@@ -1,0 +1,45 @@
+.metadata
+
+*.class
+*.log
+
+# sbt specific
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+
+# Scala-IDE specific
+.scala_dependencies
+
+# sbt
+.history
+boot/
+lib_managed/
+target/
+
+# Eclipse
+.cache
+.classpath
+.project
+.scala_dependencies
+.settings
+.target/
+.worksheet/
+*.sc
+
+# IntelliJ
+.idea/
+out/
+*.iml
+*.ipr
+*.iws
+
+# ENSIME
+.ensime
+.ensime_lucene/
+
+# Mac
+.DS_Store
