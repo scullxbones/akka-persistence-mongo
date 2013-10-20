@@ -13,6 +13,7 @@ object Dependencies {
 
   val scalatest = "org.scalatest" %% "scalatest" % "1.9.2"
   val junit = "junit" % "junit" % "4.11"
+  val embedMongo = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1"
 
   val v = Map(
     'akka -> "2.3-M1",
@@ -29,9 +30,9 @@ object Dependencies {
     akkaPersistence,
     akkaDurableMailboxen,
     rxMongo,
-    pickling,
     scalatest % "test",
-    junit % "test"
+    junit % "test",
+    embedMongo % "test"
   )
 
 }
