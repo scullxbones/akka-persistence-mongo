@@ -29,6 +29,7 @@ target/
 .target/
 .worksheet/
 *.sc
+bin/
 
 # IntelliJ
 .idea/
