@@ -10,10 +10,11 @@ object AppBuilder extends Build {
     name := "akka-persistence-mongo",
     organization := "com.github",
     version := "0.0.1-SNAPSHOT",
-    scalaVersion := "2.10.2"
+    scalaVersion := "2.10.2",
+    EclipseKeys.withSource := true,
+    EclipseKeys.createSrc := EclipseCreateSrc.Default + EclipseCreateSrc.Resource
   )
 
-  EclipseKeys.withSource := true
 
   lazy val app = Project("akka-persistence-mongo", file("."))
     .settings(appSettings : _*)

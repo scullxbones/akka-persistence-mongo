@@ -14,6 +14,7 @@ import reactivemongo.api.indexes.IndexType
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import akka.pattern.CircuitBreaker
+import reactivemongo.api.collections.default.BSONCollection
 
 object serializers {
 
@@ -31,7 +32,9 @@ class MongkaSettings(override val systemSettings: ActorSystem.Settings, override
 
   protected override val name = "mongo"
 
-  val Urls = config.getStringList("urls")
+  
+  val _config = config  
+  val Urls = config.getStringList("urls").toList
   val DbName = config.getString("db")
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")
@@ -51,13 +54,14 @@ class MongkaExtension(actorSystem: ExtendedActorSystem) extends Extension {
   val mongoUrl = settings.Urls
   val mongoDbName = settings.DbName
 
-  lazy val driver = new MongoDriver
+  val driver = MongoDriver(actorSystem)
 
-  lazy val connection = driver.connection(mongoUrl)
-  lazy val db = connection(mongoDbName)
+  val connection = driver.connection(mongoUrl) 
+  
+  val db = connection(mongoDbName)
 
   lazy val journal = { 
-    val journal = db(settings.JournalCollection)
+    val journal = db[BSONCollection](settings.JournalCollection)
     journal.indexesManager.ensure(new Index(
       key = Seq(("pid", IndexType.Ascending), ("sq", IndexType.Ascending), ("dl", IndexType.Ascending)),
       background = true,
@@ -67,7 +71,7 @@ class MongkaExtension(actorSystem: ExtendedActorSystem) extends Extension {
   }
 
   lazy val snaps = {
-    val snaps = db(settings.SnapsCollection)
+    val snaps = db[BSONCollection](settings.SnapsCollection)
     snaps.indexesManager.ensure(new Index(
       key = Seq(("pid", IndexType.Ascending), ("sq", IndexType.Descending), ("ts", IndexType.Descending)),
       background = true,
@@ -78,7 +82,7 @@ class MongkaExtension(actorSystem: ExtendedActorSystem) extends Extension {
 
   val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 
-  def collection(name: String) = db(name)
+  def collection(name: String) = db[BSONCollection](name)
 }
 
 object MongkaExtensionId extends ExtensionId[MongkaExtension] {

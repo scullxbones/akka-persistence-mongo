@@ -10,7 +10,7 @@ import akka.serialization._
 
 import reactivemongo.bson._
 
-class MongoSnapshots extends SnapshotStore {
+class MongkaSnapshots extends SnapshotStore {
 
   import serializers._
 

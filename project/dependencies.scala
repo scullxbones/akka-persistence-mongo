@@ -4,6 +4,7 @@ object Dependencies {
 
   val typesafeReleases = "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/"
   val typesafeSnapshots = "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/"
+  val local = "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
   val appResolvers = Seq(
     typesafeReleases,
@@ -17,7 +18,7 @@ object Dependencies {
 
   val v = Map(
     'akka -> "2.3-M1",
-    'mongo -> "0.9",
+    'mongo -> "0.10.0-2.3-SNAPSHOT",
     'pickling -> "0.8.0-SNAPSHOT"
   )
 

@@ -8,8 +8,9 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits._
 import play.api.libs.iteratee.Iteratee
 import reactivemongo.core.commands._
+import akka.actor.ActorLogging
 
-class MongoJournal extends AsyncWriteJournal {
+class MongkaJournal extends AsyncWriteJournal with ActorLogging {
 
   import serializers._
 
@@ -42,37 +43,38 @@ class MongoJournal extends AsyncWriteJournal {
     BSONDocument("pid" -> pid, "sn" -> BSONDocument("$gte" -> from, "$lte" -> to))
 
   private[this] def modifyJournalEntry(pid: String, seq: Long, op: BSONDocument) =
-    breaker.withCircuitBreaker(
       journal.db.command(
-        new FindAndModify(journal.name, journalEntry(pid, seq), Update(op, false))))
+        new FindAndModify(journal.name, journalEntry(pid, seq), Update(op, false))
+      )
 
   /**
    * Plugin API.
    *
    * Asynchronously writes a `persistent` message to the journal.
    */
-  def writeAsync(persistent: PersistentImpl): Future[Unit] =
-    breaker.withCircuitBreaker(journal.insert(persistent).mapTo[Unit])
+  override def writeAsync(persistent: PersistentImpl): Future[Unit] = breaker.withCircuitBreaker {
+    journal.insert(persistent).map { le => log.error(le.toString()) }
+  }
 
   /**
    * Plugin API.
    *
    * Asynchronously marks a `persistent` message as deleted.
    */
-  def deleteAsync(persistent: PersistentImpl): Future[Unit] =
-    breaker.withCircuitBreaker(
+  override def deleteAsync(persistent: PersistentImpl): Future[Unit] = breaker.withCircuitBreaker {
       modifyJournalEntry(persistent.processorId, persistent.sequenceNr,
-        BSONDocument("$set" -> BSONDocument("dl" -> true))).mapTo[Unit])
+        BSONDocument("$set" -> BSONDocument("dl" -> true))).map { le => log.error(le.toString()) }
+  }
 
   /**
    * Plugin API.
    *
    * Asynchronously writes a delivery confirmation to the journal.
    */
-  def confirmAsync(processorId: String, sequenceNr: Long, channelId: String): Future[Unit] =
-    breaker.withCircuitBreaker(
+  override def confirmAsync(processorId: String, sequenceNr: Long, channelId: String): Future[Unit] = breaker.withCircuitBreaker {
       modifyJournalEntry(processorId, sequenceNr,
-        BSONDocument("$push" -> BSONDocument("cs" -> channelId))).mapTo[Unit])
+        BSONDocument("$push" -> BSONDocument("cs" -> channelId))).map { le => log.error(le.toString()) }
+  }
 
   /**
    * Plugin API.
@@ -99,19 +101,19 @@ class MongoJournal extends AsyncWriteJournal {
    * @see [[AsyncWriteJournal]]
    * @see [[SyncWriteJournal]]
    */
-  def replayAsync(processorId: String, fromSequenceNr: Long, toSequenceNr: Long)(replayCallback: PersistentImpl ⇒ Unit): Future[Long] =
+  override def replayAsync(processorId: String, fromSequenceNr: Long, toSequenceNr: Long)(replayCallback: PersistentImpl ⇒ Unit): Future[Long] =
     breaker.withCircuitBreaker {
       val cursor = journal
         .find(journalRange(processorId, fromSequenceNr, toSequenceNr))
         .cursor[PersistentImpl]
-      val result: Future[Long] = cursor.enumerate.apply(Iteratee.foreach { p =>
+      val result: Future[Long] = cursor.enumerate().apply(Iteratee.foreach { p =>
         replayCallback(p)
       }).flatMap(_ => {
         val max = Aggregate(journal.name,
           Seq(Match(BSONDocument("pid" -> processorId)),
             GroupField("pid")(("sn", Max("sn")))))
         journal.db.command(max)
-      }).map(x => x.iterator.next().getAs[Long]("result").getOrElse(0))
+      }).map { x => x.headOption.flatMap{ doc => doc.getAs[Long]("result") }.getOrElse(0) }
       result
     }
 }
