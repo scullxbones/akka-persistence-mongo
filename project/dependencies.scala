@@ -17,23 +17,28 @@ object Dependencies {
   val embedMongo = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1"
 
   val v = Map(
-    'akka -> "2.3-M1",
-    'mongo -> "0.10.0-2.3-SNAPSHOT",
-    'pickling -> "0.8.0-SNAPSHOT"
+    'akka -> "2.3-M2",
+    'casbah -> "2.6.4",
+    'rxmongo -> "0.10.0"
   )
 
   val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % v('akka)
-  val akkaDurableMailboxen = "com.typesafe.akka" %% "akka-mailboxes-common" % v('akka)
-  val rxMongo = "org.reactivemongo" %% "reactivemongo" % v('mongo)
-  val pickling = "org.scala-lang" %% "scala-pickling" % v('pickling)
+  val rxMongo = "org.reactivemongo" %% "reactivemongo" % v('rxmongo)
+  val casbah = "org.mongodb" %% "casbah" % v('casbah)
 
-  val appDependencies = Seq(
+  val commonDependencies = Seq(
     akkaPersistence,
-    akkaDurableMailboxen,
-    rxMongo,
     scalatest % "test",
     junit % "test",
     embedMongo % "test"
+  )
+
+  val casbahDependencies = Seq(
+    casbah
+  )
+
+  val rxmongoDependencies = Seq(
+    rxMongo
   )
 
 }

@@ -17,6 +17,7 @@ import akka.testkit.ImplicitSender
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSpecLike
 import akka.persistence.RecoveryFailure
+import de.flapdoodle.embed.mongo.distribution.Version
 
 object MongkaJournalSpec {
   class MyEventSourcer extends Processor {
@@ -56,16 +57,21 @@ class MongkaJournalSpec (_system: ActorSystem) extends TestKit(_system) with Imp
 
     val actor = _system.actorOf(Props[MyEventSourcer])
     
-    it("should log persistent messages") {
-      actor ! Persistent("test1")
-      expectMsg(1)
-      actor ! Persistent("test2")
-      expectMsg(2)
-      actor ! Persistent("test3")
-      expectMsg(3)
-      actor ! Persistent("test4")
-      expectMsg(4)
+    withEmbedMongoFixture(123456, Version.V2_3_0) { mongodProps =>
+      
+	    it("should log persistent messages") {
+	      actor ! Persistent("test1")
+	      expectMsg(1)
+	      actor ! Persistent("test2")
+	      expectMsg(2)
+	      actor ! Persistent("test3")
+	      expectMsg(3)
+	      actor ! Persistent("test4")
+	      expectMsg(4)
+	    }
+	    
     }
+    
 
   }
 
