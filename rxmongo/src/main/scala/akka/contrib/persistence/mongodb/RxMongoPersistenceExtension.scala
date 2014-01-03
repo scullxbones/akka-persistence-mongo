@@ -1,26 +1,22 @@
 package akka.contrib.persistence.mongodb
 
-import reactivemongo.bson._
-import reactivemongo.bson.buffer.ArrayReadableBuffer
 import reactivemongo.api._
 import reactivemongo.api.collections.default.BSONCollection
-import reactivemongo.api.indexes.Index
-import reactivemongo.api.indexes.IndexType
+import reactivemongo.api.indexes._
+import reactivemongo.bson._
+import reactivemongo.bson.buffer.ArrayReadableBuffer
+import reactivemongo.core.commands._
+
 import akka.persistence.PersistentRepr
 import akka.serialization.SerializationExtension
-import scala.collection.immutable.{Seq => ISeq}
-import reactivemongo.core.commands.FindAndModify
-import reactivemongo.core.commands.Update
-import play.api.libs.iteratee._
-import scala.concurrent.Future
-import reactivemongo.core.commands.GetLastError
-import reactivemongo.core.commands.Aggregate
-import reactivemongo.core.commands.Match
-import reactivemongo.core.commands.GroupField
-import reactivemongo.core.commands.Max
-import scala.concurrent.ExecutionContext
 import akka.actor.ExtendedActorSystem
 import akka.persistence.SelectedSnapshot
+
+import scala.collection.immutable.{Seq => ISeq}
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext
+
+import play.api.libs.iteratee._
 
 object RxMongoPersistenceExtension {
   implicit object BsonBinaryHandler extends BSONHandler[BSONBinary, Array[Byte]] {
@@ -42,9 +38,6 @@ trait RxMongoPersistenceBase extends MongoPersistenceBase {
   type D = BSONDocument
   // Collection type
   type C = BSONCollection
-
-  val mongoUrl = settings.Urls
-  val mongoDbName = settings.DbName
 
   val driver = MongoDriver(actorSystem)
 
@@ -120,7 +113,7 @@ trait RxMongoPersistenceJournalling extends MongoPersistenceJournalling with RxM
   	journal.find(journalRangeQuery(pid,from,to)).cursor[PersistentRepr].collect[Vector]().map(_.iterator)
   	
   private[mongodb] override def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) =
-    Future.fold(persistent.map { doc => journal.insert(doc) } )()( (u,gle) => () )
+    Future.fold(persistent.map { doc => journal.insert(doc).mapTo[Unit] } )()( (u,gle) => () )
   
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = {
     val query = journalRangeQuery(pid, from, to)
@@ -130,7 +123,7 @@ trait RxMongoPersistenceJournalling extends MongoPersistenceJournalling with RxM
 	    } else {
 	      modifyJournalEntry(query,BSONDocument("$set" -> BSONDocument("dl" -> true)))
 	    }
-    result.map( gle => () )
+    result.mapTo[Unit]
   }
   
   private[mongodb] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext) = {
