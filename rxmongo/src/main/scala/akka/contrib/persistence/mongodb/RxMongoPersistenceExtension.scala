@@ -13,8 +13,7 @@ import akka.actor.ExtendedActorSystem
 import akka.persistence.SelectedSnapshot
 
 import scala.collection.immutable.{Seq => ISeq}
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext
+import scala.concurrent._
 
 import play.api.libs.iteratee._
 
@@ -26,9 +25,6 @@ object RxMongoPersistenceExtension {
     def write(t: Array[Byte]): reactivemongo.bson.BSONBinary =
       BSONBinary(ArrayReadableBuffer(t), Subtype.GenericBinarySubtype)
   }
-  
-  implicit def futureGleToFutureUnit(gle: Future[GetLastError])(implicit ec: ExecutionContext): Future[Unit] =
-    gle.map( _ => () )
 }
 
 trait RxMongoPersistenceBase extends MongoPersistenceBase {
@@ -113,7 +109,7 @@ trait RxMongoPersistenceJournalling extends MongoPersistenceJournalling with RxM
   	journal.find(journalRangeQuery(pid,from,to)).cursor[PersistentRepr].collect[Vector]().map(_.iterator)
   	
   private[mongodb] override def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) =
-    Future.fold(persistent.map { doc => journal.insert(doc).mapTo[Unit] } )()( (u,gle) => () )
+    Future.reduce(persistent.map { doc => journal.insert(doc).mapTo[Unit] } )( (u,gle) => u )
   
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = {
     val query = journalRangeQuery(pid, from, to)

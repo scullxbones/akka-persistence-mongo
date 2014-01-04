@@ -10,6 +10,7 @@ import com.mongodb.casbah.WriteConcern
 import scala.collection.immutable.{ Seq => ISeq }
 import scala.concurrent.ExecutionContext
 import akka.persistence.SelectedSnapshot
+import scala.language.implicitConversions
 
 trait CasbahPersistenceBase extends MongoPersistenceBase {
   // Document type

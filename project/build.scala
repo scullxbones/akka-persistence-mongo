@@ -35,11 +35,13 @@ object AppBuilder extends Build {
     .settings(libraryDependencies ++= casbahDependencies)
     .settings(resolvers ++= appResolvers)
     .dependsOn(common)
+    .aggregate(common)
 
   lazy val rxmongo = Project("rxmongo", file("rxmongo"))
     .settings(rxmongoSettings : _*)
     .settings(libraryDependencies ++= rxmongoDependencies)
     .settings(resolvers ++= appResolvers)
     .dependsOn(common)
+    .aggregate(common)
 
 }
