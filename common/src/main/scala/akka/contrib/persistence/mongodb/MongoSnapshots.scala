@@ -5,6 +5,7 @@ import akka.persistence.SnapshotSelectionCriteria
 import scala.concurrent.Future
 import akka.persistence.SnapshotMetadata
 import akka.persistence.SelectedSnapshot
+import scala.concurrent.ExecutionContext
 
 class MongoSnapshots extends SnapshotStore {
 
@@ -53,4 +54,21 @@ class MongoSnapshots extends SnapshotStore {
    */
   override def delete(processorId: String, criteria: SnapshotSelectionCriteria) = 
     impl.deleteMatchingSnapshots(processorId, criteria.maxSequenceNr, criteria.maxTimestamp)
+}
+
+object SnapshottingFieldNames {
+  final val PROCESSOR_ID = "pid"
+  final val SEQUENCE_NUMBER = "sn"
+  final val TIMESTAMP = "ts"
+  final val SERIALIZED = "ss"
+}
+
+trait MongoPersistenceSnapshottingApi {
+  private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Option[SelectedSnapshot]]
+
+  private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext): Future[Unit]
+  
+  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext): Unit
+  
+  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Unit
 }

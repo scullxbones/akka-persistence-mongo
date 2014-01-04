@@ -4,6 +4,7 @@ import scala.collection.immutable.Seq
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.PersistentRepr
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext
 
 class MongoJournal extends AsyncWriteJournal {
   
@@ -64,3 +65,26 @@ class MongoJournal extends AsyncWriteJournal {
   }
 
 }
+
+object JournallingFieldNames {
+  final val PROCESSOR_ID = "pid"
+  final val SEQUENCE_NUMBER = "sn"
+  final val CONFIRMS = "cs"
+  final val DELETED = "dl"
+  final val SERIALIZED = "pr"
+}
+
+trait MongoPersistenceJournallingApi {
+  private[mongodb] def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext): Future[Option[PersistentRepr]]
+
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Future[Iterator[PersistentRepr]]
+  
+  private[mongodb] def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext): Future[Unit]
+
+  private[mongodb] def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit]
+
+  private[mongodb] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext): Future[Unit]
+  
+  private[mongodb] def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Long]
+}
+  
