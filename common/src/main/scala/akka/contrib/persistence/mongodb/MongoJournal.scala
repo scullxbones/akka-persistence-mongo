@@ -7,7 +7,7 @@ import scala.concurrent.Future
 
 class MongoJournal extends AsyncWriteJournal {
   
-  private[this] val impl = context.system.extension(MongoPersistenceExtensionId)
+  private[this] val impl = context.system.extension(MongoPersistenceExtensionId).journaler
   private[this] implicit val ec = context.dispatcher
 
   /**

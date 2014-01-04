@@ -8,7 +8,7 @@ import akka.persistence.SelectedSnapshot
 
 class MongoSnapshots extends SnapshotStore {
 
-  private[this] val impl = context.system.extension(MongoPersistenceExtensionId)
+  private[this] val impl = context.system.extension(MongoPersistenceExtensionId).snapshotter
   private[this] implicit val ec = context.dispatcher
   
   /**

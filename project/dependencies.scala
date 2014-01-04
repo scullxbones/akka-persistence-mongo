@@ -12,9 +12,10 @@ object Dependencies {
     Resolver.sonatypeRepo("snapshots")
   )
 
-  val scalatest = "org.scalatest" %% "scalatest" % "1.9.2"
-  val junit = "junit" % "junit" % "4.11"
-  val embedMongo = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1"
+  val scalatest = "org.scalatest" %% "scalatest" % "2.0" % "test"
+  val junit = "junit" % "junit" % "4.11" % "test"
+  val scalaMock = "org.scalamock" %% "scalamock-scalatest-support" % "3.1.RC1" % "test"
+  val embedMongo = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1" % "test"
 
   val v = Map(
     'akka -> "2.3-M2",
@@ -25,20 +26,25 @@ object Dependencies {
   val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % v('akka)
   val rxMongo = "org.reactivemongo" %% "reactivemongo" % v('rxmongo)
   val casbah = "org.mongodb" %% "casbah" % v('casbah)
-
-  val commonDependencies = Seq(
-    akkaPersistence,
-    scalatest % "test",
-    junit % "test",
-    embedMongo % "test"
+ 
+  val testDependencies = Seq(
+    scalatest,
+    junit,
+    scalaMock
   )
+ 
+  val commonDependencies = Seq(
+    akkaPersistence
+  ) ++ testDependencies
 
   val casbahDependencies = Seq(
-    casbah
-  )
+    casbah,
+    embedMongo 
+  ) ++ commonDependencies
 
   val rxmongoDependencies = Seq(
-    rxMongo
-  )
+    rxMongo,
+    embedMongo 
+  ) ++ commonDependencies
 
 }

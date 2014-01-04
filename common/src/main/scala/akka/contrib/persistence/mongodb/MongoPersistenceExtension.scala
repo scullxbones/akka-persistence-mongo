@@ -1,21 +1,17 @@
 package akka.contrib.persistence.mongodb
 
+import akka.actor._
+import akka.pattern.CircuitBreaker
+import akka.persistence._
+import akka.serialization.SerializationExtension
+
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+
+import scala.util.Try
+import scala.concurrent._
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
-import akka.actor.Extension
-import akka.actor.ExtensionId
-import akka.actor.ExtendedActorSystem
-import akka.pattern.CircuitBreaker
-import akka.actor.ActorSystem
-import com.typesafe.config.Config
-import scala.concurrent.duration.Duration
-import com.typesafe.config.ConfigFactory
-import scala.util.Try
-import scala.concurrent.Future
-import akka.persistence.PersistentRepr
-import akka.serialization.SerializationExtension
-import scala.concurrent.ExecutionContext
-import akka.persistence.SelectedSnapshot
 
 object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension] {
   
@@ -30,24 +26,38 @@ object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension
   override def get(actorSystem: ActorSystem) = super.get(actorSystem)
 }
 
-trait MongoPersistenceBase {
-  val actorSystem: ExtendedActorSystem
-  
-  // Document type
-  type D
+trait MongoPersistenceDriver {
   // Collection type
   type C
   
-  private[mongodb] def collection(name: String)(implicit ec: ExecutionContext): C
-
-  protected lazy val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
-  protected lazy val mongoUrl = settings.Urls
-  protected lazy val mongoDbName = settings.DbName
-  
-  protected lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+  private[mongodb] def collection(name: String): C
 }
 
-trait MongoPersistenceJournalling extends MongoPersistenceBase {
+trait MongoPersistenceBase {
+  val actorSystem: ActorSystem
+  
+  private[this] lazy val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
+  
+  def snapsCollectionName = settings.SnapsCollection
+  def snapsIndexName = settings.SnapsIndex
+  def journalCollectionName = settings.JournalCollection
+  def journalIndexName = settings.JournalIndex
+  def mongoUrl = settings.Urls
+  def mongoDbName = settings.DbName
+  
+  lazy val serialization = actorSystem.extension(SerializationExtension)
+  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+}
+
+object JournallingFieldNames {
+  final val PROCESSOR_ID = "pid"
+  final val SEQUENCE_NUMBER = "sn"
+  final val CONFIRMS = "cs"
+  final val DELETED = "dl"
+  final val SERIALIZED = "pr"
+}
+
+trait MongoPersistenceJournallingApi{
   private[mongodb] def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext): Future[Option[PersistentRepr]]
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Future[Iterator[PersistentRepr]]
@@ -59,11 +69,16 @@ trait MongoPersistenceJournalling extends MongoPersistenceBase {
   private[mongodb] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Long]
-
-  private[mongodb] def journal(implicit ec: ExecutionContext): C
 }
 
-trait MongoPersistenceSnapshotting extends MongoPersistenceBase {
+object SnapshottingFieldNames {
+  final val PROCESSOR_ID = "pid"
+  final val SEQUENCE_NUMBER = "sn"
+  final val TIMESTAMP = "ts"
+  final val SERIALIZED = "ss"
+}
+
+trait MongoPersistenceSnapshottingApi {
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Option[SelectedSnapshot]]
 
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext): Future[Unit]
@@ -71,14 +86,12 @@ trait MongoPersistenceSnapshotting extends MongoPersistenceBase {
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext): Unit
   
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Unit
-  
-  private[mongodb] def snaps(implicit ec: ExecutionContext): C
 }
 
-trait MongoPersistenceExtension 
-	extends Extension 
-	with MongoPersistenceJournalling 
-	with MongoPersistenceSnapshotting
+trait MongoPersistenceExtension extends Extension {
+  def journaler: MongoPersistenceJournallingApi
+  def snapshotter: MongoPersistenceSnapshottingApi
+}
 
 class MongoSettings(override val systemSettings: ActorSystem.Settings, override val userConfig: Config)
   extends UserOverrideSettings(systemSettings, userConfig) {
