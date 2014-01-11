@@ -10,21 +10,21 @@ import scala.collection.immutable.{Seq => ISeq}
 import scala.language.implicitConversions
 import akka.actor.ActorSystem
 import com.mongodb.casbah.MongoCollection
+import akka.serialization.Serialization
 
-class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends MongoPersistenceJournallingApi {
-  
+object CasbahPersistenceJournaller {
   import JournallingFieldNames._
-
-  private[this] implicit def serializeJournal(persistent: PersistentRepr): DBObject =
+  
+  implicit def serializeJournal(persistent: PersistentRepr)(implicit serialization: Serialization): DBObject =
 	    MongoDBObject(PROCESSOR_ID -> persistent.processorId,
 	      SEQUENCE_NUMBER -> persistent.sequenceNr,
 	      CONFIRMS -> persistent.confirms,
 	      DELETED -> persistent.deleted,
-	      SERIALIZED -> driver.serialization.serializerFor(classOf[PersistentRepr]).toBinary(persistent))
+	      SERIALIZED -> serialization.serializerFor(classOf[PersistentRepr]).toBinary(persistent))
 	
-  private[this] implicit def deserializeJournal(document: DBObject): PersistentRepr = {
+  implicit def deserializeJournal(document: DBObject)(implicit serialization: Serialization): PersistentRepr = {
 	    val content = document.as[Array[Byte]](SERIALIZED)
-	    val repr = driver.serialization.deserialize(content, classOf[PersistentRepr]).get
+	    val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
 	    PersistentRepr(
 	      repr.payload,
 	      document.as[Long](SEQUENCE_NUMBER),
@@ -32,18 +32,27 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
 	      document.as[Boolean](DELETED),
 	      repr.resolved,
 	      repr.redeliveries,
-	      document.as[ISeq[String]](CONFIRMS),
+	      ISeq(document.as[Seq[String]](CONFIRMS) : _*),
 	      repr.confirmable,
 	      repr.confirmMessage,
 	      repr.confirmTarget,
 	      repr.sender)
 	  }  
   
+}
+
+class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends MongoPersistenceJournallingApi {
+  
+  import JournallingFieldNames._
+  import CasbahPersistenceJournaller._
+  
+  private[this] implicit val serialization = driver.serialization
+
   private[this] def journalEntryQuery(pid: String, seq: Long) =
     $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq)
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
-    $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $gte from $lte to)
+    $and(PROCESSOR_ID $eq pid, $and(SEQUENCE_NUMBER $gte from, SEQUENCE_NUMBER $lte to))
 
   private[mongodb] override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
@@ -67,14 +76,9 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
       if (permanent) {
-        journal.findAndRemove(journalRangeQuery(pid, from, to))
-        	.getOrElse(
-        	    throw new RuntimeException(
-        	        s"Could not find any journal entries for processor $pid, sequenced from $from to: $to"
-        	    )
-        	 )
+        journal.remove(journalRangeQuery(pid, from, to), WriteConcern.JournalSafe)
       } else {
-        journal.update(journalRangeQuery(pid, from, to), $set(DELETED -> true), false, false, WriteConcern.JournalSafe)
+        journal.update(journalRangeQuery(pid, from, to), $set(DELETED -> true), false, true, WriteConcern.JournalSafe)
       }
     }
   }.mapTo[Unit]

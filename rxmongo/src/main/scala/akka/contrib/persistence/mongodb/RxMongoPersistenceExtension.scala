@@ -22,9 +22,8 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersiste
   // Collection type
   type C = BSONCollection
 
-  private[this] lazy val driver = MongoDriver(actorSystem)
-  private[this] lazy val connection = driver.connection(mongoUrl)
-  private[this] lazy val db = connection(mongoDbName)(actorSystem.dispatcher)
+  private[this] lazy val db = MongoDriver(actorSystem)
+  								.connection(mongoUrl)(mongoDbName)(actorSystem.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
 }

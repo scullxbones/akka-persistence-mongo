@@ -12,15 +12,22 @@ import scala.concurrent.ExecutionContext
 import akka.persistence.SelectedSnapshot
 import scala.language.implicitConversions
 
+object CasbahPersistenceDriver {
+  implicit def convertListOfStringsToListOfServerAddresses(strings: List[String]): List[ServerAddress] =
+    strings.map { url =>
+    val Array(host, port) = url.split(":")
+    new ServerAddress(host, port.toInt)
+    }.toList
+
+}
+
 trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersistenceBase {
+  import CasbahPersistenceDriver._
+  
   // Collection type
   type C = MongoCollection
 
-  private[this] lazy val client = MongoClient(mongoUrl.map { url =>
-    val Array(host, port) = url.split(":")
-    new ServerAddress(host, port.toInt)
-  }.toList)
-  private[this] lazy val db = client(mongoDbName)
+  private[this] lazy val db = MongoClient(mongoUrl)(mongoDbName)
   
   private[mongodb] def collection(name: String) = db(name)
 }

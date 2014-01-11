@@ -15,7 +15,9 @@ object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension
   override def createExtension(actorSystem: ExtendedActorSystem) = {
 	val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
 	val implementation = settings.Implementation
-	Class.forName(implementation).newInstance().asInstanceOf[MongoPersistenceExtension]
+	val implType = Class.forName(implementation)
+	val implCons = implType.getConstructor(classOf[ActorSystem])
+	implCons.newInstance(actorSystem).asInstanceOf[MongoPersistenceExtension]
   }
 
   override def get(actorSystem: ActorSystem) = super.get(actorSystem)

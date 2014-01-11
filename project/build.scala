@@ -4,26 +4,25 @@ import Dependencies._
 
 object AppBuilder extends Build {
   
-  val commonSettings = Seq(
-    name := "akka-persistence-mongo-common",
-    organization := "com.github.scullxbones",
-    version := "0.0.1-SNAPSHOT",
-    scalaVersion := "2.10.2"
-  )
+  val VERSION = "0.0.1-SNAPSHOT"
+  val SCALA_VERSION = "2.10.3"
+  val ORG = "com.github.scullxbones"
 
-  val casbahSettings = Seq(
-    name := "akka-persistence-mongo-casbah",
-    organization := "com.github.scullxbones",
-    version := "0.0.1-SNAPSHOT",
-    scalaVersion := "2.10.2"
-  )
+  def projectSettings(moduleName: String) = 
+    Seq(name := "akka-persistence-mongo-"+moduleName, 
+        organization := ORG,
+        version := VERSION,
+        scalaVersion := SCALA_VERSION)
+  
+  val commonSettings = projectSettings("common")
 
-  val rxmongoSettings = Seq(
-    name := "akka-persistence-mongo-rxmongo",
-    organization := "com.github.scullxbones",
-    version := "0.0.1-SNAPSHOT",
-    scalaVersion := "2.10.2"
-  )
+  val casbahSettings = projectSettings("casbah")
+
+  val rxmongoSettings = projectSettings("rxmongo")
+  
+  lazy val aRootNode = Project("root", file("."))
+    			.settings(commonSettings : _*)
+			.aggregate(casbah,rxmongo)
 
   lazy val common = Project("common", file("common"))
     .settings(commonSettings : _*)
@@ -34,14 +33,12 @@ object AppBuilder extends Build {
     .settings(casbahSettings : _*)
     .settings(libraryDependencies ++= casbahDependencies)
     .settings(resolvers ++= appResolvers)
-    .dependsOn(common)
-    .aggregate(common)
+    .dependsOn(common % "test->test;compile->compile")
 
   lazy val rxmongo = Project("rxmongo", file("rxmongo"))
     .settings(rxmongoSettings : _*)
     .settings(libraryDependencies ++= rxmongoDependencies)
     .settings(resolvers ++= appResolvers)
-    .dependsOn(common)
-    .aggregate(common)
+    .dependsOn(common % "test->test;compile->compile")
 
 }

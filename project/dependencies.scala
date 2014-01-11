@@ -15,22 +15,19 @@ object Dependencies {
   val scalatest = "org.scalatest" %% "scalatest" % "2.0" % "test"
   val junit = "junit" % "junit" % "4.11" % "test"
   val scalaMock = "org.scalamock" %% "scalamock-scalatest-support" % "3.1.RC1" % "test"
+  val mockito = "org.mockito" % "mockito-all" % "1.9.5" % "test"
   val embedMongo = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1" % "test"
+  val akkaTestKit = "com.typesafe.akka" %% "akka-testkit" % "2.3-M2"
 
-  val v = Map(
-    'akka -> "2.3-M2",
-    'casbah -> "2.6.4",
-    'rxmongo -> "0.10.0"
-  )
-
-  val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % v('akka)
-  val rxMongo = "org.reactivemongo" %% "reactivemongo" % v('rxmongo)
-  val casbah = "org.mongodb" %% "casbah" % v('casbah)
+  val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % "2.3-M2"
+  val rxMongo = "org.reactivemongo" %% "reactivemongo" % "0.10.0"
+  val casbah = "org.mongodb" %% "casbah" % "2.6.4"
  
   val testDependencies = Seq(
     scalatest,
     junit,
-    scalaMock
+    mockito,
+    akkaTestKit
   )
  
   val commonDependencies = Seq(

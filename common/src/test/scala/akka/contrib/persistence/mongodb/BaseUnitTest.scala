@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.FunSpec
 import org.scalatest.Matchers
+import org.scalatest.mock.MockitoSugar
+import org.scalatest.FlatSpecLike
 
-class BaseUnitTest extends FunSpec with MockFactory with Matchers 
+trait BaseUnitTest extends FlatSpecLike with MockitoSugar with Matchers 
