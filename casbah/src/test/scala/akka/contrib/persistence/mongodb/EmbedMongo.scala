@@ -2,25 +2,45 @@ package akka.contrib.persistence.mongodb
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.Suite
-import de.flapdoodle.embed.mongo.distribution.Version
-import de.flapdoodle.embed.mongo.MongodStarter
-import de.flapdoodle.embed.mongo.MongodExecutable
-import de.flapdoodle.embed.mongo.MongodProcess
-import de.flapdoodle.embed.mongo.config.MongodConfig
 import com.mongodb.casbah.MongoConnection
+import de.flapdoodle.embed.mongo.distribution._
+import de.flapdoodle.embed.mongo._
+import de.flapdoodle.embed.process.io.directories._
+import de.flapdoodle.embed.process.extract._
+import de.flapdoodle.embed.mongo._
+import de.flapdoodle.embed.process.config.IRuntimeConfig
+import de.flapdoodle.embed.mongo.config._
+import de.flapdoodle.embed.process.runtime.Network
 
 trait EmbedMongo extends BeforeAndAfterAll { this: BeforeAndAfterAll with Suite =>
   def embedConnectionURL: String = { "localhost" }
   def embedConnectionPort: Int = { 12345 }
-  def embedMongoDBVersion: Version = { Version.V2_2_1 }
   def embedDB: String = { "test" }
 
-  lazy val runtime: MongodStarter = MongodStarter.getDefaultInstance
-  lazy val mongodExe: MongodExecutable = runtime.prepare(new MongodConfig(embedMongoDBVersion, embedConnectionPort, true))
-  lazy val mongod: MongodProcess = mongodExe.start()
+  val artifactStorePath = new PlatformTempDir()
+  val executableNaming = new UUIDTempNaming()
+  val command = Command.MongoD
+  val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
+    .defaults(command)
+    .artifactStore(new ArtifactStoreBuilder()
+        .defaults(command)
+        .download(new DownloadConfigBuilder()
+            .defaultsForCommand(command)
+            .artifactStorePath(artifactStorePath))
+        .executableNaming(executableNaming))
+        .build();
+  
+  val mongodConfig = new MongodConfigBuilder()
+    .version(Version.Main.PRODUCTION)
+    .net(new Net(embedConnectionPort, Network.localhostIsIPv6()))
+    .build();
+  
+  lazy val runtime = MongodStarter.getInstance(runtimeConfig);
+  lazy val mongod = runtime.prepare(mongodConfig);
+  lazy val mongodExe = mongod.start()
 
   override def beforeAll() {
-    mongod
+    mongodExe
     super.beforeAll()
   }
 
