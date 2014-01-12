@@ -14,7 +14,7 @@ import de.flapdoodle.embed.process.runtime.Network
 
 trait EmbedMongo extends BeforeAndAfterAll { this: BeforeAndAfterAll with Suite =>
   def embedConnectionURL: String = { "localhost" }
-  def embedConnectionPort: Int = { 12345 }
+  lazy val embedConnectionPort: Int = { Network.getFreeServerPort() }
   def embedDB: String = { "test" }
 
   val artifactStorePath = new PlatformTempDir()
