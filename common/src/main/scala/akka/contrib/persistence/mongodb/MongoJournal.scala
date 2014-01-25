@@ -5,6 +5,8 @@ import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.PersistentRepr
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
+import akka.persistence.PersistentConfirmation
+import akka.persistence.PersistentId
 
 class MongoJournal extends AsyncWriteJournal {
   
@@ -16,33 +18,37 @@ class MongoJournal extends AsyncWriteJournal {
    * The batch write must be atomic i.e. either all persistent messages in the batch
    * are written or none.
    */
-  override def writeAsync(persistentBatch: Seq[PersistentRepr]): Future[Unit] = 
-    impl.appendToJournal(persistentBatch)
+  override def asyncWriteMessages(messages: Seq[PersistentRepr]): Future[Unit] = 
+    impl.appendToJournal(messages)
 
   /**
-   * Plugin API: asynchronously deletes all persistent messages within the range from
-   * `fromSequenceNr` to `toSequenceNr` (both inclusive). If `permanent` is set to
-   * `false`, the persistent messages are marked as deleted, otherwise they are
-   * permanently deleted.
-   *
-   * @see [[AsyncReplay]]
+   * Plugin API: asynchronously writes a batch of delivery confirmations to the journal.
    */
-  override def deleteAsync(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, permanent: Boolean): Future[Unit] = 
-    impl.deleteJournalEntries(processorId, fromSequenceNr, toSequenceNr, permanent)
+  override def asyncWriteConfirmations(confirmations: Seq[PersistentConfirmation]): Future[Unit] = 
+    impl.confirmJournalEntries(confirmations)
 
   /**
-   * Plugin API: asynchronously writes a delivery confirmation to the journal.
+   * Plugin API: asynchronously deletes messages identified by `messageIds` from the
+   * journal. If `permanent` is set to `false`, the persistent messages are marked as
+   * deleted, otherwise they are permanently deleted.
    */
-  override def confirmAsync(processorId: String, sequenceNr: Long, channelId: String): Future[Unit] = 
-    impl.confirmJournalEntry(processorId, sequenceNr, channelId)
+  override def asyncDeleteMessages(messageIds: Seq[PersistentId], permanent: Boolean): Future[Unit] = 
+    impl.deleteAllMatchingJournalEntries(messageIds, permanent)
+
+  /**
+   * Plugin API: asynchronously deletes all persistent messages up to `toSequenceNr`
+   * (inclusive). If `permanent` is set to `false`, the persistent messages are marked
+   * as deleted, otherwise they are permanently deleted.
+   */
+  override def asyncDeleteMessagesTo(processorId: String, toSequenceNr: Long, permanent: Boolean): Future[Unit] = 
+    impl.deleteJournalEntries(processorId, 0L, toSequenceNr, permanent)
 
   /**
    * Plugin API: asynchronously replays persistent messages. Implementations replay
    * a message by calling `replayCallback`. The returned future must be completed
-   * when all messages (matching the sequence number bounds) have been replayed. The
-   * future `Long` value must be the highest stored sequence number in the journal
-   * for the specified processor. The future must be completed with a failure if any
-   * of the persistent messages could not be replayed.
+   * when all messages (matching the sequence number bounds) have been replayed.
+   * The future must be completed with a failure if any of the persistent messages
+   * could not be replayed.
    *
    * The `replayCallback` must also be called with messages that have been marked
    * as deleted. In this case a replayed message's `deleted` method must return
@@ -54,15 +60,26 @@ class MongoJournal extends AsyncWriteJournal {
    * @param processorId processor id.
    * @param fromSequenceNr sequence number where replay should start (inclusive).
    * @param toSequenceNr sequence number where replay should end (inclusive).
+   * @param max maximum number of messages to be replayed.
    * @param replayCallback called to replay a single message. Can be called from any
    *                       thread.
    *
    * @see [[AsyncWriteJournal]]
    * @see [[SyncWriteJournal]]
    */
-  override def replayAsync(processorId: String, fromSequenceNr: Long, toSequenceNr: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Long] = {
-	  impl.replayJournal(processorId, fromSequenceNr, toSequenceNr)(replayCallback)
-  }
+  override def asyncReplayMessages(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Unit] = 
+  	impl.replayJournal(processorId, fromSequenceNr, toSequenceNr)(replayCallback)
+
+  /**
+   * Plugin API: asynchronously reads the highest stored sequence number for the
+   * given `processorId`.
+   *
+   * @param processorId processor id.
+   * @param fromSequenceNr hint where to start searching for the highest sequence
+   *                       number.
+   */
+  override def asyncReadHighestSequenceNr(processorId: String, fromSequenceNr: Long): Future[Long] = 
+    impl.maxSequenceNr(processorId, fromSequenceNr)
 
 }
 
@@ -83,8 +100,12 @@ trait MongoPersistenceJournallingApi {
 
   private[mongodb] def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit]
 
-  private[mongodb] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext): Future[Unit]
+  private[mongodb] def deleteAllMatchingJournalEntries(ids: Seq[PersistentId], permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit]
+
+  private[mongodb] def confirmJournalEntries(confirms: Seq[PersistentConfirmation])(implicit ec: ExecutionContext): Future[Unit]
   
-  private[mongodb] def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Long]
+  private[mongodb] def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
+  
+  private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
 }
   

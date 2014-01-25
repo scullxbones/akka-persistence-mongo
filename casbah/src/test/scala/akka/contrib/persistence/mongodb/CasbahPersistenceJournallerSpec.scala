@@ -21,6 +21,11 @@ import scala.collection.immutable.{ Seq => ISeq }
 import org.scalatest.BeforeAndAfter
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Buffer
+import akka.persistence.PersistentConfirmation
+import akka.persistence.PersistentId
+
+case class PersistentConfirmationImpl(processorId: String, sequenceNr: Long, channelId: String) extends PersistentConfirmation
+case class PersistentIdImpl(processorId: String, sequenceNr: Long) extends PersistentId
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
@@ -109,6 +114,21 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       recone(DELETED) should ===(false)
     }
   }
+  
+  it should "hard delete all journal entries by key" in new Fixture { withJournal { journal =>
+      journal.insert(records: _*)
+
+      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
+      
+      underTest.deleteAllMatchingJournalEntries(ids, true)
+
+      journal.size should be(1)
+      val recone = journal.head
+      recone(PROCESSOR_ID) should be("unit-test")
+      recone(SEQUENCE_NUMBER) should be(3)
+      recone(DELETED) should ===(false)
+  	}
+  }
 
   it should "soft delete journal entries" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
@@ -131,15 +151,40 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     }
   }
 
+  it should "soft delete all journal entries by key" in new Fixture { withJournal { journal =>
+      journal.insert(records: _*)
+
+      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
+      
+      underTest.deleteAllMatchingJournalEntries(ids, false)
+
+      journal.size should be(3)
+      val recone = journal.head
+      recone(PROCESSOR_ID) should be("unit-test")
+      recone(SEQUENCE_NUMBER) should be(1)
+      recone(DELETED) should ===(true)
+
+      val rectwo = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 2)).get
+      rectwo(SEQUENCE_NUMBER) should be(2)
+      rectwo(DELETED) should ===(true)
+
+      val recthree = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 3)).get
+      recthree(SEQUENCE_NUMBER) should be(3)
+      recthree(DELETED) should ===(false)
+    }
+  }
+
   it should "confirm journal entries" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
 
-      underTest.confirmJournalEntry("unit-test", 1, "4chan")
-      List(1, 2, 3).foreach { sq =>
-        underTest.confirmJournalEntry("unit-test", sq, "1chan")
-        underTest.confirmJournalEntry("unit-test", sq, "2chan")
-        underTest.confirmJournalEntry("unit-test", sq, "3chan")
+      
+      val confirms = List(1, 2, 3).flatMap { sq =>
+        List(PersistentConfirmationImpl("unit-test", sq, "1chan"),
+            PersistentConfirmationImpl("unit-test", sq, "2chan"),
+            PersistentConfirmationImpl("unit-test", sq, "3chan"))
       }
+      
+      underTest.confirmJournalEntries(PersistentConfirmationImpl("unit-test", 1, "4chan") :: confirms)
 
       val consone :: constwo :: consthree :: _ = List(1, 2, 3).map { sq =>
         journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> sq)).get(CONFIRMS).asInstanceOf[JList[String]].asScala
@@ -156,10 +201,17 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       var buf = Buffer[PersistentRepr]()
       val result = underTest.replayJournal("unit-test", 2, 3)(buf += _).value.get.get
-
-      result should be(3)
       buf should have size 2
       buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, processorId = "unit-test"))
     }
+  }
+
+  it should "calculate the max sequence nr" in new Fixture { withJournal { journal =>
+      journal.insert(records: _*)
+
+      val result = underTest.maxSequenceNr("unit-test", 2).value.get.get
+      result should be (3)
+    }
+  
   }
 }
