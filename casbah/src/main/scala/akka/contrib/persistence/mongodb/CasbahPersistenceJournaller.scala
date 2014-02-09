@@ -101,7 +101,9 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
       val maxCursor = journal.find($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $gte from), 
     		  						MongoDBObject(SEQUENCE_NUMBER -> 1))
     		  				 .sort(MongoDBObject(SEQUENCE_NUMBER -> -1)).limit(1)
-      maxCursor.buffered.head.getAs[Long](SEQUENCE_NUMBER).getOrElse(0)
+      if (maxCursor.hasNext)
+        maxCursor.next().as[Long](SEQUENCE_NUMBER)
+      else 0L
     }
   }
   
