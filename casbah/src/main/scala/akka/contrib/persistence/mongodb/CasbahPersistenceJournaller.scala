@@ -48,6 +48,7 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   import CasbahPersistenceJournaller._
   
   private[this] implicit val serialization = driver.serialization
+  private[this] lazy val writeConcern = driver.journalWriteConcern
 
   private[this] def journalEntryQuery(pid: String, seq: Long) =
     $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq)
@@ -70,15 +71,15 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
 
   private[mongodb] override def appendToJournal(documents: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
-      documents.foreach { journal.insert(_, WriteConcern.JournalSafe) }
+      documents.foreach { journal.insert(_, writeConcern) }
     }
   }.mapTo[Unit]
   
   private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext) =
       if (hard) {
-        journal.remove(query, WriteConcern.JournalSafe)
+        journal.remove(query, writeConcern)
       } else {
-        journal.update(query, $set(DELETED -> true), false, true, WriteConcern.JournalSafe)
+        journal.update(query, $set(DELETED -> true), false, true, writeConcern)
       }
 
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = Future {
@@ -107,7 +108,7 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   
   private[this] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
-      journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, WriteConcern.JournalSafe)
+      journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, writeConcern)
     }
   }.mapTo[Unit]
 

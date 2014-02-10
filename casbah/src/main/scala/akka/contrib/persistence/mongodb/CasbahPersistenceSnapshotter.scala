@@ -31,6 +31,7 @@ class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends Mong
   import SnapshottingFieldNames._
   
   private[this] implicit val serialization = driver.serialization
+  private[this] lazy val writeConcern = driver.snapsWriteConcern
   
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) = 
   	$and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $lte maxSeq, TIMESTAMP $lte maxTs)
@@ -47,16 +48,16 @@ class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends Mong
   }
 
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker { snaps.insert(snapshot, WriteConcern.JournalSafe) }
+    driver.breaker.withSyncCircuitBreaker { snaps.insert(snapshot, writeConcern) }
   }
   
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = driver.breaker.withSyncCircuitBreaker {
-    snaps.remove($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq, TIMESTAMP $eq ts),WriteConcern.JournalSafe)
+    snaps.remove($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq, TIMESTAMP $eq ts),writeConcern)
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
     driver.breaker.withSyncCircuitBreaker {
-      snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), WriteConcern.JournalSafe)
+      snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
     }
   
   

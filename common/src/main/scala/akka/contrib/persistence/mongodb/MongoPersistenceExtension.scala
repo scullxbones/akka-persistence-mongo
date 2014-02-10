@@ -41,10 +41,12 @@ class MongoSettings(override val systemSettings: ActorSystem.Settings, override 
   val DbName = config.getString("db")
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")
+  val JournalWriteConcern = config.getString("journal-write-concern")
   val SnapsCollection = config.getString("snaps-collection")
   val SnapsIndex = config.getString("snaps-index")
+  val SnapsWriteConcern = config.getString("snaps-write-concern")
 
   val Tries = config.getInt("breaker.maxTries")
-  val CallTimeout = Duration(config.getMilliseconds("breaker.timeout.call"), MILLISECONDS)
-  val ResetTimeout = Duration(config.getMilliseconds("breaker.timeout.reset"), MILLISECONDS)
+  val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
+  val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
 }
