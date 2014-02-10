@@ -206,12 +206,17 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     }
   }
 
+  it should "have a default sequence nr when journal is empty" in new Fixture { withJournal { journal =>
+      val result = underTest.maxSequenceNr("unit-test", 5).value.get.get
+      result should be (0)
+    }
+  }
+
   it should "calculate the max sequence nr" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
 
       val result = underTest.maxSequenceNr("unit-test", 2).value.get.get
       result should be (3)
     }
-  
   }
 }
