@@ -6,7 +6,7 @@ object Dependencies {
   val typesafeSnapshots = "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/"
   val local = "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-  val appResolvers = Seq(
+  val projectResolvers = Seq(
     typesafeReleases,
     typesafeSnapshots,
     Resolver.sonatypeRepo("snapshots")
