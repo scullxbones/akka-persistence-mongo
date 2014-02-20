@@ -25,6 +25,9 @@
 
 ### Jars now available in central snapshots repo:
 
+0.0.1 release is tracking Akka 2.3.0-RC2
+0.0.2 snapshot is tracking Akka 2.3.0-RC3
+
 #### Using sbt?
 
 ```scala
