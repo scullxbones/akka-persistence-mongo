@@ -25,7 +25,7 @@
 
 ### Jars now available in central snapshots repo:
 
-0.0.2 is tracking 2.3.0-RC4 and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit)
+0.0.2 is tracking 2.3.0-RC4 and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.1`
 
 #### Using sbt?
 
