@@ -19,7 +19,7 @@ object Dependencies {
   val scalaMock = "org.scalamock" %% "scalamock-scalatest-support" % "3.1.RC1" % "test"
   val mockito = "org.mockito" % "mockito-all" % "1.9.5" % "test"
   val embedMongoScalatest = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1" % "test"
-  val embedMongo = "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.41" % "test"
+  val embedMongo = "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.42" % "test"
   val akkaTestKit = "com.typesafe.akka" %% "akka-testkit" % "2.3.0-RC4" % "test"
   val akkaPersistTck = "com.github.krasserm" %% "akka-persistence-testkit" % "0.1" % "test"
 

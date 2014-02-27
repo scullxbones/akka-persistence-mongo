@@ -32,6 +32,9 @@ trait EmbedMongo extends BeforeAndAfterAll { this: BeforeAndAfterAll with Suite 
   
   val mongodConfig = new MongodConfigBuilder()
     .version(Version.Main.PRODUCTION)
+    .cmdOptions(new MongoCmdOptionsBuilder()
+    	.syncDeplay(0)
+    	.build())
     .net(new Net(embedConnectionPort, Network.localhostIsIPv6()))
     .build();
   
