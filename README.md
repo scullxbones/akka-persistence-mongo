@@ -110,6 +110,16 @@ akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 3s
 akka.contrib.persistence.mongodb.mongo.breaker.timeout.reset = 10s
 ```
 
+#### Configuring the dispatcher used
+
+The name `akka-contrib-persistence-dispatcher` is mapped to a typically configured `ThreadPoolExecutor` based dispatcher.  This is needed to support the `Future`s used to interact with MongoDB via Casbah.  More details on these settings can be found in the [Akka Dispatcher documentation](http://doc.akka.io/docs/akka/snapshot/scala/dispatchers.html).  For example the (by core-scaled) pool sizes can be set:
+
+```
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-min = 10
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-factor = 10
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
+```
+
 #### Defaults
 ```
 akka {
@@ -139,4 +149,26 @@ akka {
     }
   }
 }
+
+
+akka-contrib-persistence-dispatcher {
+  # Dispatcher is the name of the event-based dispatcher
+  type = Dispatcher
+  # What kind of ExecutionService to use
+  executor = "thread-pool-executor"
+  # Configuration for the thread pool
+  thread-pool-executor {
+    # minimum number of threads to cap factor-based core number to
+    core-pool-size-min = 2
+    # No of core threads ... ceil(available processors * factor)
+    core-pool-size-factor = 2.0
+    # maximum number of threads to cap factor-based number to
+    core-pool-size-max = 10
+  }
+  # Throughput defines the maximum number of messages to be
+  # processed per actor before the thread jumps to the next actor.
+  # Set to 1 for as fair as possible.
+  throughput = 100
+}
+
 ```
