@@ -13,6 +13,7 @@ import com.mongodb.casbah.MongoCollection
 import akka.serialization.Serialization
 import akka.persistence.PersistentConfirmation
 import akka.persistence.PersistentId
+import scala.annotation.tailrec
 
 object CasbahPersistenceJournaller {
   import JournallingFieldNames._
@@ -75,7 +76,7 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
     }
   }.mapTo[Unit]
   
-  private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext) =
+  private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext):Unit =
       if (hard) {
         journal.remove(query, writeConcern)
       } else {
@@ -111,14 +112,26 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   private[this] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
       journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, writeConcern)
+      ()
     }
   }.mapTo[Unit]
 
-  private[mongodb] override def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      val cursor = journal.find(journalRangeQuery(pid, from, to)).map(deserializeJournal)
-      cursor.foreach(replayCallback)
-    }
+  private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = Future {
+    if (to >= from)
+      driver.breaker.withSyncCircuitBreaker {
+        val cursor = journal.find(journalRangeQuery(pid, from, to)).map(deserializeJournal)
+        
+        @tailrec
+        def replayLimit(cursor: Iterator[PersistentRepr], remaining: Long): Unit = {
+          if (remaining == 0 || !cursor.hasNext) {
+            return ()
+          }
+          replayCallback(cursor.next)
+          replayLimit(cursor, remaining - 1)
+        }
+        
+        replayLimit(cursor,max)
+      }
   }
 
   private[mongodb] def journal(implicit ec: ExecutionContext): MongoCollection = {

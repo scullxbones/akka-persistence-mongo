@@ -102,7 +102,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
       .map(l => l.headOption.map(pi => pi.sequenceNr).getOrElse(0L))
   }
 
-  private[mongodb] override def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = {
+  private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = {
     val cursor = journal
       .find(journalRangeQuery(pid, from, to))
       .cursor[PersistentRepr]

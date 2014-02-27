@@ -10,7 +10,7 @@ import akka.persistence.PersistentId
 
 class MongoJournal extends AsyncWriteJournal {
   
-  private[this] val impl = context.system.extension(MongoPersistenceExtensionId).journaler
+  private[this] val impl = MongoPersistenceExtensionId.get(context.system).journaler
   private[this] implicit val ec = context.dispatcher
 
   /**
@@ -68,7 +68,7 @@ class MongoJournal extends AsyncWriteJournal {
    * @see [[SyncWriteJournal]]
    */
   override def asyncReplayMessages(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Unit] = 
-  	impl.replayJournal(processorId, fromSequenceNr, toSequenceNr)(replayCallback)
+  	impl.replayJournal(processorId, fromSequenceNr, toSequenceNr, max)(replayCallback)
 
   /**
    * Plugin API: asynchronously reads the highest stored sequence number for the
@@ -104,7 +104,7 @@ trait MongoPersistenceJournallingApi {
 
   private[mongodb] def confirmJournalEntries(confirms: Seq[PersistentConfirmation])(implicit ec: ExecutionContext): Future[Unit]
   
-  private[mongodb] def replayJournal(pid: String, from: Long, to: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
+  private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
 }

@@ -200,9 +200,23 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       journal.insert(records: _*)
 
       var buf = Buffer[PersistentRepr]()
-      val result = underTest.replayJournal("unit-test", 2, 3)(buf += _).value.get.get
+      val result = underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
       buf should have size 2
       buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, processorId = "unit-test"))
+    }
+  }
+
+  it should "not replay deleted journal entries" in new Fixture { withJournal { journal =>
+      journal.insert(records: _*)
+
+      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
+      
+      underTest.deleteAllMatchingJournalEntries(ids, true)
+      
+      var buf = Buffer[PersistentRepr]()
+      val result = underTest.replayJournal("unit-test", 1, 15, 10)(buf += _).value.get.get
+      buf should have size 1
+      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 3, processorId = "unit-test"))
     }
   }
 
