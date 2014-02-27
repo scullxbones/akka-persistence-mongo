@@ -33,9 +33,9 @@ trait EmbedMongo extends BeforeAndAfterAll { this: BeforeAndAfterAll with Suite 
   val mongodConfig = new MongodConfigBuilder()
     .version(Version.Main.PRODUCTION)
     .cmdOptions(new MongoCmdOptionsBuilder()
-    	.syncDeplay(0)
+    	.syncDeplay(1)
     	.build())
-    .net(new Net(embedConnectionPort, Network.localhostIsIPv6()))
+    .net(new Net("127.0.0.1",embedConnectionPort, Network.localhostIsIPv6()))
     .build();
   
   lazy val runtime = MongodStarter.getInstance(runtimeConfig);
@@ -44,6 +44,8 @@ trait EmbedMongo extends BeforeAndAfterAll { this: BeforeAndAfterAll with Suite 
 
   override def beforeAll() {
     mongodExe
+    val col = mongoDB("system.profile")
+    col.findOne
     super.beforeAll()
   }
 
