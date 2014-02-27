@@ -26,12 +26,15 @@
 ### Jars now available in central snapshots repo:
 
 0.0.1 release is tracking Akka 2.3.0-RC2
+
 0.0.2 snapshot is tracking Akka 2.3.0-RC3
+
+0.0.2 release will track 2.3.0-RC4 and will pass the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit)
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.1-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.1"
 ```
 
 #### Using Maven?
@@ -40,13 +43,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.1</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.1-SNAPSHOT'
+runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.1'
 ```
 
 ### How to use with akka-persistence?
