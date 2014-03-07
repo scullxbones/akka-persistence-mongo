@@ -48,6 +48,6 @@ trait MongoPersistenceBase {
   def mongoUrl = settings.Urls
   def mongoDbName = settings.DbName
   
-  lazy val serialization = actorSystem.extension(SerializationExtension)
+  lazy val serialization = SerializationExtension.get(actorSystem)
   lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 }
