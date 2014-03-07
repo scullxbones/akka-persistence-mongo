@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.png?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
 
 
-## An implementation of mongodb flavor of [akka-persistence](http://akka.io)
+## A mongodb flavored implementation of [akka-persistence](http://akka.io)
 
  * Three projects, a core and two driver implementations.  You must build both the core and one of the drivers:
    * common provides integration with Akka persistence, implementing the plugin API
@@ -25,12 +25,12 @@
 
 ### Jars now available in central snapshots repo:
 
-0.0.2 is tracking 2.3.0-RC4 and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.1`
+Version `0.0.3` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.2"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.3"
 ```
 
 #### Using Maven?
@@ -39,13 +39,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.2'
+runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.3'
 ```
 
 ### How to use with akka-persistence?
