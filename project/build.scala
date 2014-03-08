@@ -36,7 +36,8 @@ object AppBuilder extends Build {
         organization := ORG,
         version := VERSION,
         scalaVersion := SCALA_VERSION,
-        pomExtra := POM_XTRA) ++ sonatypeSettings
+        pomExtra := POM_XTRA,
+	scalacOptions ++= Seq("-unchecked", "-deprecation","-feature")) ++ sonatypeSettings
   
   val commonSettings = projectSettings("common")
 
@@ -45,8 +46,8 @@ object AppBuilder extends Build {
   val rxmongoSettings = projectSettings("rxmongo")
   
   lazy val aRootNode = Project("root", file("."))
-    			.settings(commonSettings : _*)
-			.aggregate(casbah,rxmongo)
+			.settings (packagedArtifacts in file(".") := Map.empty)
+			.aggregate(common,casbah,rxmongo)
 
   lazy val common = Project("common", file("common"))
     .settings(commonSettings : _*)

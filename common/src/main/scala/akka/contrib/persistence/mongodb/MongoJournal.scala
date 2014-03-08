@@ -63,9 +63,6 @@ class MongoJournal extends AsyncWriteJournal {
    * @param max maximum number of messages to be replayed.
    * @param replayCallback called to replay a single message. Can be called from any
    *                       thread.
-   *
-   * @see [[AsyncWriteJournal]]
-   * @see [[SyncWriteJournal]]
    */
   override def asyncReplayMessages(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Unit] = 
   	impl.replayJournal(processorId, fromSequenceNr, toSequenceNr, max)(replayCallback)
