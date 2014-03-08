@@ -25,12 +25,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.0.3` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
+Version `0.0.4` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.4"
 ```
 
 #### Using Maven?
@@ -39,13 +39,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.3</version>
+    <version>0.0.4</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.3'
+runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.4'
 ```
 
 ### How to use with akka-persistence?
@@ -59,7 +59,7 @@ akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
 Add the following line if you want to use the snapshotting functionality:
 
 ```
-akka.persistence.snapshot.plugin = "akka-contrib-mongodb-persistence-snapshot"
+akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
 ```
 
 ### How to configure?
