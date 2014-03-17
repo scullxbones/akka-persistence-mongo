@@ -1,17 +1,16 @@
 # akka-persistence-mongo
-======
 
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.png?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
 
 
-## A mongodb flavored implementation of [akka-persistence](http://akka.io)
+## A MongoDB plugin for [akka-persistence](http://akka.io)
 
- * Three projects, a core and two driver implementations.  You must build both the core and one of the drivers:
+ * Three projects, a core and two driver implementations.  To use you must pull jars for both the common and one of the drivers:
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver (ONLY FUNCTIONAL APPROACH CURRENTLY)
    * rxmongo provides an implementation against the ReactiveMongo driver (NOT FUNCTIONAL ATM)
  * ~~No these projects are not available in Maven Central ... yet~~
- * Akka persistence has an unstable api that is changing with each release - do not expect this to work with non-matching versions of Akka until that changes
+ * Akka persistence has ~~an unstable~~ a much more stable api that is ~~changing with each release - do not expect this to work with non-matching versions of Akka until that changes~~ pretty stable as of Akka 2.3.0.
  * Both the journal and snapshot will reuse the dispatcher of the actor that is performing journalling and snapshot activities for any futures; this means you should *not* use the default dispatcher, but a unique dispatcher.  ~~This will be taken care of for you in the future.~~  This is now configured by default and is only an FYI.
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
 
