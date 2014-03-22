@@ -83,6 +83,7 @@ akka.contrib.persistence.mongodb.mongo.journal-collection = "my_persistent_journ
 akka.contrib.persistence.mongodb.mongo.journal-index = "my_journal_index"
 akka.contrib.persistence.mongodb.mongo.snaps-collection = "my_persistent_snapshots"
 akka.contrib.persistence.mongodb.mongo.snaps-index = "my_snaps_index"
+akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
 ```
 
 #### Mongo Write Concern settings
@@ -98,6 +99,12 @@ The write concern can be set both for the journal plugin as well as the snapshot
  * `ErrorsIgnored` - !WARNING! Extremely unsafe.  This level may not be able to detect if the MongoDB server is even running.  It will also not detect errors such as key collisions.  This makes data loss likely.  In general, don't use this.
 
 It is a bad idea&trade; to use anything less safe than `Acknowledged` on the journal.  The snapshots can be played a bit more fast and loose, but the recommendation is not to go below `Acknowledged` for any serious work.
+
+As a single data point (complete with grain of salt!) on a MBP i5 w/ SSD with [Kodemaniak's testbed](https://github.com/kodemaniak/akka-persistence-throughput-test) and mongodb running on the same physical machine, the performance difference between:
+ * `Journaled` and `Acknowledged` write concerns is two orders of magnitude
+ * `Acknowledged` and both `Unacknowledged` and `ErrorsIgnored` write concerns is one order of magnitude
+
+`Journaled` is a significant trade off of straight line performance for safety, and should be benchmarked vs. `Acknowledged` for your specific use case and treated as an engineering cost-benefit decision.  The argument for the unsafe pair of `Unacknowledged` and `ErrorsIgnored` vs. `Acknowledged` seems to be much weaker, although the functionality is left for the user to apply supersonic lead projectiles to their phalanges as necessary :).
 
 #### Circuit breaker settings
 
