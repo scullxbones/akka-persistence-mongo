@@ -1,10 +1,12 @@
 package akka.contrib.persistence.mongodb
 
-import akka.pattern.CircuitBreaker
+import scala.language.implicitConversions
+import com.codahale.metrics.MetricRegistry
 import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
+import akka.pattern.CircuitBreaker
 import akka.serialization.SerializationExtension
-import scala.language.implicitConversions
+import nl.grons.metrics.scala.InstrumentedBuilder
 
 object MongoPersistenceBase {
 
@@ -22,6 +24,8 @@ object MongoPersistenceBase {
     case "journaled" => Journaled
     case "replicaacknowledged" => ReplicaAcknowledged
   }
+  
+  private[mongodb] lazy val registry = new MetricRegistry
 }
 
 
