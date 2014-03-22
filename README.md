@@ -24,18 +24,21 @@
 
 ### What's new?
 
+#### 0.0.6
+ - Fixed goofy name for extension - now is `MongoPersistenceExtension`, matching the [metrics docs](#metrics) below
+
 #### 0.0.5
  - A `what's new` section in the README :)
  - [Metrics Scala](https://github.com/erikvanoosten/metrics-scala) introduced on casbah journal ... [details](#metrics)
 
 ### Jars now available in central snapshots repo:
 
-Version `0.0.5` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
+Version `0.0.6` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.6"
 ```
 
 #### Using Maven?
@@ -44,13 +47,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.5</version>
+    <version>0.0.6</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.5'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.6'
 ```
 
 ### How to use with akka-persistence?
