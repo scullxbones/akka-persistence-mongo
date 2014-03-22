@@ -1,12 +1,14 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor._
-
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
-
-import scala.concurrent.duration._
-import scala.collection.JavaConverters._
+import akka.actor.ActorSystem
+import akka.actor.ExtendedActorSystem
+import akka.actor.Extension
+import akka.actor.ExtensionId
+import com.codahale.metrics.MetricRegistry
 
 object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension] {
   
@@ -26,6 +28,7 @@ object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension
 trait MongoPersistenceExtension extends Extension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
+  def registry: MetricRegistry = MongoPersistenceBase.registry
 }
 
 class MongoSettings(override val systemSettings: ActorSystem.Settings, override val userConfig: Config)

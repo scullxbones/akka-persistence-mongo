@@ -26,6 +26,7 @@ object Dependencies {
   val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % "2.3.0"
   val rxMongo = "org.reactivemongo" %% "reactivemongo" % "0.10.0"
   val casbah = "org.mongodb" %% "casbah" % "2.6.4"
+  val metrix = "nl.grons" %% "metrics-scala" % "3.0.5_a2.3"
  
   val testDependencies = Seq(
     scalatest,
@@ -36,7 +37,8 @@ object Dependencies {
   )
  
   val commonDependencies = Seq(
-    akkaPersistence
+    akkaPersistence,
+    metrix
   ) ++ testDependencies
 
   val casbahDependencies = Seq(

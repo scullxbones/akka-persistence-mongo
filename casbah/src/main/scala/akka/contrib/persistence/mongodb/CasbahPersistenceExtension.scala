@@ -47,7 +47,9 @@ class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceD
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
   private[this] lazy val driver = new CasbahMongoDriver(actorSystem)
-  private[this] lazy val _journaler = new CasbahPersistenceJournaller(driver)
+  private[this] lazy val _journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
+    override def driverName = "casbah"
+  }
   private[this] lazy val _snapshotter = new CasbahPersistenceSnapshotter(driver)
   
   override def journaler = _journaler
