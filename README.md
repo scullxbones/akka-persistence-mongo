@@ -22,14 +22,20 @@
  - ~~Publish to maven central~~
  - Finish implementation of RXMongo driver (currently blocked by the Akka version RxMongo uses, 2.2)
 
+### What's new?
+
+#### 0.0.5
+ - A `what's new` section in the README :)
+ - [Metrics Scala](https://github.com/erikvanoosten/metrics-scala) introduced on casbah journal ... [details](#metrics)
+
 ### Jars now available in central snapshots repo:
 
-Version `0.0.4` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
+Version `0.0.5` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.5"
 ```
 
 #### Using Maven?
@@ -38,13 +44,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.4</version>
+    <version>0.0.5</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-runtime 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.4'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.5'
 ```
 
 ### How to use with akka-persistence?
@@ -178,3 +184,43 @@ akka-contrib-persistence-dispatcher {
 }
 
 ```
+
+### <a name="metrics"></a> Metrics
+
+Depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
+
+For this implementation, no assumptions are made about how the results are reported.  Unfortunately this means you need to inject your own reporters.  This will require you to refer to the extension in your own code, e.g.:
+
+```scala
+
+object MyApplication {
+
+  val actorSystem = ActorSystem("my-application")
+  val registry = MongoPersistenceExtension(actorSystem).registry
+  val jmxReporter = JmxReporter.forRegistry(registry).build()
+  jmxReporter.start()
+
+}
+
+```
+
+#### What is measured?
+Timers:
+ - Single journal entry
+ - Journal entry range
+ - Journal append
+ - Journal range delete
+ - Journal multi delete
+ - Journal confirms
+ - Journal replays
+ - Journal max sequence number for processor query
+
+Meters:
+ - Rate of usage of `permanent` flag in deletes
+
+Histograms:
+ - Batch sizes used for: range read, appends, deletes, confirms
+
+#### Future plans?
+ - Adding metrics to snapshotter
+ - Adding health checks to both
