@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 
 class MongoSnapshots extends SnapshotStore {
 
-  private[this] val impl = MongoPersistenceExtensionId(context.system).snapshotter
+  private[this] val impl = MongoPersistenceExtension(context.system).snapshotter
   private[this] implicit val ec = context.dispatcher
   
   /**

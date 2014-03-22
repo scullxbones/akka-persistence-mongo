@@ -10,9 +10,9 @@ import akka.actor.Extension
 import akka.actor.ExtensionId
 import com.codahale.metrics.MetricRegistry
 
-object MongoPersistenceExtensionId extends ExtensionId[MongoPersistenceExtension] {
+object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] {
   
-  def lookup = MongoPersistenceExtensionId
+  def lookup = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem) = {
 	val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())

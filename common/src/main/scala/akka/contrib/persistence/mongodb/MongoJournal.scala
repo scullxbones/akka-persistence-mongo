@@ -13,7 +13,7 @@ import nl.grons.metrics.scala.Timer
 
 class MongoJournal extends AsyncWriteJournal {
   
-  private[this] val impl = MongoPersistenceExtensionId.get(context.system).journaler
+  private[this] val impl = MongoPersistenceExtension(context.system).journaler
   private[this] implicit val ec = context.dispatcher
 
   /**
