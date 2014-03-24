@@ -24,6 +24,9 @@
 
 ### What's new?
 
+#### 0.0.7
+ - Fix metrics bug by which all timers were shunted to the JE timer
+
 #### 0.0.6
  - Fixed goofy name for extension - now is `MongoPersistenceExtension`, matching the [metrics docs](#metrics) below
 
@@ -33,12 +36,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.0.6` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
+Version `0.0.7` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.6"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.7"
 ```
 
 #### Using Maven?
@@ -47,13 +50,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.6</version>
+    <version>0.0.7</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.6'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.7'
 ```
 
 ### How to use with akka-persistence?
@@ -188,7 +191,7 @@ akka-contrib-persistence-dispatcher {
 
 ```
 
-### <a name="metrics"></a> Metrics
+### <a name="metrics"></a> Metrics (optional functionality)
 
 Depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
 
