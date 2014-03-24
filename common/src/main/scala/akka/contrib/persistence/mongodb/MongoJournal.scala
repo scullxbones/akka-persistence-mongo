@@ -140,7 +140,7 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
   private lazy val confirmBatchSize = metrics.histogram(histName("write.confirms.batch-size"))
   
   private def timeIt[A](timer: Timer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
-    val ctx = jeTimer.timerContext
+    val ctx = timer.timerContext
     val result = block
     result.onComplete(_ => ctx.stop())
     result
