@@ -21,7 +21,7 @@ object Dependencies {
   val embedMongoScalatest = "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.1" % "test"
   val embedMongo = "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.42" % "test"
   val akkaTestKit = "com.typesafe.akka" %% "akka-testkit" % "2.3.0" % "test"
-  val akkaPersistTck = "com.github.krasserm" %% "akka-persistence-testkit" % "0.2" % "test"
+  val akkaPersistTck = "com.github.krasserm" %% "akka-persistence-testkit" % "0.3" % "test"
 
   val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % "2.3.0"
   val rxMongo = "org.reactivemongo" %% "reactivemongo" % "0.10.0"
