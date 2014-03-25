@@ -9,20 +9,17 @@
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver (ONLY FUNCTIONAL APPROACH CURRENTLY)
    * rxmongo provides an implementation against the ReactiveMongo driver (NOT FUNCTIONAL ATM)
- * ~~No these projects are not available in Maven Central ... yet~~
- * Akka persistence has ~~an unstable~~ a much more stable api that is ~~changing with each release - do not expect this to work with non-matching versions of Akka until that changes~~ pretty stable as of Akka 2.3.0.
- * Both the journal and snapshot will reuse the dispatcher of the actor that is performing journalling and snapshot activities for any futures; this means you should *not* use the default dispatcher, but a unique dispatcher.  ~~This will be taken care of for you in the future.~~  This is now configured by default and is only an FYI.
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
 
 ### Outstanding tasks:
 
- - ~~Solve Travis CI / embedded mongo issue~~
- - ~~Address dispatchers used~~
  - DRY up circuit breaker usage
- - ~~Publish to maven central~~
  - Finish implementation of RXMongo driver (currently blocked by the Akka version RxMongo uses, 2.2)
 
 ### What's new?
+
+#### 0.0.8
+ - Update to support 0.3 of [TCK](https://github.com/krasserm/akka-persistence-testkit), which added snapshot coverage
 
 #### 0.0.7
  - Fix metrics bug by which all timers were shunted to the JE timer
@@ -36,12 +33,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.0.7` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.2`
+Version `0.0.8` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.7"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.8"
 ```
 
 #### Using Maven?
@@ -50,13 +47,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.7</version>
+    <version>0.0.8</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.7'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.8'
 ```
 
 ### How to use with akka-persistence?
