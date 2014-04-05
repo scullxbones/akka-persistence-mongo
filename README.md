@@ -20,6 +20,7 @@
 
 #### 0.0.9
  - Use batch mode for inserts to journal for very significant performance gain
+ - Currently batch-mode inserts are not atomic, and so there is an opportunity for a failure to leave the journal in a partially completed state; Looking to address this with Issue #5
 
 #### 0.0.8
  - Update to support 0.3 of [TCK](https://github.com/krasserm/akka-persistence-testkit), which added snapshot coverage
