@@ -3,6 +3,9 @@
 *.class
 *.log
 
+journal/
+snapshots/
+
 # sbt specific
 dist/*
 target/

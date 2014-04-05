@@ -72,7 +72,8 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
 
   private[mongodb] override def appendToJournal(documents: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) = Future {
     driver.breaker.withSyncCircuitBreaker {
-      documents.foreach { journal.insert(_, writeConcern) }
+      journal.insert(documents.toSeq:_*)(serializeJournal,writeConcern)
+      ()
     }
   }.mapTo[Unit]
   
