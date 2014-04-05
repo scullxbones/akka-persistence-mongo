@@ -18,6 +18,9 @@
 
 ### What's new?
 
+#### 0.0.9
+ - Use batch mode for inserts to journal for very significant performance gain
+
 #### 0.0.8
  - Update to support 0.3 of [TCK](https://github.com/krasserm/akka-persistence-testkit), which added snapshot coverage
 
@@ -33,12 +36,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.0.8` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3`
+Version `0.0.9` is tracking Akka `2.3.0` and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.8"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.0.9"
 ```
 
 #### Using Maven?
@@ -47,13 +50,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.0.8</version>
+    <version>0.0.9</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.8'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.0.9'
 ```
 
 ### How to use with akka-persistence?
