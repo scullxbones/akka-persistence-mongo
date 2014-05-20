@@ -6,7 +6,7 @@ import SonatypeKeys._
 
 object AppBuilder extends Build {
   
-  val VERSION = "0.1.0-SNAPSHOT"
+  val VERSION = "0.1.0"
   val SCALA_VERSION = "2.10.0"
   val ORG = "com.github.scullxbones"
   val POM_XTRA = {
@@ -49,6 +49,7 @@ object AppBuilder extends Build {
 			.settings (packagedArtifacts in file(".") := Map.empty)
 			.settings (crossScalaVersions := Seq("2.10.0","2.11.0"))
 			.settings (scalaVersion := SCALA_VERSION)
+			.settings (publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))))
 			.aggregate(common,casbah)
 
   lazy val common = project("common")

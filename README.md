@@ -18,6 +18,13 @@
 
 ### What's new?
 
+#### 0.1.0
+ - Cross compile to 2.11 (Issue #9)
+ - Update to 2.11 compatible versions of libraries (scalatest, casbah); Mark akka dependencies `provided`
+ - Update to support 0.3.1 of [TCK](https://github.com/krasserm/akka-persistence-testkit), which supports Scala 2.11
+ - Eliminate publish message from root project
+ - Remove build and publish of rxmongo project for now
+
 #### 0.0.9
  - Use batch mode for inserts to journal for very significant performance gain
  - Currently batch-mode inserts are not atomic, and so there is an opportunity for a failure to leave the journal in a partially completed state; Looking to address this with Issue #5
