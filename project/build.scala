@@ -6,8 +6,8 @@ import SonatypeKeys._
 
 object AppBuilder extends Build {
   
-  val VERSION = "0.0.9"
-  val SCALA_VERSION = "2.10.3"
+  val VERSION = "0.1.0-SNAPSHOT"
+  val SCALA_VERSION = "2.10.0"
   val ORG = "com.github.scullxbones"
   val POM_XTRA = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -31,40 +31,36 @@ object AppBuilder extends Build {
   </developers>
   }
 
-  def projectSettings(moduleName: String) = 
+  def project(moduleName: String) = 
+    Project(moduleName, file(moduleName))
+	.settings(projectSettings(moduleName) : _*)
+	.settings(resolvers ++= projectResolvers)
+
+  def projectSettings(moduleName: String) = Defaults.defaultSettings ++
     Seq(name := "akka-persistence-mongo-"+moduleName, 
         organization := ORG,
         version := VERSION,
         scalaVersion := SCALA_VERSION,
+        crossScalaVersions := Seq("2.10.0","2.11.0"),
         pomExtra := POM_XTRA,
 	scalacOptions ++= Seq("-unchecked", "-deprecation","-feature")) ++ sonatypeSettings
   
-  val commonSettings = projectSettings("common")
-
-  val casbahSettings = projectSettings("casbah")
-
-  val rxmongoSettings = projectSettings("rxmongo")
-  
   lazy val aRootNode = Project("root", file("."))
 			.settings (packagedArtifacts in file(".") := Map.empty)
-			.aggregate(common,casbah,rxmongo)
+			.settings (crossScalaVersions := Seq("2.10.0","2.11.0"))
+			.settings (scalaVersion := SCALA_VERSION)
+			.aggregate(common,casbah)
 
-  lazy val common = Project("common", file("common"))
-    .settings(commonSettings : _*)
+  lazy val common = project("common")
     .settings(libraryDependencies ++= commonDependencies)
-    .settings(resolvers ++= projectResolvers)
 
-  lazy val casbah = Project("casbah", file("casbah"))
-    .settings(casbahSettings : _*)
+  lazy val casbah = project("casbah")
     .settings(libraryDependencies ++= casbahDependencies)
-    .settings(resolvers ++= projectResolvers)
     .dependsOn(common % "test->test;compile->compile")
-
-  lazy val rxmongo = Project("rxmongo", file("rxmongo"))
-    .settings(rxmongoSettings : _*)
+/*
+  lazy val rxmongo = project("rxmongo")
     .settings(libraryDependencies ++= rxmongoDependencies)
-    .settings(resolvers ++= projectResolvers)
     .dependsOn(common % "test->test;compile->compile")
-
+*/
 
 }
