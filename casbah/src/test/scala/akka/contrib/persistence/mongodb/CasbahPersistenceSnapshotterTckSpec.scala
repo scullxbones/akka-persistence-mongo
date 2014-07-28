@@ -12,7 +12,7 @@ class CasbahPersistenceSnapshotterTckSpec extends SnapshotStoreSpec with EmbedMo
       |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
       |akka.persistence.journal.leveldb.native = off
       |akka.contrib.persistence.mongodb.mongo.driver = "akka.contrib.persistence.mongodb.CasbahPersistenceExtension"
-      |akka.contrib.persistence.mongodb.mongo.urls = ["localhost:${embedConnectionPort}"]
+      |akka.contrib.persistence.mongodb.mongo.urls = ["localhost:$embedConnectionPort"]
       |akka-contrib-mongodb-persistence-snapshot {
 	  |	  # Class name of the plugin.
 	  |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"

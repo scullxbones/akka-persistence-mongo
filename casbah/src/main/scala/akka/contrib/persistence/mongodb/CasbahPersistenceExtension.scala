@@ -2,14 +2,8 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
-import akka.persistence.PersistentRepr
-import scala.concurrent.Future
-import akka.serialization.SerializationExtension
-import com.mongodb.ServerAddress
 import com.mongodb.casbah.WriteConcern
-import scala.collection.immutable.{ Seq => ISeq }
-import scala.concurrent.ExecutionContext
-import akka.persistence.SelectedSnapshot
+
 import scala.language.implicitConversions
 
 object CasbahPersistenceDriver {
@@ -31,12 +25,22 @@ object CasbahPersistenceDriver {
 }
 
 trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersistenceBase {
-  import CasbahPersistenceDriver._
+  import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
   
   // Collection type
   type C = MongoCollection
 
-  private[this] lazy val db = MongoClient(mongoUrl)(mongoDbName)
+  private[this] lazy val db =
+    userPass.map {
+      case (u,p) => authenticated(u,p)
+    }.getOrElse(unauthenticated())(mongoDbName)
+
+  private[this] def authenticated(user: String, password: String) =
+    MongoClient(mongoUrl,MongoCredential.createMongoCRCredential(user,mongoDbName,password.toCharArray) :: Nil)
+
+  private[this] def unauthenticated() = MongoClient(mongoUrl)
+
+
   
   private[mongodb] def collection(name: String) = db(name)
   private[mongodb] def journalWriteConcern: WriteConcern = journalWriteSafety

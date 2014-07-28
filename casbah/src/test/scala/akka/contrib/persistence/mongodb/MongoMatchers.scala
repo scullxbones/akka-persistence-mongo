@@ -1,16 +1,14 @@
 package akka.contrib.persistence.mongodb
 
-import org.scalatest.matchers.Matcher
 import com.mongodb.DBObject
-import org.scalatest.matchers.MatchResult
 import org.bson.BSONObject
-import scala.reflect.ClassTag
+import org.scalatest.matchers.{MatchResult, Matcher}
 
 trait MongoMatchers {
 
   class DBObjectContains[V](key: String, value: V) extends Matcher[DBObject] {
     def apply(left: DBObject) = {
-      val contained = Option(left.get(key)).getOrElse(null)
+      val contained = Option(left.get(key)).orNull
       MatchResult(
           value.equals(contained),
           s"DBObject $key did not match $value, received $contained",

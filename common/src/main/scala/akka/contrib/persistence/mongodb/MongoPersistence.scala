@@ -1,12 +1,12 @@
 package akka.contrib.persistence.mongodb
 
-import scala.language.implicitConversions
-import com.codahale.metrics.MetricRegistry
-import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
 import akka.pattern.CircuitBreaker
 import akka.serialization.SerializationExtension
-import nl.grons.metrics.scala.InstrumentedBuilder
+import com.codahale.metrics.SharedMetricRegistries
+import com.typesafe.config.ConfigFactory
+
+import scala.language.implicitConversions
 
 object MongoPersistenceBase {
 
@@ -25,7 +25,7 @@ object MongoPersistenceBase {
     case "replicaacknowledged" => ReplicaAcknowledged
   }
   
-  private[mongodb] lazy val registry = new MetricRegistry
+  private[mongodb] lazy val registry = SharedMetricRegistries.getOrCreate("mongodb")
 }
 
 
@@ -37,11 +37,13 @@ trait MongoPersistenceDriver {
 }
 
 trait MongoPersistenceBase {
-  import MongoPersistenceBase._
+  import akka.contrib.persistence.mongodb.MongoPersistenceBase._
   
   val actorSystem: ActorSystem
+
+  val userOverrides = ConfigFactory.load()
   
-  private[this] lazy val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
+  lazy val settings = new MongoSettings(actorSystem.settings, userOverrides)
   
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
@@ -51,6 +53,13 @@ trait MongoPersistenceBase {
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern 
   def mongoUrl = settings.Urls
   def mongoDbName = settings.DbName
+  def userPass: Option[(String,String)] = {
+    val userAndPass = (settings.Username,settings.Password)
+    for {
+      user <- userAndPass._1
+      pass <- userAndPass._2
+    } yield(user,pass)
+  }
   
   lazy val serialization = SerializationExtension.get(actorSystem)
   lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)

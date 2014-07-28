@@ -1,23 +1,22 @@
 package akka.contrib.persistence.mongodb
 
+import akka.actor.ActorSystem
+import akka.persistence.{SelectedSnapshot, SnapshotMetadata}
+import akka.serialization.SerializationExtension
+import akka.testkit.TestKit
+import com.mongodb.casbah.Imports._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import akka.testkit.TestKit
-import akka.actor.ActorSystem
-import akka.serialization.SerializationExtension
-import akka.persistence.SelectedSnapshot
-import akka.persistence.SnapshotMetadata
-import com.mongodb.casbah.Imports._
-import scala.util.Success
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
 
-  import CasbahPersistenceSnapshotter._
-  import SnapshottingFieldNames._
-  import MongoMatchers._
+  import akka.contrib.persistence.mongodb.CasbahPersistenceSnapshotter._
+  import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 
   implicit val serialization = SerializationExtension(system)
+
+  override def auth = new AuthenticatingCommandLinePostProcessor
 
   trait Fixture {
     val underTest = new CasbahPersistenceSnapshotter(driver)
@@ -62,7 +61,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       snapshot.insert(records: _*)
 
       underTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 250).value.get.get shouldBe
-        (Some(SelectedSnapshot(SnapshotMetadata("unit-test", 20, 200), "snapshot-data")))
+        Some(SelectedSnapshot(SnapshotMetadata("unit-test", 20, 200), "snapshot-data"))
     }
   }
 
@@ -71,7 +70,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       snapshot.insert(records: _*)
 
       underTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 350).value.get.get shouldBe
-        (Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 300), "snapshot-data")))
+        Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 300), "snapshot-data"))
     }
   }
 
@@ -80,7 +79,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       snapshot.insert(records: _*)
 
       underTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 25000).value.get.get shouldBe
-        (Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 10000), "snapshot-data")))
+        Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 10000), "snapshot-data"))
     }
   }
 

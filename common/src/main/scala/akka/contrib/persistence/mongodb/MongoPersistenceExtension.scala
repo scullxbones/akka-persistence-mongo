@@ -10,6 +10,8 @@ import akka.actor.Extension
 import akka.actor.ExtensionId
 import com.codahale.metrics.MetricRegistry
 
+import scala.util.Try
+
 object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] {
   
   def lookup = MongoPersistenceExtension
@@ -35,12 +37,14 @@ class MongoSettings(override val systemSettings: ActorSystem.Settings, override 
   extends UserOverrideSettings(systemSettings, userConfig) {
 
   protected override val name = "mongo"
-  
-  val _config = config  
+
+ // config.checkValid(ConfigFactory.defaultReference(),"akka.contrib.persistence.mongodb.mongo")
   
   val Implementation = config.getString("driver")
   
   val Urls = config.getStringList("urls").asScala.toList
+  val Username = Try(config.getString("username")).toOption
+  val Password = Try(config.getString("password")).toOption
   val DbName = config.getString("db")
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")

@@ -25,7 +25,7 @@ trait CasbahPersistenceSpec extends BaseUnitTest with EmbedMongo { self: TestKit
       try {
         testCode(collection)
       } finally {
-        collection.dropCollection
+        collection.dropCollection()
       }
     }
     

@@ -1,48 +1,39 @@
 package akka.contrib.persistence.mongodb
 
+import java.util.{List => JList}
+
+import akka.actor.ActorSystem
+import akka.persistence.{PersistentConfirmation, PersistentId, PersistentRepr}
+import akka.serialization.SerializationExtension
+import akka.testkit.TestKit
 import com.mongodb.casbah.Imports._
-import akka.persistence.Persistent
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext
-import akka.persistence.PersistentRepr
-import akka.pattern.CircuitBreaker
-import akka.actor.Scheduler
-import scala.language.postfixOps
-import com.mongodb.WriteConcern
-import akka.serialization.Serialization
-import scala.util.Success
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import akka.testkit.TestKit
-import akka.actor.ActorSystem
-import akka.serialization.SerializationExtension
-import java.util.{ List => JList }
-import scala.collection.immutable.{ Seq => ISeq }
-import org.scalatest.BeforeAndAfter
-import scala.collection.JavaConverters._
-import scala.collection.mutable.Buffer
-import akka.persistence.PersistentConfirmation
-import akka.persistence.PersistentId
 
-case class PersistentConfirmationImpl(processorId: String, sequenceNr: Long, channelId: String) extends PersistentConfirmation
+import scala.collection.JavaConverters._
+import scala.collection.immutable.{Seq => ISeq}
+import scala.collection.mutable
+import scala.language.postfixOps
+
+case class PersistentConfirmationImpl(persistenceId: String, sequenceNr: Long, channelId: String) extends PersistentConfirmation
 case class PersistentIdImpl(processorId: String, sequenceNr: Long) extends PersistentId
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
 
-  import CasbahPersistenceJournaller._
-  import JournallingFieldNames._
+  import akka.contrib.persistence.mongodb.CasbahPersistenceJournaller._
+  import akka.contrib.persistence.mongodb.JournallingFieldNames._
 
   implicit val serialization = SerializationExtension(system)
 
   trait Fixture {
     val underTest = new CasbahPersistenceJournaller(driver)
-    val records = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, processorId = "unit-test") }
+    val records = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test") }
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in new Fixture {
 
-    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, processorId = "pid")
+    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, persistenceId = "pid")
 
     val serialized = serializeJournal(repr)
 
@@ -53,14 +44,14 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val deserialized = deserializeJournal(serialized)
 
     deserialized.payload should be("TEST")
-    deserialized.processorId should be("pid")
+    deserialized.persistenceId should be("pid")
     deserialized.deleted should ===(false)
     deserialized.sequenceNr should be(1)
 
   }
 
   it should "serialize and deserialize confirmable data" in new Fixture {
-    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, processorId = "pid", confirmable = true, confirms = ISeq("uno"))
+    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, persistenceId = "pid", confirmable = true, confirms = ISeq("uno"))
 
     val serialized = serializeJournal(repr)
 
@@ -105,7 +96,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   it should "hard delete journal entries" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
 
-      underTest.deleteJournalEntries("unit-test", 1, 2, true)
+      underTest.deleteJournalEntries("unit-test", 1, 2, permanent = true)
 
       journal.size should be(1)
       val recone = journal.head
@@ -120,7 +111,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
       
-      underTest.deleteAllMatchingJournalEntries(ids, true)
+      underTest.deleteAllMatchingJournalEntries(ids, permanent = true)
 
       journal.size should be(1)
       val recone = journal.head
@@ -133,7 +124,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   it should "soft delete journal entries" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
 
-      underTest.deleteJournalEntries("unit-test", 1, 2, false)
+      underTest.deleteJournalEntries("unit-test", 1, 2, permanent = false)
 
       journal.size should be(3)
       val recone = journal.head
@@ -156,7 +147,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
       
-      underTest.deleteAllMatchingJournalEntries(ids, false)
+      underTest.deleteAllMatchingJournalEntries(ids, permanent = false)
 
       journal.size should be(3)
       val recone = journal.head
@@ -199,10 +190,10 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   it should "replay journal entries" in new Fixture { withJournal { journal =>
       journal.insert(records: _*)
 
-      var buf = Buffer[PersistentRepr]()
+      var buf = mutable.Buffer[PersistentRepr]()
       val result = underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
       buf should have size 2
-      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, processorId = "unit-test"))
+      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
     }
   }
 
@@ -211,12 +202,12 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
       
-      underTest.deleteAllMatchingJournalEntries(ids, true)
+      underTest.deleteAllMatchingJournalEntries(ids, permanent = true)
       
-      var buf = Buffer[PersistentRepr]()
-      val result = underTest.replayJournal("unit-test", 1, 15, 10)(buf += _).value.get.get
+      var buf = mutable.Buffer[PersistentRepr]()
+      underTest.replayJournal("unit-test", 1, 15, 10)(buf += _).value.get.get
       buf should have size 1
-      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 3, processorId = "unit-test"))
+      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 3, persistenceId = "unit-test"))
     }
   }
 
