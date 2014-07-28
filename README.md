@@ -18,6 +18,11 @@
 
 ### What's new?
 
+#### 0.1.1
+ - Add support for authentication against Mongo (currently MONGO CR supported) - Issue #10
+ - Compile against Akka 2.3.4, which is binary incompatible to 2.3.3 for akka-persistence module
+ - Update to support 0.3.4 of [TCK](https://github.com/krasserm/akka-persistence-testkit) - fixing issue #8 indirectly
+
 #### 0.1.0
  - Cross compile to 2.11 (Issue #9)
  - Update to 2.11 compatible versions of libraries (scalatest, casbah); Mark akka dependencies `provided`
@@ -44,12 +49,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.1.0` is tracking Akka `2.3.2` as a `provided` dependency and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3.1`
+Version `0.1.1` is tracking Akka `2.3.4` as a `provided` dependency and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3.4`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.1.0"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.1.1"
 ```
 
 #### Using Maven?
@@ -58,13 +63,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.1'
 ```
 
 ### How to use with akka-persistence?
@@ -104,6 +109,15 @@ akka.contrib.persistence.mongodb.mongo.journal-index = "my_journal_index"
 akka.contrib.persistence.mongodb.mongo.snaps-collection = "my_persistent_snapshots"
 akka.contrib.persistence.mongodb.mongo.snaps-index = "my_snaps_index"
 akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
+```
+
+#### Mongo authentication settings
+
+Both username and password can be specified.  Currently MONGO-CR is the only authentication mode supported.
+
+```
+akka.contrib.persistence.mongodb.mongo.username = "my.mongo.user"
+akka.contrib.persistence.mongodb.mongo.password = "secret"
 ```
 
 #### Mongo Write Concern settings
