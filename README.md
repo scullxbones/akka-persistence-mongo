@@ -7,16 +7,18 @@
 
  * Three projects, a core and two driver implementations.  To use you must pull jars for both the common and one of the drivers:
    * common provides integration with Akka persistence, implementing the plugin API
-   * casbah provides an implementation against the casbah driver (ONLY FUNCTIONAL APPROACH CURRENTLY)
+   * casbah provides an implementation against the casbah driver
    * rxmongo provides an implementation against the ReactiveMongo driver (NOT FUNCTIONAL ATM)
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
 
 ### Outstanding tasks:
 
- - DRY up circuit breaker usage
- - Finish implementation of RXMongo driver (currently blocked by the Akka version RxMongo uses, 2.2)
+ - Tracked in issue log
 
 ### What's new?
+
+#### 0.1.2
+ - Close out connection pool with actor system shutdown; should fix leaking connections for use case of reusing single JVM with multiple `ActorSystem`s; Fixes issue #12
 
 #### 0.1.1
  - Add support for authentication against Mongo (currently MONGO CR supported) - Issue #10
@@ -49,12 +51,12 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.1.1` is tracking Akka `2.3.4` as a `provided` dependency and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3.4`
+Version `0.1.2` is tracking Akka `2.3.4` as a `provided` dependency and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3.4`
 
 #### Using sbt?
 
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.1.2"
 ```
 
 #### Using Maven?
@@ -63,13 +65,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.1'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.2'
 ```
 
 ### How to use with akka-persistence?
