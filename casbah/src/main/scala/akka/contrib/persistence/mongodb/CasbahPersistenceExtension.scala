@@ -30,10 +30,12 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersisten
   // Collection type
   type C = MongoCollection
 
-  private[this] lazy val db =
+  private[mongodb] lazy val client =
     userPass.map {
       case (u,p) => authenticated(u,p)
-    }.getOrElse(unauthenticated())(mongoDbName)
+    }.getOrElse(unauthenticated())
+
+  private[mongodb] lazy val db = client(mongoDbName)
 
   private[this] def authenticated(user: String, password: String) =
     MongoClient(mongoUrl,MongoCredential.createMongoCRCredential(user,mongoDbName,password.toCharArray) :: Nil)
@@ -47,7 +49,11 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersisten
   private[mongodb] def snapsWriteConcern: WriteConcern = snapsWriteSafety
 }
 
-class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceDriver
+class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceDriver {
+  actorSystem.registerOnTermination {
+    client.close()
+  }
+}
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
   private[this] lazy val driver = new CasbahMongoDriver(actorSystem)

@@ -5,6 +5,7 @@ import com.mongodb.ServerAddress
 import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import scala.concurrent.duration._
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverSpec extends BaseUnitTest{
@@ -19,6 +20,41 @@ class CasbahPersistenceDriverSpec extends BaseUnitTest{
 }
 
 @RunWith(classOf[JUnitRunner])
+class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbedMongo {
+
+  class MockCasbahPersistenceDriver extends CasbahMongoDriver(ActorSystem("shutdown-spec")) {
+
+    override val userOverrides = ConfigFactory.parseString(
+      s"""
+        |mongo {
+        | urls = [ "localhost:$embedConnectionPort" ]
+        | db = "shutdown-spec"
+        |}
+      """.stripMargin).resolve()
+  }
+
+
+  "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in {
+    val underTest = new MockCasbahPersistenceDriver
+    underTest.actorSystem.shutdown()
+    underTest.actorSystem.awaitTermination(10.seconds)
+    intercept[IllegalStateException] {
+      underTest.db.stats()
+    }
+  }
+
+
+  it should "reconnect if a new driver is created" in {
+    val underTest = new MockCasbahPersistenceDriver
+    underTest.actorSystem.shutdown()
+    underTest.actorSystem.awaitTermination(10.seconds)
+
+    val underTest2 = new MockCasbahPersistenceDriver
+    underTest2.db.stats() // Should not throw exception
+  }
+}
+
+@RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbedMongo {
 
   override def embedDB = "admin"
@@ -27,18 +63,6 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbedMongo {
   class MockCasbahPersistenceDriver extends CasbahPersistenceDriver {
 
     val actorSystem = ActorSystem("authentication-spec")
-
-    /**
-     *         |akka {
-        |  contrib {
-        |    persistence {
-        |      mongodb {
-        |      }
-        |    }
-        |  }
-        |}
-
-     */
 
     override val userOverrides = ConfigFactory.parseString(
       s"""
