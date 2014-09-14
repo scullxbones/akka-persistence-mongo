@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.pattern.CircuitBreaker
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.WriteConcern
 
@@ -57,10 +58,14 @@ class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceD
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
   private[this] lazy val driver = new CasbahMongoDriver(actorSystem)
-  private[this] lazy val _journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
-    override def driverName = "casbah"
+  private[this] lazy val _journaler =
+    new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+      override def driverName = "casbah"
+      override private[mongodb] val breaker = driver.breaker
+    }
+  private[this] lazy val _snapshotter = new CasbahPersistenceSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
+    override private[mongodb] val breaker = driver.breaker
   }
-  private[this] lazy val _snapshotter = new CasbahPersistenceSnapshotter(driver)
   
   override def journaler = _journaler
   override def snapshotter = _snapshotter

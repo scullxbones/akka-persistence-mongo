@@ -1,5 +1,6 @@
 package akka.contrib.persistence.mongodb
 
+import akka.pattern.CircuitBreaker
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.SnapshotSelectionCriteria
 import scala.concurrent.Future
@@ -71,4 +72,21 @@ trait MongoPersistenceSnapshottingApi {
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext): Unit
   
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Unit
+}
+
+trait MongoPersistenceSnapshotFailFast extends MongoPersistenceSnapshottingApi {
+
+  private[mongodb] val breaker: CircuitBreaker
+
+  private[mongodb] abstract override def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
+    breaker.withCircuitBreaker(super.findYoungestSnapshotByMaxSequence(pid,maxSeq,maxTs))
+
+  private[mongodb] abstract override def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) =
+    breaker.withCircuitBreaker(super.saveSnapshot(snapshot))
+
+  private[mongodb] abstract override def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
+    breaker.withSyncCircuitBreaker(super.deleteSnapshot(pid,seq,ts))
+
+  private[mongodb] abstract override def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
+    breaker.withSyncCircuitBreaker(super.deleteMatchingSnapshots(pid,maxSeq,maxTs))
 }

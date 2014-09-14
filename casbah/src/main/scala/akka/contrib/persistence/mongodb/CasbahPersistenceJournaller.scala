@@ -5,10 +5,8 @@ import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-import com.mongodb.casbah.WriteConcern
 import scala.collection.immutable.{Seq => ISeq}
 import scala.language.implicitConversions
-import akka.actor.ActorSystem
 import com.mongodb.casbah.MongoCollection
 import akka.serialization.Serialization
 import akka.persistence.PersistentConfirmation
@@ -58,23 +56,17 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
     $and(PROCESSOR_ID $eq pid, $and(SEQUENCE_NUMBER $gte from, SEQUENCE_NUMBER $lte to))
 
   private[mongodb] override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      journal.findOne(journalEntryQuery(pid, seq)).map(deserializeJournal)
-    }
+    journal.findOne(journalEntryQuery(pid, seq)).map(deserializeJournal)
   }
 
   private[mongodb] override def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      val cursor = journal.find(journalRangeQuery(pid, from, to))
-      cursor.buffered.map(deserializeJournal)
-    }
+    val cursor = journal.find(journalRangeQuery(pid, from, to))
+    cursor.buffered.map(deserializeJournal)
   }
 
   private[mongodb] override def appendToJournal(documents: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      journal.insert(documents.toSeq:_*)(serializeJournal,writeConcern)
-      ()
-    }
+    journal.insert(documents.toSeq:_*)(serializeJournal,writeConcern)
+    ()
   }.mapTo[Unit]
   
   private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext):Unit =
@@ -85,54 +77,47 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
       }
 
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker(hardOrSoftDelete(journalRangeQuery(pid, from, to), permanent))
+    hardOrSoftDelete(journalRangeQuery(pid, from, to), permanent)
   }.mapTo[Unit]
 
   private[mongodb] override def confirmJournalEntries(confirms: ISeq[PersistentConfirmation])(implicit ec: ExecutionContext): Future[Unit] = 
   	Future.reduce(confirms.map( c => confirmJournalEntry(c.processorId, c.sequenceNr, c.channelId) ))((r,u) => u)
   
   private[mongodb] override def deleteAllMatchingJournalEntries(ids: ISeq[PersistentId],permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] =
-    driver.breaker.withCircuitBreaker {
-      Future.reduce(ids.map (id => Future {
-        hardOrSoftDelete(journalEntryQuery(id.processorId,id.sequenceNr), permanent)
-      }.mapTo[Unit]))((r,u) => u)
-	}
-    
+    Future.reduce(ids.map (id => Future {
+      hardOrSoftDelete(journalEntryQuery(id.processorId,id.sequenceNr), permanent)
+    }.mapTo[Unit]))((r,u) => u)
+
   
   private[mongodb] def maxSequenceNr(pid: String,from: Long)(implicit ec: ExecutionContext): Future[Long] = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      val maxCursor = journal.find($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $gte from), 
-    		  						MongoDBObject(SEQUENCE_NUMBER -> 1))
-    		  				 .sort(MongoDBObject(SEQUENCE_NUMBER -> -1)).limit(1)
-      if (maxCursor.hasNext)
-        maxCursor.next().as[Long](SEQUENCE_NUMBER)
-      else 0L
-    }
+    val maxCursor = journal.find($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $gte from),
+                    MongoDBObject(SEQUENCE_NUMBER -> 1))
+                 .sort(MongoDBObject(SEQUENCE_NUMBER -> -1)).limit(1)
+    if (maxCursor.hasNext)
+      maxCursor.next().as[Long](SEQUENCE_NUMBER)
+    else 0L
   }
   
   private[this] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext) = Future {
-    driver.breaker.withSyncCircuitBreaker {
-      journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, writeConcern)
-      ()
-    }
+    journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, writeConcern)
+    ()
   }.mapTo[Unit]
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = Future {
-    if (to >= from)
-      driver.breaker.withSyncCircuitBreaker {
-        val cursor = journal.find(journalRangeQuery(pid, from, to)).map(deserializeJournal)
-        
-        @tailrec
-        def replayLimit(cursor: Iterator[PersistentRepr], remaining: Long): Unit = {
-          if (remaining == 0 || !cursor.hasNext) {
-            return ()
-          }
-          replayCallback(cursor.next)
-          replayLimit(cursor, remaining - 1)
+    if (to >= from) {
+      val cursor = journal.find(journalRangeQuery(pid, from, to)).map(deserializeJournal)
+
+      @tailrec
+      def replayLimit(cursor: Iterator[PersistentRepr], remaining: Long): Unit = {
+        if (remaining == 0 || !cursor.hasNext) {
+          return ()
         }
-        
-        replayLimit(cursor,max)
+        replayCallback(cursor.next)
+        replayLimit(cursor, remaining - 1)
       }
+
+      replayLimit(cursor,max)
+    }
   }
 
   private[mongodb] def journal(implicit ec: ExecutionContext): MongoCollection = {
