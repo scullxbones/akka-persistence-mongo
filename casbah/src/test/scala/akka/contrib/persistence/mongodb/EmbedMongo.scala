@@ -50,7 +50,7 @@ trait EmbedMongo extends BeforeAndAfterAll { this: Suite =>
         .build()
   
   val mongodConfig = new MongodConfigBuilder()
-    .version(Version.Main.V2_4)
+    .version(Version.Main.V2_6)
     .cmdOptions(new MongoCmdOptionsBuilder()
     	.syncDelay(1)
       .useNoJournal(false)

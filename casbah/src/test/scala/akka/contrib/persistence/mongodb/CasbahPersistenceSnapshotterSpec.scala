@@ -16,8 +16,6 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   implicit val serialization = SerializationExtension(system)
 
-  override def auth = new AuthenticatingCommandLinePostProcessor
-
   trait Fixture {
     val underTest = new CasbahPersistenceSnapshotter(driver)
     val records = List(10, 20, 30).map { sq =>
