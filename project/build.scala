@@ -6,7 +6,7 @@ import SonatypeKeys._
 
 object AppBuilder extends Build {
   
-  val VERSION = "0.1.3-SNAPSHOT"
+  val VERSION = "0.1.3"
   val SCALA_VERSION = "2.10.0"
   val ORG = "com.github.scullxbones"
   val POM_XTRA = {
