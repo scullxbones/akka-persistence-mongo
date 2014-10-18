@@ -18,6 +18,9 @@
 
 ### What's new?
 
+#### 0.1.4
+ - Ignore sequence# hint during journaling max sequence query - in some cases it's quite wrong; Closes issue #14
+
 #### 0.1.3
  - Verify against Mongo 2.6 - add support for both 2.6 and 2.4; Closes issue #13
  - DRY out usage of circuit breakers in preparation for RxMongo driver; Closes issue #6
@@ -70,13 +73,13 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.1.3</version>
+    <version>0.1.4</version>
 </dependency>
 ```
 
 #### Using Gradle?
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.3'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.4'
 ```
 
 ### How to use with akka-persistence?
