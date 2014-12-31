@@ -114,7 +114,7 @@ compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.0'
 
 ##### Reactive Mongo
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.2.0'
 ```
 
 ### How to use with akka-persistence?
