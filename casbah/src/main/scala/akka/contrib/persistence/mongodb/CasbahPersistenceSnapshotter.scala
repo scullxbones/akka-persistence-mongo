@@ -1,28 +1,41 @@
 package akka.contrib.persistence.mongodb
 
-import akka.persistence.SelectedSnapshot
+import akka.persistence.{SnapshotMetadata, SelectedSnapshot}
+import akka.persistence.serialization.Snapshot
 import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
 import scala.concurrent._
-import akka.actor.ExtendedActorSystem
 import scala.language.implicitConversions
-import akka.actor.ActorSystem
 import akka.serialization.Serialization
 
 object CasbahPersistenceSnapshotter {
    import SnapshottingFieldNames._
  
   implicit def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): DBObject =
-	    MongoDBObject(PROCESSOR_ID -> snapshot.metadata.processorId,
+	    MongoDBObject(PROCESSOR_ID -> snapshot.metadata.persistenceId,
 	      SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
 	      TIMESTAMP -> snapshot.metadata.timestamp,
-	      SERIALIZED -> serialization.serializerFor(classOf[SelectedSnapshot]).toBinary(snapshot))
+	      V2.SERIALIZED -> serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
 	      
   implicit def deserializeSnapshot(document: DBObject)(implicit serialization: Serialization): SelectedSnapshot = {
-     val content = document.as[Array[Byte]](SERIALIZED)
-     serialization.deserialize(content, classOf[SelectedSnapshot]).get
+    if (document.containsField(V1.SERIALIZED)) {
+      val content = document.as[Array[Byte]](V1.SERIALIZED)
+      serialization.deserialize(content, classOf[SelectedSnapshot]).get
+    } else {
+      val content = document.as[Array[Byte]](V2.SERIALIZED)
+      val snap = serialization.deserialize(content, classOf[Snapshot]).get
+      val pid = document.as[String](PROCESSOR_ID)
+      val sn = document.as[Long](SEQUENCE_NUMBER)
+      val ts = document.as[Long](TIMESTAMP)
+      SelectedSnapshot(SnapshotMetadata(pid,sn,ts),snap.data)
+    }
    }
-  
+
+  def legacySerializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): DBObject =
+    MongoDBObject(PROCESSOR_ID -> snapshot.metadata.persistenceId,
+      SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
+      TIMESTAMP -> snapshot.metadata.timestamp,
+      V1.SERIALIZED -> serialization.serializerFor(classOf[SelectedSnapshot]).toBinary(snapshot))
 }
 
 class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends MongoPersistenceSnapshottingApi {

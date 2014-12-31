@@ -61,7 +61,12 @@ object SnapshottingFieldNames {
   final val PROCESSOR_ID = "pid"
   final val SEQUENCE_NUMBER = "sn"
   final val TIMESTAMP = "ts"
-  final val SERIALIZED = "ss"
+  object V1 {
+    final val SERIALIZED = "ss"
+  }
+  object V2 {
+    final val SERIALIZED = "s2"
+  }
 }
 
 trait MongoPersistenceSnapshottingApi {

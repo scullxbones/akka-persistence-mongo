@@ -145,4 +145,29 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
     }
   }
+
+  it should "read legacy snapshot formats" in new Fixture {
+    withSnapshot { snapshot =>
+      val legacies = records.map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
+      snapshot.insert(legacies: _*)
+      snapshot.size should be(4)
+
+      snapshot.foreach { dbo =>
+        deserializeSnapshot(dbo).metadata.persistenceId should be ("unit-test")
+      }
+    }
+  }
+
+  it should "read mixed snapshot formats" in new Fixture {
+    withSnapshot { snapshot =>
+      val legacies = records.take(2).map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
+      val newVersions = records.drop(2).map(CasbahPersistenceSnapshotter.serializeSnapshot)
+      snapshot.insert(legacies ++ newVersions : _*)
+      snapshot.size should be(4)
+
+      snapshot.foreach { dbo =>
+        deserializeSnapshot(dbo).metadata.persistenceId should be ("unit-test")
+      }
+    }
+  }
 }

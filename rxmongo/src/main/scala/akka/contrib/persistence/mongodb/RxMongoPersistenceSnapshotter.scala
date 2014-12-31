@@ -1,35 +1,59 @@
 package akka.contrib.persistence.mongodb
 
+import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
+import akka.persistence.serialization.Snapshot
+import akka.serialization.Serialization
 import reactivemongo.api.indexes._
 import reactivemongo.bson._
 
-import akka.persistence.SelectedSnapshot
+import akka.persistence.{SnapshotMetadata, SelectedSnapshot}
 
 import scala.concurrent._
 
+class RxMongoSnapshotSerialization(implicit serialization: Serialization) extends BSONDocumentReader[SelectedSnapshot] with BSONDocumentWriter[SelectedSnapshot] {
+  import RxMongoPersistenceExtension._
+
+  override def read(doc: BSONDocument): SelectedSnapshot = {
+    val content = doc.getAs[Array[Byte]](V1.SERIALIZED)
+    if (content.isDefined) {
+      serialization.deserialize(content.get, classOf[SelectedSnapshot]).get
+    } else {
+      val pid = doc.getAs[String](PROCESSOR_ID).get
+      val sn = doc.getAs[Long](SEQUENCE_NUMBER).get
+      val timestamp = doc.getAs[Long](TIMESTAMP).get
+      val snapshot = doc.getAs[Array[Byte]](V2.SERIALIZED).get
+      val deserialized = serialization.deserialize(snapshot, classOf[Snapshot]).get
+      SelectedSnapshot(SnapshotMetadata(pid,sn,timestamp),deserialized.data)
+    }
+  }
+
+  override def write(snap: SelectedSnapshot): BSONDocument = {
+    val content = serialization.serialize(Snapshot(snap.snapshot)).get
+    BSONDocument(PROCESSOR_ID -> snap.metadata.persistenceId,
+      SEQUENCE_NUMBER -> snap.metadata.sequenceNr,
+      TIMESTAMP -> snap.metadata.timestamp,
+      V2.SERIALIZED -> content)
+  }
+
+  def legacyWrite(snap: SelectedSnapshot): BSONDocument = {
+    val content = serialization.serialize(snap).get
+    BSONDocument(PROCESSOR_ID -> snap.metadata.persistenceId,
+      SEQUENCE_NUMBER -> snap.metadata.sequenceNr,
+      TIMESTAMP -> snap.metadata.timestamp,
+      V1.SERIALIZED -> content)
+  }
+}
+
+
+
 class RxMongoSnapshotter(driver: RxMongoPersistenceDriver) extends MongoPersistenceSnapshottingApi {
   
-  import RxMongoPersistenceExtension._
   import SnapshottingFieldNames._
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
+  private[this] implicit lazy val snapshotSerialization = new RxMongoSnapshotSerialization()
 
-  implicit object SelectedSnapshotHandler extends BSONDocumentReader[SelectedSnapshot] with BSONDocumentWriter[SelectedSnapshot] {
-    def read(doc: BSONDocument): SelectedSnapshot = {
-      val content = doc.getAs[Array[Byte]](SERIALIZED).get
-      serialization.deserialize(content, classOf[SelectedSnapshot]).get
-    }
-
-    def write(snap: SelectedSnapshot): BSONDocument = {
-      val content = serialization.serialize(snap).get
-      BSONDocument(PROCESSOR_ID -> snap.metadata.persistenceId,
-                    SEQUENCE_NUMBER -> snap.metadata.sequenceNr,
-                    TIMESTAMP -> snap.metadata.timestamp,
-                    SERIALIZED -> content)
-    }
-  }
-  
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
       val selected =
         snaps.find(

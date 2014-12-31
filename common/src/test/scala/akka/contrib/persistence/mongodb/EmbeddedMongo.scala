@@ -19,7 +19,7 @@ trait Authentication {
     def asDBObject: DBObject = {
       map.foldLeft(BasicDBObjectBuilder.start()) { case(builder,(k,v)) => v match {
         case v:Map[String,Any] => builder.add(k,v.asDBObject)
-        case v:List[Any] => builder.add(k,v.asJavaCollection)
+        case v:List[Any] => builder.add(k,v.asJava)
         case _ => builder.add(k,v)
       }}.get()
     }
@@ -29,16 +29,18 @@ trait Authentication {
     val roles = BasicDBObjectBuilder.start("role","userAdminAnyDatabase").add("db","admin").get ::
                 BasicDBObjectBuilder.start("role","dbAdminAnyDatabase").add("db","admin").get ::
                 BasicDBObjectBuilder.start("role","readWrite").add("db","admin").get ::
-                BasicDBObjectBuilder.start("role","root").add("db","admin").get ::
+//                BasicDBObjectBuilder.start("role","root").add("db","admin").get ::
                 Nil
     val command = Map("createUser" -> user,
                       "pwd" -> pass,
-                      "roles" -> roles)
-    val result = db.command(command.asDBObject, ReadPreference.primary())
+                      "roles" -> List("userAdminAnyDatabase","dbAdminAnyDatabase","readWrite"))
+    val result = db.command(command.asDBObject)
     if (!result.ok()) {
       result.keySet().asScala.foreach(k => println(s"k-v: $k = ${result.get(k)}"))
       println(s"${result.getErrorMessage}")
       println(s"${result.getException}")
+      println(s"${command.asDBObject}")
+      result.throwOnError()
     }
   }
 }
