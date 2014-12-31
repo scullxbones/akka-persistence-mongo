@@ -8,7 +8,7 @@
  * Three projects, a core and two driver implementations.  To use you must pull jars for both the common and one of the drivers:
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver
-   * rxmongo provides an implementation against the ReactiveMongo driver (NOT FUNCTIONAL ATM)
+   * rxmongo provides an implementation against the ReactiveMongo driver
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
  * Supports MongoDB major versions 2.4 and 2.6
 
@@ -17,6 +17,15 @@
  - Tracked in issue log
 
 ### What's new?
+
+#### 0.2.0
+ - Reactive Mongo driver now supported as an alternative to Casbah
+   - Requires minimum of `0.10.5.0.akka23` of driver
+   - Measurably (factor of 2ish) less performant than Casbah in limited load testing - not sure what to make of this yet, possibly different dispatcher tuning is necessary
+   - Closes issue #7
+ - It is important that you use only one driver sub-project at a time.  Using both in the same project is unsupported.
+ - Compiled against Akka 2.3.8 and updated to latest of TCK
+ - Now supports configuration of `wtimeout` and `fsync` for Journal and Snapshots write concerns
 
 #### 0.1.4
  - Ignore sequence# hint during journaling max sequence query - in some cases it's quite wrong; Closes issue #14
@@ -59,27 +68,53 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.1.3` is tracking Akka `2.3.6` as a `provided` dependency and passing the [Akka Persistence TCK](https://github.com/krasserm/akka-persistence-testkit) version `0.3.4`
+Version `0.2.0` is tracking Akka `2.3.8` as a `provided` dependency and passing the TCK now delivered with Akka
+
+Driver dependencies are also `provided`, meaning they must be included in the application project's dependencies.
 
 #### Using sbt?
 
+##### Casbah
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.1.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.2.0"
+```
+
+##### Reactive Mongo
+```scala
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.2.0"
 ```
 
 #### Using Maven?
 
+##### Casbah
 ```xml
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.1.4</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
+##### Reactive Mongo
+```xml
+<dependency>
+    <groupId>com.github.scullxbones</groupId>
+    <artifactId>akka-persistence-mongo-rxmongo_2.10</artifactId>
+    <version>0.2.0</version>
+</dependency>
+```
+
+
 #### Using Gradle?
+
+##### Casbah
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.1.4'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.0'
+```
+
+##### Reactive Mongo
+```groovy
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.0'
 ```
 
 ### How to use with akka-persistence?
@@ -150,6 +185,16 @@ As a single data point (complete with grain of salt!) on a MBP i5 w/ SSD with [K
 
 `Journaled` is a significant trade off of straight line performance for safety, and should be benchmarked vs. `Acknowledged` for your specific use case and treated as an engineering cost-benefit decision.  The argument for the unsafe pair of `Unacknowledged` and `ErrorsIgnored` vs. `Acknowledged` seems to be much weaker, although the functionality is left for the user to apply supersonic lead projectiles to their phalanges as necessary :).
 
+In addition to the mode of write concern, the `wtimeout` and `fsync` parameters may be configured seperately for the journal and snapshot.  FSync cannot be used with Journaling, so it will be disabled in that case.
+
+Default values below:
+```
+akka.contrib.persistence.mongodb.mongo.journal-wtimeout = 3s
+akka.contrib.persistence.mongodb.mongo.journal-fsync = false
+akka.contrib.persistence.mongodb.mongo.snaps-wtimeout = 3s
+akka.contrib.persistence.mongodb.mongo.snaps-fsync = false
+```
+
 #### Circuit breaker settings
 
 By default the circuit breaker is set up with a `maxTries` of 5, and `callTimeout` and `resetTimeout` of 5s.  [Akka's circuit breaker documentation](http://doc.akka.io/docs/akka/snapshot/common/circuitbreaker.html) covers in detail what these settings are used for.  In the context of this plugin, you can set these in the following way:
@@ -176,30 +221,35 @@ akka {
   contrib {
     persistence {
       mongodb {
-	    mongo {
-	      urls = [ "localhost:27017" ]
-	      db = "akka-persistence"
-	      journal-collection = "akka_persistence_journal"
-	      journal-index = "akka_persistence_journal_index"
-	      # Write concerns are one of: ErrorsIgnored, Unacknowledged, Acknowledged, Journaled, ReplicaAcknowledged
-	      journal-write-concern = "Journaled" 
-	      snaps-collection = "akka_persistsence_snaps"
-	      snaps-index = "akka_persistence_snaps_index"
-	      snaps-write-concern = "Journaled"
-	
-	      breaker {
-	        maxTries = 5
-	        timeout {
-	          call = 5s
-	          reset = 5s
-	        }
-	      }
-	    }
-	  }
+        mongo {
+          urls = [ "localhost:27017" ]
+          db = "akka-persistence"
+
+          journal-collection = "akka_persistence_journal"
+          journal-index = "akka_persistence_journal_index"
+          # Write concerns are one of: ErrorsIgnored, Unacknowledged, Acknowledged, Journaled, ReplicaAcknowledged
+          journal-write-concern = "Journaled"
+          journal-wtimeout = 3s
+          journal-fsync = false
+
+          snaps-collection = "akka_persistsence_snaps"
+          snaps-index = "akka_persistence_snaps_index"
+          snaps-write-concern = "Journaled"
+          snaps-wtimeout = 3s
+          snaps-fsync = false
+
+          breaker {
+            maxTries = 5
+            timeout {
+              call = 5s
+              reset = 5s
+            }
+          }
+        }
+      }
     }
   }
 }
-
 
 akka-contrib-persistence-dispatcher {
   # Dispatcher is the name of the event-based dispatcher
@@ -220,7 +270,6 @@ akka-contrib-persistence-dispatcher {
   # Set to 1 for as fair as possible.
   throughput = 100
 }
-
 ```
 
 ### <a name="metrics"></a> Metrics (optional functionality)
