@@ -1,10 +1,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.pattern.CircuitBreaker
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.WriteConcern
 
+import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 
 object CasbahPersistenceDriver {
@@ -16,12 +16,12 @@ object CasbahPersistenceDriver {
     new ServerAddress(host, port.toInt)
     }.toList
 
-  implicit def convertWriteSafety2WriteConcern(writeSafety: WriteSafety): WriteConcern = writeSafety match {
-    case ErrorsIgnored => WriteConcern.None
-    case Unacknowledged => WriteConcern.Normal
-    case Acknowledged => WriteConcern.Safe
-    case Journaled => WriteConcern.JournalSafe
-    case ReplicaAcknowledged => WriteConcern.ReplicasSafe
+  def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
+    case (ErrorsIgnored,w,f) => WriteConcern(-1,wTimeout = w, fsync = f,continueInsertOnError = true)
+    case (Unacknowledged,w,f) => WriteConcern(0,wTimeout = w, fsync = f)
+    case (Acknowledged,w,f) => WriteConcern(1,wTimeout = w, fsync = f)
+    case (Journaled,w,_) => WriteConcern(1,j=true,wTimeout = w)
+    case (ReplicaAcknowledged,w,f) => WriteConcern.withRule("majority",w,fsync = f,j = !f)
   }
 }
 
@@ -46,8 +46,8 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersisten
 
   
   private[mongodb] def collection(name: String) = db(name)
-  private[mongodb] def journalWriteConcern: WriteConcern = journalWriteSafety
-  private[mongodb] def snapsWriteConcern: WriteConcern = snapsWriteSafety
+  private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
+  private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 }
 
 class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceDriver {

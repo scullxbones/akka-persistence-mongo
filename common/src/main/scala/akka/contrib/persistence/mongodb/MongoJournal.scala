@@ -23,7 +23,7 @@ class MongoJournal extends AsyncWriteJournal {
    * The batch write must be atomic i.e. either all persistent messages in the batch
    * are written or none.
    */
-  override def asyncWriteMessages(messages: Seq[PersistentRepr]): Future[Unit] = 
+  override def asyncWriteMessages(messages: Seq[PersistentRepr]): Future[Unit] =
     impl.appendToJournal(messages)
 
   /**

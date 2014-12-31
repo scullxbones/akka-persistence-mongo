@@ -20,7 +20,7 @@ class CasbahPersistenceDriverSpec extends BaseUnitTest{
 }
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbedMongo {
+class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo {
 
   class MockCasbahPersistenceDriver extends CasbahMongoDriver(ActorSystem("shutdown-spec")) {
 
@@ -55,7 +55,7 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbedMongo {
 }
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbedMongo {
+class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
 
   override def embedDB = "admin"
   override def auth = new AuthenticatingCommandLinePostProcessor()
@@ -73,15 +73,12 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbedMongo {
         |          password = "password"
         |        }
       """.stripMargin).resolve()
-
-    def users = collection("system.users")
   }
 
   "A secured mongodb instance" should "be connectable via user and pass" in {
     val underTest = new MockCasbahPersistenceDriver
-    val coll = underTest.users
-    coll.size should be (1)
-    val admin = coll.head
-    admin.get("user") should be ("admin")
+    val collections = underTest.db.collectionNames()
+    collections.size should be (3)
+    collections should contain ("system.users")
   }
 }

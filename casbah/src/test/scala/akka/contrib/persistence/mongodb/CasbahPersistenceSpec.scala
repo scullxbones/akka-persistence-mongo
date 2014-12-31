@@ -5,9 +5,11 @@ import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import com.mongodb.casbah.MongoCollection
+import com.mongodb.casbah.{MongoClient, MongoCollection}
 
-trait CasbahPersistenceSpec extends BaseUnitTest with EmbedMongo { self: TestKit =>
+trait CasbahPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: TestKit =>
+
+    lazy val mongoDB = MongoClient(embedConnectionURL,embedConnectionPort)(embedDB)
 
     implicit val callerRuns = new ExecutionContext {
       def reportFailure(t: Throwable) { t.printStackTrace() }

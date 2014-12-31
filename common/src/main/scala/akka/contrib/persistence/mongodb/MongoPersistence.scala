@@ -17,7 +17,7 @@ object MongoPersistenceBase {
   case object Journaled extends WriteSafety
   case object ReplicaAcknowledged extends WriteSafety
   
-  implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase() match {
+  implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase match {
     case "errorsignored" => ErrorsIgnored
     case "unacknowledged" => Unacknowledged
     case "acknowledged" => Acknowledged
@@ -48,9 +48,13 @@ trait MongoPersistenceBase {
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
+  def snapsWTimeout = settings.SnapsWTimeout
+  def snapsFsync = settings.SnapsFSync
   def journalCollectionName = settings.JournalCollection
   def journalIndexName = settings.JournalIndex
-  def journalWriteSafety: WriteSafety = settings.JournalWriteConcern 
+  def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
+  def journalWTimeout = settings.JournalWTimeout
+  def journalFsync = settings.JournalFSync
   def mongoUrl = settings.Urls
   def mongoDbName = settings.DbName
   def userPass: Option[(String,String)] = {

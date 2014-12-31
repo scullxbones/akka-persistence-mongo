@@ -17,11 +17,11 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
   def lookup = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem) = {
-	val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
-	val implementation = settings.Implementation
-	val implType = Class.forName(implementation)
-	val implCons = implType.getConstructor(classOf[ActorSystem])
-	implCons.newInstance(actorSystem).asInstanceOf[MongoPersistenceExtension]
+    val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
+    val implementation = settings.Implementation
+    val implType = Class.forName(implementation)
+    val implCons = implType.getConstructor(classOf[ActorSystem])
+    implCons.newInstance(actorSystem).asInstanceOf[MongoPersistenceExtension]
   }
 
   override def get(actorSystem: ActorSystem) = super.get(actorSystem)
@@ -46,12 +46,19 @@ class MongoSettings(override val systemSettings: ActorSystem.Settings, override 
   val Username = Try(config.getString("username")).toOption
   val Password = Try(config.getString("password")).toOption
   val DbName = config.getString("db")
+
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")
   val JournalWriteConcern = config.getString("journal-write-concern")
+  val JournalWTimeout = config.getDuration("journal-wtimeout",MILLISECONDS).millis
+  val JournalFSync = config.getBoolean("journal-fsync")
+
   val SnapsCollection = config.getString("snaps-collection")
   val SnapsIndex = config.getString("snaps-index")
   val SnapsWriteConcern = config.getString("snaps-write-concern")
+  val SnapsWTimeout = config.getDuration("snaps-wtimeout",MILLISECONDS).millis
+  val SnapsFSync = config.getBoolean("snaps-fsync")
+
 
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
