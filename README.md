@@ -18,6 +18,9 @@
 
 ### What's new?
 
+#### 0.2.2
+ - Fixes #17, configuration no longer eagerly loads (this was providing no additional value)
+
 #### 0.2.1
  - Snapshots no longer are forced to use Java serialization
    - `SelectedSnapshot` is not serialized directly
@@ -75,7 +78,7 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.2.1` is tracking Akka `2.3.8` as a `provided` dependency and passing the TCK now delivered with Akka
+Version `0.2.2` is tracking Akka `2.3.8` as a `provided` dependency and passing the TCK now delivered with Akka
 
 Driver dependencies are also `provided`, meaning they must be included in the application project's dependencies.
 
@@ -83,12 +86,12 @@ Driver dependencies are also `provided`, meaning they must be included in the ap
 
 ##### Casbah
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.2.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.2.2"
 ```
 
 ##### Reactive Mongo
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.2.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.2.2"
 ```
 
 #### Using Maven?
@@ -98,7 +101,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.2.1</version>
+    <version>0.2.2</version>
 </dependency>
 ```
 
@@ -107,7 +110,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-rxmongo_2.10</artifactId>
-    <version>0.2.1</version>
+    <version>0.2.2</version>
 </dependency>
 ```
 
@@ -116,12 +119,12 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 
 ##### Casbah
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.1'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.2'
 ```
 
 ##### Reactive Mongo
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.2.1'
+compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.2.2'
 ```
 
 ### How to use with akka-persistence?
