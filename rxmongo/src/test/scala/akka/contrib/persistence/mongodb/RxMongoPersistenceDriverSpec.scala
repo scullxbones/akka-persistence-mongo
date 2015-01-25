@@ -15,7 +15,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""
-        |mongo {
+        |akka.contrib.persistence.mongodb.mongo {
         | urls = [ "localhost:$embedConnectionPort" ]
         | db = "shutdown-spec"
         |}
@@ -44,7 +44,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
     val test2 = ActorSystem("test2",shutdownConfig)
     try {
       val underTest2 = new MockRxMongoPersistenceDriver(test2)
-      Await.result(underTest2.showCollections, 3.seconds).size should be(3)
+      Await.result(underTest2.showCollections, 3.seconds).size should be(0)
     } finally {
       test2.shutdown()
     }
@@ -59,18 +59,18 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
 
   val authConfig = ConfigFactory.parseString(
     s"""
-        |        mongo {
-        |          urls = [ "localhost:$embedConnectionPort" ]
-        |          db = "admin"
-        |          username = "admin"
-        |          password = "password"
-        |        }
+        |akka.contrib.persistence.mongodb.mongo {
+        | urls = [ "localhost:$embedConnectionPort" ]
+        | db = "admin"
+        | username = "admin"
+        | password = "password"
+        |}
       """.stripMargin)
 
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"authentication-config") { actorSystem =>
     val underTest = new RxMongoDriver(actorSystem)
     val collections = Await.result(underTest.db.collectionNames,3.seconds)
     collections.size should be (3)
-    collections should contain ("system.indexes")
+    collections should contain ("system.users")
   }
 }

@@ -24,7 +24,9 @@ object Dependencies {
   val akkaTestKit = "com.typesafe.akka" %% "akka-testkit" % AKKA_VERSION % "test"
   val akkaPersistTck = "com.typesafe.akka" %% "akka-persistence-tck-experimental" % AKKA_VERSION % "test"
 
-  val akkaPersistence = "com.typesafe.akka" %% "akka-persistence-experimental" % AKKA_VERSION % "provided"
+  val akkaPersistence = ("com.typesafe.akka" %% "akka-persistence-experimental" % AKKA_VERSION % "provided")
+                          .exclude("org.iq80.leveldb","leveldb")
+                          .exclude("org.fusesource.leveldbjni","leveldbjni-all")
   val rxMongo = "org.reactivemongo" %% "reactivemongo" % "0.10.5.0.akka23" % "provided"
   val casbah = "org.mongodb" %% "casbah" % "2.7.4" % "provided"
   val metrix = "nl.grons" %% "metrics-scala" % "3.3.0_a2.3"

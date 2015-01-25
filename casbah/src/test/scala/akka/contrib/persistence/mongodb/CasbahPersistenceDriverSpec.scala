@@ -25,7 +25,7 @@ import ConfigLoanFixture._
 class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo {
 
   val shutdownConfig = ConfigFactory.parseString(
-    s"""|mongo {
+    s"""|akka.contrib.persistence.mongodb.mongo {
         | urls = [ "localhost:$embedConnectionPort" ]
         | db = "shutdown-spec"
         |}
@@ -59,18 +59,18 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
 
   val authConfig = ConfigFactory.parseString(
     s"""
-        |        mongo {
-        |          urls = [ "localhost:$embedConnectionPort" ]
-        |          db = "admin"
-        |          username = "admin"
-        |          password = "password"
-        |        }
+        |akka.contrib.persistence.mongodb.mongo {
+        | urls = [ "localhost:$embedConnectionPort" ]
+        | db = "admin"
+        | username = "admin"
+        | password = "password"
+        |}
       """.stripMargin)
 
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig) { actorSystem =>
     val underTest = new CasbahMongoDriver(actorSystem)
     val collections = underTest.db.collectionNames()
     collections.size should be (3)
-    collections should contain ("system.indexes")
+    collections should contain ("system.users")
   }
 }
