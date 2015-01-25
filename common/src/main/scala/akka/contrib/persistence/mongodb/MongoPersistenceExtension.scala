@@ -17,7 +17,7 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
   def lookup = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem) = {
-    val settings = new MongoSettings(actorSystem.settings, ConfigFactory.load())
+    val settings = new MongoSettings(actorSystem.settings)
     val implementation = settings.Implementation
     val implType = Class.forName(implementation)
     val implCons = implType.getConstructor(classOf[ActorSystem])
@@ -33,13 +33,17 @@ trait MongoPersistenceExtension extends Extension {
   def registry: MetricRegistry = MongoPersistenceBase.registry
 }
 
-class MongoSettings(override val systemSettings: ActorSystem.Settings, override val userConfig: Config)
-  extends UserOverrideSettings(systemSettings, userConfig) {
+class MongoSettings(val systemSettings: ActorSystem.Settings) {
 
-  protected override val name = "mongo"
 
- // config.checkValid(ConfigFactory.defaultReference(),"akka.contrib.persistence.mongodb.mongo")
-  
+  lazy protected val config = {
+    val fullName = s"${getClass.getPackage.getName}.mongo"
+    val systemConfig = systemSettings.config
+    systemConfig.checkValid(ConfigFactory.defaultReference(), fullName)
+    systemConfig.getConfig(fullName)
+  }
+
+
   val Implementation = config.getString("driver")
   
   val Urls = config.getStringList("urls").asScala.toList

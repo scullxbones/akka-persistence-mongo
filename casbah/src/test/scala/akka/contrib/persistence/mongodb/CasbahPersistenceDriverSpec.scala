@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import com.mongodb.ServerAddress
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import scala.concurrent.duration._
@@ -19,23 +19,20 @@ class CasbahPersistenceDriverSpec extends BaseUnitTest{
 
 }
 
+import ConfigLoanFixture._
+
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo {
 
-  class MockCasbahPersistenceDriver extends CasbahMongoDriver(ActorSystem("shutdown-spec")) {
-
-    override val userOverrides = ConfigFactory.parseString(
-      s"""
-        |mongo {
+  val shutdownConfig = ConfigFactory.parseString(
+    s"""|mongo {
         | urls = [ "localhost:$embedConnectionPort" ]
         | db = "shutdown-spec"
         |}
-      """.stripMargin).resolve()
-  }
+      """.stripMargin)
 
-
-  "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in {
-    val underTest = new MockCasbahPersistenceDriver
+  "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig) { actorSystem =>
+    val underTest = new CasbahMongoDriver(actorSystem)
     underTest.actorSystem.shutdown()
     underTest.actorSystem.awaitTermination(10.seconds)
     intercept[IllegalStateException] {
@@ -44,12 +41,12 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
   }
 
 
-  it should "reconnect if a new driver is created" in {
-    val underTest = new MockCasbahPersistenceDriver
+  it should "reconnect if a new driver is created" in withConfig(shutdownConfig)  { actorSystem =>
+    val underTest = new CasbahMongoDriver(actorSystem)
     underTest.actorSystem.shutdown()
     underTest.actorSystem.awaitTermination(10.seconds)
 
-    val underTest2 = new MockCasbahPersistenceDriver
+    val underTest2 = new CasbahMongoDriver(ActorSystem("test2",shutdownConfig))
     underTest2.db.stats() // Should not throw exception
   }
 }
@@ -60,25 +57,20 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
   override def embedDB = "admin"
   override def auth = new AuthenticatingCommandLinePostProcessor()
 
-  class MockCasbahPersistenceDriver extends CasbahPersistenceDriver {
-
-    val actorSystem = ActorSystem("authentication-spec")
-
-    override val userOverrides = ConfigFactory.parseString(
-      s"""
+  val authConfig = ConfigFactory.parseString(
+    s"""
         |        mongo {
         |          urls = [ "localhost:$embedConnectionPort" ]
         |          db = "admin"
         |          username = "admin"
         |          password = "password"
         |        }
-      """.stripMargin).resolve()
-  }
+      """.stripMargin)
 
-  "A secured mongodb instance" should "be connectable via user and pass" in {
-    val underTest = new MockCasbahPersistenceDriver
+  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig) { actorSystem =>
+    val underTest = new CasbahMongoDriver(actorSystem)
     val collections = underTest.db.collectionNames()
     collections.size should be (3)
-    collections should contain ("system.users")
+    collections should contain ("system.indexes")
   }
 }

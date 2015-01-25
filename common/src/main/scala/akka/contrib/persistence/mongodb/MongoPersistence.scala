@@ -41,9 +41,7 @@ trait MongoPersistenceBase {
   
   val actorSystem: ActorSystem
 
-  val userOverrides = ConfigFactory.load()
-  
-  lazy val settings = new MongoSettings(actorSystem.settings, userOverrides)
+  lazy val settings = new MongoSettings(actorSystem.settings)
   
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
