@@ -106,18 +106,30 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
             .map(l => l.map(_.sequenceNr).getOrElse(0L))
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
-    if (max == 0L) Promise().success(()).future
+    if (max == 0L) Future.successful()
     else {
-      val it = Iteratee.fold2[PersistentRepr,Long](max){ case(remaining,el) =>
-        replayCallback(el)
-        Promise[(Long,Boolean)]().success((remaining-1,remaining <= 1)).future
-      }
       val cursor = journal
-        .find(journalRangeQuery(pid, from, to))
-        .cursor[PersistentRepr]
-      cursor.enumerate(max.toInt,stopOnError = true).run(it).map(_ => ())
+            .find(journalRangeQuery(pid, from, to))
+            .cursor[PersistentRepr]
+      
+      val maxInt = toInt(max)
+      
+      val it = Iteratee.fold2[PersistentRepr, Int](maxInt) {
+            case (remaining, el) =>
+              replayCallback(el)
+              Future.successful((remaining - 1, remaining <= 1))
+          }
+      cursor.enumerate(maxInt, stopOnError = true).run(it).map(_ => ())
     }
 
+  private[this] def toInt(long:Long):Int = {
+    if(long > Int.MaxValue) {
+    	Int.MaxValue
+    } else {
+      long.intValue
+    }
+  }
+  
   private[this] def journal(implicit ec: ExecutionContext) = {
     val journal = driver.collection(driver.journalCollectionName)
     journal.indexesManager.ensure(new Index(
