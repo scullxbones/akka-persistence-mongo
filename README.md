@@ -18,6 +18,13 @@
 
 ### What's new?
 
+#### 0.2.4
+ - Closes issue #18, thanks for the report and fixing pull request @marcuslinke!
+   - If replay size exceeded `Int.MaxValue`, conversion was causing negative limits passed to rxmongo which are transformed to 101, much smaller than 4 billion.
+
+#### 0.2.3
+ - D'oh.  Skipped this one.
+
 #### 0.2.2
  - Fixes #17, configuration no longer eagerly loads (this was providing no additional value)
 
