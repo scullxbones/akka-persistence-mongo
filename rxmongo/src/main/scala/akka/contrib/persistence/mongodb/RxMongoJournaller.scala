@@ -29,8 +29,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
             sender = ActorRef.noSender
           )
         case v: BSONBinary =>
-          val content = v.asTry[Array[Byte]]
-          serialization.deserialize(content.get, classOf[PersistentRepr]).get
+          serialization.deserialize(BsonBinaryHandler.read(v), classOf[PersistentRepr]).get
       }
 
       val confirms = ISeq(document.getAs[Seq[String]](CONFIRMS).getOrElse(Seq.empty[String]): _*)
@@ -56,7 +55,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
             SenderKey -> persistent.sender.path.toSerializationFormat
           )
         case _ =>
-          BSONBinary(serialization.serialize(persistent).get, Subtype.GenericBinarySubtype)
+          BsonBinaryHandler.write(serialization.serialize(persistent).get)
       }
 
       BSONDocument(PROCESSOR_ID -> persistent.processorId,
