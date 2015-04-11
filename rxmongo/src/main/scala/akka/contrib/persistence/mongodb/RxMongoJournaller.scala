@@ -18,13 +18,6 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
   implicit object PersistentReprHandler extends BSONDocumentReader[PersistentRepr] with BSONDocumentWriter[PersistentRepr] {
-    val PayloadKey = "payload"
-    val SenderKey = "sender"
-    val RedeliveriesKey = "redeliveries"
-    val ConfirmableKey = "confirmable"
-    val ConfirmMessageKey = "confirmMessage"
-    val ConfirmTargetKey = "confirmTarget"
-
     def read(document: BSONDocument): PersistentRepr = {
       val repr: PersistentRepr = document.get(SERIALIZED).get match {
         case b: BSONDocument =>
@@ -37,7 +30,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
             confirmTarget = serialization.deserialize(b.getAsTry[Array[Byte]](ConfirmTargetKey).get, classOf[ActorRef]).get
           )
         case v =>
-          serialization.deserialize(v.asTry[Array[Byte]].get, classOf[PersistentRepr]).get
+          serialization.deserialize(document.getAsTry[Array[Byte]](SERIALIZED).get, classOf[PersistentRepr]).get
       }
 
       val confirms = ISeq(document.getAs[Seq[String]](CONFIRMS).getOrElse(Seq.empty[String]): _*)

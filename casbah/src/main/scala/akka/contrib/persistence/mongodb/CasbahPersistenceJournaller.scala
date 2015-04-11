@@ -1,51 +1,80 @@
 package akka.contrib.persistence.mongodb
 
-import akka.persistence.PersistentRepr
+import akka.actor.ActorRef
+import akka.persistence.{Delivered, PersistentConfirmation, PersistentId, PersistentRepr}
+import akka.serialization.Serialization
 import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
-import scala.collection.immutable.{Seq => ISeq}
-import scala.language.implicitConversions
 import com.mongodb.casbah.MongoCollection
-import akka.serialization.Serialization
-import akka.persistence.PersistentConfirmation
-import akka.persistence.PersistentId
+
 import scala.annotation.tailrec
+import scala.collection.immutable.{Seq => ISeq}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.language.implicitConversions
 
 object CasbahPersistenceJournaller {
+
   import JournallingFieldNames._
-  
-  implicit def serializeJournal(persistent: PersistentRepr)(implicit serialization: Serialization): DBObject =
-	    MongoDBObject(PROCESSOR_ID -> persistent.processorId,
-	      SEQUENCE_NUMBER -> persistent.sequenceNr,
-	      CONFIRMS -> persistent.confirms,
-	      DELETED -> persistent.deleted,
-	      SERIALIZED -> serialization.serializerFor(classOf[PersistentRepr]).toBinary(persistent))
-	
+
+  implicit def serializeJournal(persistent: PersistentRepr)(implicit serialization: Serialization): DBObject = {
+    val content = persistent.payload match {
+      case dbo: DBObject =>
+        MongoDBObject(
+          PayloadKey -> dbo,
+          SenderKey -> serialization.serialize(persistent.sender).get,
+          RedeliveriesKey -> persistent.redeliveries,
+          ConfirmableKey -> persistent.confirmable,
+          ConfirmMessageKey -> serialization.serialize(persistent.confirmMessage).get,
+          ConfirmTargetKey -> serialization.serialize(persistent.confirmTarget).get
+        )
+      case _ =>
+        serialization.serializerFor(classOf[PersistentRepr]).toBinary(persistent)
+    }
+    MongoDBObject(PROCESSOR_ID -> persistent.processorId,
+      SEQUENCE_NUMBER -> persistent.sequenceNr,
+      CONFIRMS -> persistent.confirms,
+      DELETED -> persistent.deleted,
+      SERIALIZED -> content)
+  }
+
   implicit def deserializeJournal(document: DBObject)(implicit serialization: Serialization): PersistentRepr = {
-	    val content = document.as[Array[Byte]](SERIALIZED)
-	    val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
-	    PersistentRepr(
-	      repr.payload,
-	      document.as[Long](SEQUENCE_NUMBER),
-	      document.as[String](PROCESSOR_ID),
-	      document.as[Boolean](DELETED),
-	      repr.redeliveries,
-	      ISeq(document.as[Seq[String]](CONFIRMS) : _*),
-	      repr.confirmable,
-	      repr.confirmMessage,
-	      repr.confirmTarget,
-	      repr.sender)
-	  }  
-  
+    document.get(SERIALIZED) match {
+      case b: DBObject =>
+        PersistentRepr(
+          payload = b.as[DBObject](PayloadKey),
+          sequenceNr = document.as[Long](SEQUENCE_NUMBER),
+          persistenceId = document.as[String](PROCESSOR_ID),
+          deleted = document.as[Boolean](DELETED),
+          redeliveries = b.as[Int](RedeliveriesKey),
+          confirms = ISeq(document.as[Seq[String]](CONFIRMS): _*),
+          confirmable = b.as[Boolean](ConfirmableKey),
+          confirmMessage = serialization.deserialize(b.as[Array[Byte]](ConfirmMessageKey), classOf[Delivered]).get,
+          confirmTarget = serialization.deserialize(b.as[Array[Byte]](ConfirmTargetKey), classOf[ActorRef]).get,
+          sender = serialization.deserialize(b.as[Array[Byte]](SenderKey), classOf[ActorRef]).get)
+      case _ =>
+        val content = document.as[Array[Byte]](SERIALIZED)
+        val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
+        PersistentRepr(
+          repr.payload,
+          document.as[Long](SEQUENCE_NUMBER),
+          document.as[String](PROCESSOR_ID),
+          document.as[Boolean](DELETED),
+          repr.redeliveries,
+          ISeq(document.as[Seq[String]](CONFIRMS): _*),
+          repr.confirmable,
+          repr.confirmMessage,
+          repr.confirmTarget,
+          repr.sender)
+    }
+  }
+
 }
 
 class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends MongoPersistenceJournallingApi {
-  
-  import JournallingFieldNames._
+
   import CasbahPersistenceJournaller._
-  
+  import JournallingFieldNames._
+
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
@@ -65,39 +94,39 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   }
 
   private[mongodb] override def appendToJournal(documents: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) = Future {
-    journal.insert(documents.toSeq:_*)(serializeJournal,writeConcern)
+    journal.insert(documents.toSeq: _*)(serializeJournal, writeConcern)
     ()
   }.mapTo[Unit]
-  
-  private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext):Unit =
-      if (hard) {
-        journal.remove(query, writeConcern)
-      } else {
-        journal.update(query, $set(DELETED -> true), false, true, writeConcern)
-      }
+
+  private[this] def hardOrSoftDelete(query: DBObject, hard: Boolean)(implicit ec: ExecutionContext): Unit =
+    if (hard) {
+      journal.remove(query, writeConcern)
+    } else {
+      journal.update(query, $set(DELETED -> true), false, true, writeConcern)
+    }
 
   private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = Future {
     hardOrSoftDelete(journalRangeQuery(pid, from, to), permanent)
   }.mapTo[Unit]
 
-  private[mongodb] override def confirmJournalEntries(confirms: ISeq[PersistentConfirmation])(implicit ec: ExecutionContext): Future[Unit] = 
-  	Future.reduce(confirms.map( c => confirmJournalEntry(c.processorId, c.sequenceNr, c.channelId) ))((r,u) => u)
-  
-  private[mongodb] override def deleteAllMatchingJournalEntries(ids: ISeq[PersistentId],permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] =
-    Future.reduce(ids.map (id => Future {
-      hardOrSoftDelete(journalEntryQuery(id.processorId,id.sequenceNr), permanent)
-    }.mapTo[Unit]))((r,u) => u)
+  private[mongodb] override def confirmJournalEntries(confirms: ISeq[PersistentConfirmation])(implicit ec: ExecutionContext): Future[Unit] =
+    Future.reduce(confirms.map(c => confirmJournalEntry(c.processorId, c.sequenceNr, c.channelId)))((r, u) => u)
 
-  
-  private[mongodb] def maxSequenceNr(pid: String,from: Long)(implicit ec: ExecutionContext): Future[Long] = Future {
+  private[mongodb] override def deleteAllMatchingJournalEntries(ids: ISeq[PersistentId], permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] =
+    Future.reduce(ids.map(id => Future {
+      hardOrSoftDelete(journalEntryQuery(id.processorId, id.sequenceNr), permanent)
+    }.mapTo[Unit]))((r, u) => u)
+
+
+  private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long] = Future {
     val maxCursor = journal.find($and(PROCESSOR_ID $eq pid),
-                    MongoDBObject(SEQUENCE_NUMBER -> 1))
-                 .sort(MongoDBObject(SEQUENCE_NUMBER -> -1)).limit(1)
+      MongoDBObject(SEQUENCE_NUMBER -> 1))
+      .sort(MongoDBObject(SEQUENCE_NUMBER -> -1)).limit(1)
     if (maxCursor.hasNext)
       maxCursor.next().as[Long](SEQUENCE_NUMBER)
     else 0L
   }
-  
+
   private[this] def confirmJournalEntry(pid: String, seq: Long, channelId: String)(implicit ec: ExecutionContext) = Future {
     journal.update(journalEntryQuery(pid, seq), $push(CONFIRMS -> channelId), false, false, writeConcern)
     ()
@@ -116,7 +145,7 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
         replayLimit(cursor, remaining - 1)
       }
 
-      replayLimit(cursor,max)
+      replayLimit(cursor, max)
     }
   }
 
