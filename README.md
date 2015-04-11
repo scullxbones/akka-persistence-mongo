@@ -152,6 +152,12 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 
 The defaults are fairly sane, but some common ones to change may be the location of the mongodb server.  These changes can be made in the `application.conf` file.
 
+The only thing you have to provide is the driver implementation:
+
+```
+akka.contrib.persistence.mongodb.mongo.driver = "akka.contrib.persistence.mongodb.RxMongoPersistenceExtension" // or CasbahPersistenceExtension
+```
+
 #### Mongo URLs
 
 A list of urls can be supplied.  These are specified as host:port.  For example `localhost:27017`
@@ -288,6 +294,12 @@ akka-contrib-persistence-dispatcher {
   throughput = 100
 }
 ```
+
+### <a name="direct"></a> Passing DB objects directly into journal collection
+
+If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONObject` (using reactivemongo).
+
+During replay, events will be sent to your actor as-is. It is client's duty to handle BSON (de)serialization in this case.
 
 ### <a name="metrics"></a> Metrics (optional functionality)
 
