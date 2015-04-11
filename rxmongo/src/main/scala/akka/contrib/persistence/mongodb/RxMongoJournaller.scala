@@ -20,16 +20,24 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
   implicit object PersistentReprHandler extends BSONDocumentReader[PersistentRepr] with BSONDocumentWriter[PersistentRepr] {
     val PayloadKey = "payload"
     val SenderKey = "sender"
+    val RedeliveriesKey = "redeliveries"
+    val ConfirmableKey = "confirmable"
+    val ConfirmMessageKey = "confirmMessage"
+    val ConfirmTargetKey = "confirmTarget"
 
     def read(document: BSONDocument): PersistentRepr = {
       val repr: PersistentRepr = document.get(SERIALIZED).get match {
         case b: BSONDocument =>
           PersistentRepr(
             payload = b.get(PayloadKey).get,
-            sender = ActorRef.noSender
+            sender = serialization.deserialize(b.getAsTry[Array[Byte]](SenderKey).get, classOf[ActorRef]).get,
+            redeliveries = b.getAsTry[Int](RedeliveriesKey).get,
+            confirmable = b.getAsTry[Boolean](ConfirmableKey).get,
+            confirmMessage = serialization.deserialize(b.getAsTry[Array[Byte]](ConfirmMessageKey).get, classOf[Delivered]).get,
+            confirmTarget = serialization.deserialize(b.getAsTry[Array[Byte]](ConfirmTargetKey).get, classOf[ActorRef]).get
           )
-        case v: BSONBinary =>
-          serialization.deserialize(BsonBinaryHandler.read(v), classOf[PersistentRepr]).get
+        case v =>
+          serialization.deserialize(v.asTry[Array[Byte]].get, classOf[PersistentRepr]).get
       }
 
       val confirms = ISeq(document.getAs[Seq[String]](CONFIRMS).getOrElse(Seq.empty[String]): _*)
@@ -52,7 +60,11 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
         case b: BSONDocument =>
           BSONDocument(
             PayloadKey -> b,
-            SenderKey -> persistent.sender.path.toSerializationFormat
+            SenderKey -> serialization.serialize(persistent.sender).get,
+            RedeliveriesKey -> persistent.redeliveries,
+            ConfirmableKey -> persistent.confirmable,
+            ConfirmMessageKey -> serialization.serialize(persistent.confirmMessage).get,
+            ConfirmTargetKey -> serialization.serialize(persistent.confirmTarget).get
           )
         case _ =>
           BsonBinaryHandler.write(serialization.serialize(persistent).get)
