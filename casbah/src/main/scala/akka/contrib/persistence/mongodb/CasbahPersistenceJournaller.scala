@@ -1,6 +1,6 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorRef
+import akka.actor.{ActorSystem, ActorRef}
 import akka.persistence.{Delivered, PersistentConfirmation, PersistentId, PersistentRepr}
 import akka.serialization.Serialization
 import com.mongodb.DBObject
@@ -16,17 +16,22 @@ object CasbahPersistenceJournaller {
 
   import JournallingFieldNames._
 
-  implicit def serializeJournal(persistent: PersistentRepr)(implicit serialization: Serialization): DBObject = {
+  implicit def serializeJournal(persistent: PersistentRepr)(implicit serialization: Serialization, system: ActorSystem): DBObject = {
     val content = persistent.payload match {
       case dbo: DBObject =>
-        MongoDBObject(
-          PayloadKey -> dbo,
-          SenderKey -> serialization.serialize(persistent.sender).get,
-          RedeliveriesKey -> persistent.redeliveries,
-          ConfirmableKey -> persistent.confirmable,
-          ConfirmMessageKey -> serialization.serialize(persistent.confirmMessage).get,
-          ConfirmTargetKey -> serialization.serialize(persistent.confirmTarget).get
+        val o = MongoDBObject(
+          PayloadKey -> dbo
         )
+        Seq {
+          Option(persistent.sender).filterNot(_ == system.deadLetters).flatMap(serialization.serialize(_).toOption).map(SenderKey -> _)
+          Option(persistent.redeliveries).filterNot(_ == 0).map(RedeliveriesKey -> _)
+          Option(persistent.confirmable).filter(identity).map(ConfirmableKey -> _)
+          Option(persistent.confirmMessage).flatMap(serialization.serialize(_).toOption).map(ConfirmMessageKey -> _)
+          Option(persistent.confirmTarget).flatMap(serialization.serialize(_).toOption).map(ConfirmTargetKey -> _)
+        }.collect {
+          case Some(bb) => bb
+        }.foreach(kv => o.put(kv._1, kv._2))
+        o
       case _ =>
         serialization.serializerFor(classOf[PersistentRepr]).toBinary(persistent)
     }
@@ -37,7 +42,7 @@ object CasbahPersistenceJournaller {
       SERIALIZED -> content)
   }
 
-  implicit def deserializeJournal(document: DBObject)(implicit serialization: Serialization): PersistentRepr = {
+  implicit def deserializeJournal(document: DBObject)(implicit serialization: Serialization, system: ActorSystem): PersistentRepr = {
     document.get(SERIALIZED) match {
       case b: DBObject =>
         PersistentRepr(
@@ -45,12 +50,13 @@ object CasbahPersistenceJournaller {
           sequenceNr = document.as[Long](SEQUENCE_NUMBER),
           persistenceId = document.as[String](PROCESSOR_ID),
           deleted = document.as[Boolean](DELETED),
-          redeliveries = b.as[Int](RedeliveriesKey),
+          redeliveries = b.getAs[Int](RedeliveriesKey).getOrElse(0),
           confirms = ISeq(document.as[Seq[String]](CONFIRMS): _*),
-          confirmable = b.as[Boolean](ConfirmableKey),
-          confirmMessage = serialization.deserialize(b.as[Array[Byte]](ConfirmMessageKey), classOf[Delivered]).get,
-          confirmTarget = serialization.deserialize(b.as[Array[Byte]](ConfirmTargetKey), classOf[ActorRef]).get,
-          sender = serialization.deserialize(b.as[Array[Byte]](SenderKey), classOf[ActorRef]).get)
+          confirmable = b.getAs[Boolean](ConfirmableKey).getOrElse(false),
+          confirmMessage = b.getAs[Array[Byte]](ConfirmMessageKey).flatMap(serialization.deserialize(_, classOf[Delivered]).toOption).orNull,
+          confirmTarget = b.getAs[Array[Byte]](ConfirmTargetKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption).orNull,
+          sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption).getOrElse(system.deadLetters)
+        )
       case _ =>
         val content = document.as[Array[Byte]](SERIALIZED)
         val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
@@ -74,6 +80,8 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
 
   import CasbahPersistenceJournaller._
   import JournallingFieldNames._
+
+  implicit val system = driver.actorSystem
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern

@@ -52,14 +52,14 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
       val content: BSONValue = persistent.payload match {
         case b: BSONDocument =>
           Seq {
-            Option(persistent.sender).filterNot(_ == driver.actorSystem.deadLetters).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(SenderKey -> n))
-            Option(persistent.redeliveries).filterNot(_ == 0).map(n => BSONDocument(RedeliveriesKey -> n))
-            Option(persistent.confirmable).filter(identity).map(n => BSONDocument(ConfirmableKey -> n))
-            Option(persistent.confirmMessage).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(ConfirmMessageKey -> n))
-            Option(persistent.confirmTarget).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(ConfirmTargetKey -> n))
+            Option(persistent.sender).filterNot(_ == driver.actorSystem.deadLetters).flatMap(serialization.serialize(_).toOption).map(SenderKey -> _)
+            Option(persistent.redeliveries).filterNot(_ == 0).map(RedeliveriesKey -> _)
+            Option(persistent.confirmable).filter(identity).map(ConfirmableKey -> _)
+            Option(persistent.confirmMessage).flatMap(serialization.serialize(_).toOption).map(ConfirmMessageKey -> _)
+            Option(persistent.confirmTarget).flatMap(serialization.serialize(_).toOption).map(ConfirmTargetKey -> _)
           }.collect {
-            case Some(b: BSONDocument) => b
-          }.foldLeft(BSONDocument(PayloadKey -> b))(_ ++ _)
+            case Some(bb) => bb
+          }.map(BSONDocument(_)).foldLeft(BSONDocument(PayloadKey -> b))(_ ++ _)
         case _ =>
           BsonBinaryHandler.write(serialization.serialize(persistent).get)
       }
