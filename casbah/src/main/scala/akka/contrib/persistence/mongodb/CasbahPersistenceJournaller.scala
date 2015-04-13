@@ -1,6 +1,6 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ActorRef}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.persistence.{Delivered, PersistentConfirmation, PersistentId, PersistentRepr}
 import akka.serialization.Serialization
 import com.mongodb.DBObject
