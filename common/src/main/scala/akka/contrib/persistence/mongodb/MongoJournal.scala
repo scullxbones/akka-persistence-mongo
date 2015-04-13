@@ -92,12 +92,12 @@ object JournallingFieldNames {
   final val DELETED = "dl"
   final val SERIALIZED = "pr"
 
-  val PayloadKey = "payload"
-  val SenderKey = "sender"
-  val RedeliveriesKey = "redeliveries"
-  val ConfirmableKey = "confirmable"
-  val ConfirmMessageKey = "confirmMessage"
-  val ConfirmTargetKey = "confirmTarget"
+  val PayloadKey = "p"
+  val SenderKey = "s"
+  val RedeliveriesKey = "r"
+  val ConfirmableKey = "c"
+  val ConfirmMessageKey = "cm"
+  val ConfirmTargetKey = "ct"
 }
 
 trait MongoPersistenceJournallingApi {

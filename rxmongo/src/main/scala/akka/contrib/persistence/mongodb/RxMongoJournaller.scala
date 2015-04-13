@@ -23,11 +23,11 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
         case b: BSONDocument =>
           PersistentRepr(
             payload = b.get(PayloadKey).get,
-            sender = serialization.deserialize(b.getAsTry[Array[Byte]](SenderKey).get, classOf[ActorRef]).get,
-            redeliveries = b.getAsTry[Int](RedeliveriesKey).get,
-            confirmable = b.getAsTry[Boolean](ConfirmableKey).get,
-            confirmMessage = serialization.deserialize(b.getAsTry[Array[Byte]](ConfirmMessageKey).get, classOf[Delivered]).get,
-            confirmTarget = serialization.deserialize(b.getAsTry[Array[Byte]](ConfirmTargetKey).get, classOf[ActorRef]).get
+            sender = b.getAsTry[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef])).getOrElse(driver.actorSystem.deadLetters),
+            redeliveries = b.getAsTry[Int](RedeliveriesKey).getOrElse(0),
+            confirmable = b.getAsTry[Boolean](ConfirmableKey).getOrElse(false),
+            confirmMessage = b.getAsTry[Array[Byte]](ConfirmMessageKey).flatMap(serialization.deserialize(_, classOf[Delivered])).getOrElse(null),
+            confirmTarget = b.getAsTry[Array[Byte]](ConfirmTargetKey).flatMap(serialization.deserialize(_, classOf[ActorRef])).getOrElse(null)
           )
         case v =>
           serialization.deserialize(document.getAsTry[Array[Byte]](SERIALIZED).get, classOf[PersistentRepr]).get
@@ -51,14 +51,15 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     def write(persistent: PersistentRepr): BSONDocument = {
       val content: BSONValue = persistent.payload match {
         case b: BSONDocument =>
-          BSONDocument(
-            PayloadKey -> b,
-            SenderKey -> serialization.serialize(persistent.sender).get,
-            RedeliveriesKey -> persistent.redeliveries,
-            ConfirmableKey -> persistent.confirmable,
-            ConfirmMessageKey -> serialization.serialize(persistent.confirmMessage).get,
-            ConfirmTargetKey -> serialization.serialize(persistent.confirmTarget).get
-          )
+          Seq {
+            Option(persistent.sender).filterNot(_ == driver.actorSystem.deadLetters).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(SenderKey -> n))
+            Option(persistent.redeliveries).filterNot(_ == 0).map(n => BSONDocument(RedeliveriesKey -> n))
+            Option(persistent.confirmable).filter(identity).map(n => BSONDocument(ConfirmableKey -> n))
+            Option(persistent.confirmMessage).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(ConfirmMessageKey -> n))
+            Option(persistent.confirmTarget).flatMap(serialization.serialize(_).toOption).map(n => BSONDocument(ConfirmTargetKey -> n))
+          }.collect {
+            case Some(b: BSONDocument) => b
+          }.foldLeft(BSONDocument(PayloadKey -> b))(_ ++ _)
         case _ =>
           BsonBinaryHandler.write(serialization.serialize(persistent).get)
       }
