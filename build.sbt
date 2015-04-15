@@ -2,12 +2,6 @@ val scalaV = "2.11.6"
 
 scalaVersion := scalaV
 
-resolvers ++= Seq(
-  "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
-  "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
-  "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
-)
-
 val AkkaV = "2.3.9"
 
 val pomXtra = {
@@ -60,7 +54,12 @@ val commonSettings = Seq(
   version := "0.3.0-SNAPSHOT",
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
-  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
+  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
+  resolvers ++= Seq(
+    "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
+    "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
+    "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+  )
 ) ++ sonatypeSettings
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
