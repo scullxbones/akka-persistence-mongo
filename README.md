@@ -18,6 +18,10 @@
 
 ### What's new?
 
+#### 0.3.0
+ - Migrated to build.sbt
+ - Direct passing of bson documents into journal/snapshotter (#16)
+
 #### 0.2.4
  - Closes issue #18, thanks for the report and fixing pull request @marcuslinke!
    - If replay size exceeded `Int.MaxValue`, conversion was causing negative limits passed to rxmongo which are transformed to 101, much smaller than 4 billion.
@@ -151,6 +155,12 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 ### How to configure?
 
 The defaults are fairly sane, but some common ones to change may be the location of the mongodb server.  These changes can be made in the `application.conf` file.
+
+The only thing you have to provide is the driver implementation:
+
+```
+akka.contrib.persistence.mongodb.mongo.driver = "akka.contrib.persistence.mongodb.RxMongoPersistenceExtension" // or CasbahPersistenceExtension
+```
 
 #### Mongo URLs
 
@@ -288,6 +298,14 @@ akka-contrib-persistence-dispatcher {
   throughput = 100
 }
 ```
+
+### <a name="direct"></a> Passing DB objects directly into journal collection
+
+If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONDocument` (using reactivemongo).
+
+During replay, events will be sent to your actor as-is. It is client's duty to handle BSON (de)serialization in this case.
+
+The same holds for snapshots.
 
 ### <a name="metrics"></a> Metrics (optional functionality)
 
