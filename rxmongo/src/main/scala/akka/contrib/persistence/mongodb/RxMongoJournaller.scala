@@ -157,6 +157,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
 
   private[this] def journal(implicit ec: ExecutionContext) = {
     val journal = driver.collection(driver.journalCollectionName)
+    println(s"driver class = ${driver.getClass.getName} db name = ${journal.db.name}  coll name = ${journal.name}")
     journal.indexesManager.ensure(new Index(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),
         (SEQUENCE_NUMBER, IndexType.Ascending),

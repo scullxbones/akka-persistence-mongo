@@ -23,11 +23,6 @@ val pomXtra = {
         <name>Brian Scully</name>
         <url>https://github.com/scullxbones/</url>
       </developer>
-      <developer>
-        <id>alari</id>
-        <name>Dmitry Kurinskiy</name>
-        <url>https://github.com/alari/</url>
-      </developer>
     </developers>
 }
 

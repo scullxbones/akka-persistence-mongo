@@ -28,7 +28,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   trait Fixture {
     val underTest = new CasbahPersistenceJournaller(driver)
-    val records = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test") }
+    val records:List[PersistentRepr] = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test") }
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in new Fixture {
@@ -224,4 +224,19 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       result should be (3)
     }
   }
+
+  it should "support BSON payloads as MongoDBObjects" in new Fixture { withJournal { journal =>
+    val documents = List(1,2,3).map(sn => PersistentRepr(persistenceId = "unit-test", sequenceNr = sn, payload = MongoDBObject("foo" -> "bar", "baz" -> 1)))
+    underTest.appendToJournal(documents)
+    val results = journal.find().toList
+    results should have size 3
+    val first = results.head
+    first.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
+    first.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
+    first.getAs[Boolean](DELETED) shouldBe Some(false)
+    val blob = first.getAs[MongoDBObject](SERIALIZED).get
+    val payload = blob.getAs[MongoDBObject](PayloadKey).get
+    payload.getAs[String]("foo") shouldBe Some("bar")
+    payload.getAs[Int]("baz") shouldBe Some(1)
+  }}
 }
