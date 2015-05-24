@@ -20,7 +20,7 @@
 
 #### 0.3.0
  - Migrated to build.sbt
- - Direct passing of bson documents into journal/snapshotter (#16)
+ - [Direct passing](#direct) of bson documents into journal/snapshotter (#16), much thanks to @alari for the PR.
 
 #### 0.2.4
  - Closes issue #18, thanks for the report and fixing pull request @marcuslinke!
@@ -303,9 +303,31 @@ akka-contrib-persistence-dispatcher {
 
 If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONDocument` (using reactivemongo).
 
-During replay, events will be sent to your actor as-is. It is client's duty to handle BSON (de)serialization in this case.
+```scala
+case class Command(value: String)
+case class SampleState(counter: Int, lastValue: Option[String])
 
-The same holds for snapshots.
+class SampleActor extends PersistentActor {
+  
+  var state = SampleState(0,None)
+
+  def updateState(event: DBObject): Unit = {
+    state = state.copy(counter = state.counter + 1, lastValue = event.getAs[String]("value"))
+  }
+
+  val receiveCommand: Receive = {
+    case Command(value) =>
+      persist(DBObject("value" -> value))(updateState)
+  }
+
+  // receiveRecover implementation, etc rest of class 
+}
+
+```
+
+During replay, events will be sent to your actor as-is. It is the application's duty to handle BSON (de)serialization in this case.
+
+This funcationality is also exposed for snapshots.
 
 ### <a name="metrics"></a> Metrics (optional functionality)
 
