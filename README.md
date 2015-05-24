@@ -89,7 +89,7 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.2.2` is tracking Akka `2.3.8` as a `provided` dependency and passing the TCK now delivered with Akka
+Version `0.3.0` is tracking Akka `2.3.9` as a `provided` dependency and passing the TCK now delivered with Akka
 
 Driver dependencies are also `provided`, meaning they must be included in the application project's dependencies.
 
@@ -97,12 +97,12 @@ Driver dependencies are also `provided`, meaning they must be included in the ap
 
 ##### Casbah
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.2.2"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.3.0"
 ```
 
 ##### Reactive Mongo
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.2.2"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.3.0"
 ```
 
 #### Using Maven?
@@ -112,7 +112,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.2.2</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -121,7 +121,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-rxmongo_2.10</artifactId>
-    <version>0.2.2</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -130,12 +130,12 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 
 ##### Casbah
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.2.2'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.3.0'
 ```
 
 ##### Reactive Mongo
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.2.2'
+compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.3.0'
 ```
 
 ### How to use with akka-persistence?
