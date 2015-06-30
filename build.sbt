@@ -1,8 +1,8 @@
-val scalaV = "2.11.6"
+val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.3.9"
+val AkkaV = "2.3.11"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -45,8 +45,8 @@ val commonDeps = Seq(
 val commonSettings = Seq(
   scalaVersion := scalaV,
   libraryDependencies ++= commonDeps,
-  crossScalaVersions := Seq("2.10.5", "2.11.6"),
-  version := "0.3.0",
+  crossScalaVersions := Seq("2.10.5", "2.11.7"),
+  version := "0.3.1",
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
   scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
@@ -62,6 +62,7 @@ lazy val `akka-persistence-mongo-common` = (project in file("common"))
 
 lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
+  .aggregate(`akka-persistence-mongo-common`)
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -71,10 +72,11 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
+  .aggregate(`akka-persistence-mongo-common`)
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.10.5.0.akka23" % "provided"
+      "org.reactivemongo" %% "reactivemongo" % "0.11.0-M2" % "provided"
     )
   )
 
