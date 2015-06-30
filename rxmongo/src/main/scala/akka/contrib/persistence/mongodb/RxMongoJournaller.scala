@@ -3,6 +3,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorRef
 import akka.persistence._
 import play.api.libs.iteratee.{Enumerator, Iteratee}
+import reactivemongo.api.ReadPreference
 import reactivemongo.api.indexes._
 import reactivemongo.bson._
 
@@ -16,6 +17,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
+  private[this] val readPreference = ReadPreference.nearest
 
   implicit object PersistentReprHandler extends BSONDocumentReader[PersistentRepr] with BSONDocumentWriter[PersistentRepr] {
     def read(document: BSONDocument): PersistentRepr = {
@@ -82,10 +84,14 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     journal.find(journalEntryQuery(pid, seq)).one[PersistentRepr]
 
   private[mongodb] override def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
-    journal.find(journalRangeQuery(pid, from, to)).cursor[PersistentRepr].collect[Vector]().map(_.iterator.asInstanceOf[Iterator[PersistentRepr]])
+    journal.find(journalRangeQuery(pid, from, to)).cursor[PersistentRepr](readPreference).collect[Vector]().map(_.iterator.asInstanceOf[Iterator[PersistentRepr]])
 
   private[mongodb] override def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) =
-    journal.bulkInsert(Enumerator.enumerate(persistent), writeConcern).map(_ => ())
+    {
+      val j = journal
+      import j.pack.serialize
+      j.bulkInsert(persistent.toStream.map(r => serialize(r, PersistentReprHandler)), ordered = false, writeConcern = writeConcern).map(_ => ())
+    }
 
   private[this] def hardOrSoftDelete(query: BSONDocument, permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] = {
     val result =
@@ -112,7 +118,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     val grouped = confirms.groupBy(c => (c.persistenceId, c.sequenceNr))
 
     Future.reduce(grouped.map { case ((id, seq), groupedConfirms) =>
-      val channels = groupedConfirms.map(c => c.channelId).toSeq
+      val channels = groupedConfirms.map(c => c.channelId)
       val update = BSONDocument("$push" -> BSONDocument(CONFIRMS -> BSONDocument("$each" -> channels)))
       journal.update(
         journalEntryQuery(id, seq),
@@ -126,7 +132,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
   private[mongodb] override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) =
     journal.find(BSONDocument(PROCESSOR_ID -> pid))
       .sort(BSONDocument(SEQUENCE_NUMBER -> -1))
-      .cursor[PersistentRepr]
+      .cursor[PersistentRepr](readPreference)
       .headOption
       .map(l => l.map(_.sequenceNr).getOrElse(0L))
 
@@ -135,7 +141,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     else {
       val cursor = journal
         .find(journalRangeQuery(pid, from, to))
-        .cursor[PersistentRepr]
+        .cursor[PersistentRepr](readPreference)
 
       val maxInt = toInt(max)
 

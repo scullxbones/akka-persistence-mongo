@@ -4,7 +4,7 @@ import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
 import org.scalatest.concurrent.ScalaFutures
 import reactivemongo.api.MongoDriver
-import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
@@ -17,7 +17,7 @@ trait RxMongoPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: Tes
     def execute(runnable: Runnable) { runnable.run() }
   }
 
-  lazy val connection = MongoDriver(system).connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
+  lazy val connection = MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
   lazy val specDb = connection(embedDB)
 
   class SpecDriver extends RxMongoPersistenceDriver {

@@ -1,12 +1,14 @@
 package akka.contrib.persistence.mongodb
 
 import reactivemongo.api._
-import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.commands.GetLastError.WaitForAknowledgments
+import reactivemongo.api.commands.WriteConcern
 import reactivemongo.bson._
 import reactivemongo.bson.buffer.ArrayReadableBuffer
 
 import akka.actor.ActorSystem
-import reactivemongo.core.commands.GetLastError
+import reactivemongo.api.commands.GetLastError
 import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent.duration.Duration
@@ -27,17 +29,17 @@ object RxMongoPersistenceExtension {
 object RxMongoPersistenceDriver {
   import MongoPersistenceBase._
 
-  def toGetLastError(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean):GetLastError = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
+  def toGetLastError(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean):WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
     case (ErrorsIgnored,wt,f) =>
-      GetLastError(j = false, w = None, wt, fsync = f)
+      GetLastError(j = false, w = WaitForAknowledgments(0), wtimeout = Some(wt), fsync = f)
     case (Unacknowledged,wt,f) =>
-      GetLastError(j = false, w = Option(BSONInteger(0)), wt, fsync = f)
+      GetLastError(j = false, w = WaitForAknowledgments(0), wtimeout = Some(wt), fsync = f)
     case (Acknowledged,wt,f) =>
-      GetLastError(j = false, w = Option(BSONInteger(1)), wt, fsync = f)
+      GetLastError(j = false, w = WaitForAknowledgments(1), wtimeout = Some(wt), fsync = f)
     case (Journaled,wt,_) =>
-      GetLastError(j = true, w = Option(BSONInteger(1)), wt, fsync = false)
+      GetLastError(j = true, w = WaitForAknowledgments(1), wtimeout = Some(wt), fsync = false)
     case (ReplicaAcknowledged,wt,f) =>
-      GetLastError(j = !f, w = Option(BSONInteger(2)), wt, fsync = f)
+      GetLastError(j = !f, w = WaitForAknowledgments(2), wtimeout = Some(wt), fsync = f)
   }
 }
 
@@ -47,7 +49,7 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersiste
   // Collection type
   type C = BSONCollection
 
-  private[mongodb] lazy val driver = MongoDriver(actorSystem)
+  private[mongodb] lazy val driver = MongoDriver()
   private[mongodb] lazy val connection =
     userPass.map {
       case (u,p) => authenticated(u,p)
@@ -60,8 +62,8 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersiste
   private[mongodb] lazy val db = connection(mongoDbName)(actorSystem.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
-  private[mongodb] def journalWriteConcern: GetLastError = toGetLastError(journalWriteSafety,journalWTimeout,journalFsync)
-  private[mongodb] def snapsWriteConcern: GetLastError = toGetLastError(snapsWriteSafety,snapsWTimeout,snapsFsync)
+  private[mongodb] def journalWriteConcern: WriteConcern = toGetLastError(journalWriteSafety,journalWTimeout,journalFsync)
+  private[mongodb] def snapsWriteConcern: WriteConcern = toGetLastError(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
 }
 
