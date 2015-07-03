@@ -76,7 +76,7 @@ trait EmbeddedMongo extends BeforeAndAfterAll { this: Suite =>
     .build()
 
   val mongodConfig = new MongodConfigBuilder()
-    .version(Version.Main.V2_6)
+    .version(Version.Main.V3_0)
     .cmdOptions(new MongoCmdOptionsBuilder()
     .syncDelay(1)
     .useNoJournal(false)

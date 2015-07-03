@@ -1,16 +1,16 @@
 package akka.contrib.persistence.mongodb
 
 import reactivemongo.api._
-import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.commands.WriteConcern
 import reactivemongo.bson._
 import reactivemongo.bson.buffer.ArrayReadableBuffer
 
 import akka.actor.ActorSystem
-import reactivemongo.core.commands.GetLastError
-import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
+import scala.util.{Failure, Success}
 
 object RxMongoPersistenceExtension {
   implicit object BsonBinaryHandler extends BSONHandler[BSONBinary, Array[Byte]] {
@@ -27,41 +27,44 @@ object RxMongoPersistenceExtension {
 object RxMongoPersistenceDriver {
   import MongoPersistenceBase._
 
-  def toGetLastError(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean):GetLastError = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
-    case (ErrorsIgnored,wt,f) =>
-      GetLastError(j = false, w = None, wt, fsync = f)
+  def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean):WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
     case (Unacknowledged,wt,f) =>
-      GetLastError(j = false, w = Option(BSONInteger(0)), wt, fsync = f)
+      WriteConcern.Unacknowledged.copy(fsync = f, wtimeout = Option(wt))
     case (Acknowledged,wt,f) =>
-      GetLastError(j = false, w = Option(BSONInteger(1)), wt, fsync = f)
+      WriteConcern.Acknowledged.copy(fsync = f, wtimeout = Option(wt))
     case (Journaled,wt,_) =>
-      GetLastError(j = true, w = Option(BSONInteger(1)), wt, fsync = false)
+      WriteConcern.Journaled.copy(wtimeout = Option(wt))
     case (ReplicaAcknowledged,wt,f) =>
-      GetLastError(j = !f, w = Option(BSONInteger(2)), wt, fsync = f)
+      WriteConcern.ReplicaAcknowledged(2, wt, !f)
   }
 }
 
 trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersistenceBase {
   import RxMongoPersistenceDriver._
+  import concurrent.Await
+  import concurrent.duration._
 
   // Collection type
   type C = BSONCollection
 
-  private[mongodb] lazy val driver = MongoDriver(actorSystem)
+  private[mongodb] lazy val driver = MongoDriver()
+  private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
+    case Success(parsed) => parsed
+    case Failure(throwable) => throw throwable
+  }
   private[mongodb] lazy val connection =
-    userPass.map {
-      case (u,p) => authenticated(u,p)
-    }.getOrElse(unauthenticated())
+    waitForPrimary(driver.connection(parsedURI = parsedMongoUri))
 
-  private[this] def authenticated(user: String, pass: String) =
-    driver.connection(mongoUrl,authentications = Seq(Authenticate(mongoDbName,user,pass)))
-  private[this] def unauthenticated() = driver.connection(mongoUrl)
+  private[this] def waitForPrimary(conn: MongoConnection): MongoConnection = {
+    Await.result(conn.waitForPrimary(3.seconds),4.seconds)
+    conn
+  }
 
-  private[mongodb] lazy val db = connection(mongoDbName)(actorSystem.dispatcher)
+  private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(actorSystem.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
-  private[mongodb] def journalWriteConcern: GetLastError = toGetLastError(journalWriteSafety,journalWTimeout,journalFsync)
-  private[mongodb] def snapsWriteConcern: GetLastError = toGetLastError(snapsWriteSafety,snapsWTimeout,snapsFsync)
+  private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
+  private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
 }
 

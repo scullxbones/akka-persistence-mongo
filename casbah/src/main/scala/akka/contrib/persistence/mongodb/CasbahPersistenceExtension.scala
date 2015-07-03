@@ -10,14 +10,7 @@ import scala.language.implicitConversions
 object CasbahPersistenceDriver {
   import akka.contrib.persistence.mongodb.MongoPersistenceBase._
   
-  implicit def convertListOfStringsToListOfServerAddresses(strings: List[String]): List[ServerAddress] =
-    strings.map { url =>
-    val Array(host, port) = url.split(":")
-    new ServerAddress(host, port.toInt)
-    }.toList
-
   def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
-    case (ErrorsIgnored,w,f) => WriteConcern(-1,wTimeout = w, fsync = f,continueInsertOnError = true)
     case (Unacknowledged,w,f) => WriteConcern(0,wTimeout = w, fsync = f)
     case (Acknowledged,w,f) => WriteConcern(1,wTimeout = w, fsync = f)
     case (Journaled,w,_) => WriteConcern(1,j=true,wTimeout = w)
@@ -31,17 +24,11 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersisten
   // Collection type
   type C = MongoCollection
 
-  private[mongodb] lazy val client =
-    userPass.map {
-      case (u,p) => authenticated(u,p)
-    }.getOrElse(unauthenticated())
+  private[this] lazy val url = MongoClientURI(mongoUri)
 
-  private[mongodb] lazy val db = client(mongoDbName)
+  private[mongodb] lazy val client = MongoClient(url)
 
-  private[this] def authenticated(user: String, password: String) =
-    MongoClient(mongoUrl,MongoCredential.createMongoCRCredential(user,mongoDbName,password.toCharArray) :: Nil)
-
-  private[this] def unauthenticated() = MongoClient(mongoUrl)
+  private[mongodb] lazy val db = client(url.database.getOrElse(DEFAULT_DB_NAME))
 
 
   

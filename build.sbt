@@ -1,8 +1,10 @@
-val scalaV = "2.11.6"
+val releaseV = "0.4.0"
+
+val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.3.9"
+val AkkaV = "2.3.11"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -36,7 +38,7 @@ val commonDeps = Seq(
   "org.scalamock" %% "scalamock-scalatest-support" % "3.2.1" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
   "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.2" % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.46.4" % "test",
+  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.0" % "test",
   "org.mongodb" % "mongo-java-driver" % "2.12.4" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-tck-experimental" % AkkaV % "test"
@@ -45,8 +47,8 @@ val commonDeps = Seq(
 val commonSettings = Seq(
   scalaVersion := scalaV,
   libraryDependencies ++= commonDeps,
-  crossScalaVersions := Seq("2.10.5", "2.11.6"),
-  version := "0.3.0",
+  crossScalaVersions := Seq("2.10.5", scalaV),
+  version := releaseV,
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
   scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
@@ -65,7 +67,7 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "2.7.4" % "provided"
+      "org.mongodb" %% "casbah" % "2.8.1" % "provided"
     )
   )
 
@@ -74,7 +76,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.10.5.0.akka23" % "provided"
+      "org.reactivemongo" %% "reactivemongo" % "0.11.0" % "provided"
     )
   )
 

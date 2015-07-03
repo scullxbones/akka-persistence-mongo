@@ -6,7 +6,6 @@ import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import play.api.libs.iteratee.Enumerator
 import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
@@ -24,9 +23,9 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
     val snapshots = metadata.map(SelectedSnapshot(_,"snapshot"))
     val legacyDocs = snapshots.map(serializer.legacyWrite)
 
-    Await.result(ss.bulkInsert(Enumerator.enumerate(legacyDocs)),3.seconds) should be (metadata.size)
+    Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true),3.seconds).n should be (metadata.size)
 
-    val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot].collect[List](stopOnError = true)
+    val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
     val result = Await.result(extracted,3.seconds)
     result.size should be (10)
     result.head.metadata.persistenceId should be ("p-1")
@@ -39,9 +38,9 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
     val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
     val newDocs = snapshots.drop(5).map(serializer.write)
 
-    Await.result(ss.bulkInsert(Enumerator.enumerate(legacyDocs ++ newDocs)),3.seconds) should be (metadata.size)
+    Await.result(ss.bulkInsert((legacyDocs ++ newDocs).toStream, ordered = true),3.seconds).n should be (metadata.size)
 
-    val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot].collect[List](stopOnError = true)
+    val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
     val result = Await.result(extracted,3.seconds)
     result.size should be (10)
     result.foreach { sn =>

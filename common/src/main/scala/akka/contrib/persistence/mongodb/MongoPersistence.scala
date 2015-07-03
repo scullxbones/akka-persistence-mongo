@@ -4,21 +4,19 @@ import akka.actor.ActorSystem
 import akka.pattern.CircuitBreaker
 import akka.serialization.SerializationExtension
 import com.codahale.metrics.SharedMetricRegistries
-import com.typesafe.config.ConfigFactory
 
 import scala.language.implicitConversions
 
 object MongoPersistenceBase {
 
   sealed trait WriteSafety
-  case object ErrorsIgnored extends WriteSafety
   case object Unacknowledged extends WriteSafety
   case object Acknowledged extends WriteSafety
   case object Journaled extends WriteSafety
   case object ReplicaAcknowledged extends WriteSafety
   
   implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase match {
-    case "errorsignored" => ErrorsIgnored
+    case "errorsignored" => throw new IllegalArgumentException("Errors ignored is no longer supported as a write safety option")
     case "unacknowledged" => Unacknowledged
     case "acknowledged" => Acknowledged
     case "journaled" => Journaled
@@ -53,16 +51,10 @@ trait MongoPersistenceBase {
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync
-  def mongoUrl = settings.Urls
-  def mongoDbName = settings.DbName
-  def userPass: Option[(String,String)] = {
-    val userAndPass = (settings.Username,settings.Password)
-    for {
-      user <- userAndPass._1
-      pass <- userAndPass._2
-    } yield(user,pass)
-  }
-  
+  def mongoUri = settings.MongoUri
+
+  val DEFAULT_DB_NAME = "akka-persistence"
+
   lazy val serialization = SerializationExtension.get(actorSystem)
   lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 }

@@ -1,8 +1,7 @@
 package akka.contrib.persistence.mongodb
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import com.typesafe.config.Config
+import scala.collection.JavaConverters._
 import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
 import akka.actor.ExtendedActorSystem
@@ -45,11 +44,21 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
 
 
   val Implementation = config.getString("driver")
-  
-  val Urls = config.getStringList("urls").asScala.toList
-  val Username = Try(config.getString("username")).toOption
-  val Password = Try(config.getString("password")).toOption
-  val DbName = config.getString("db")
+
+  val MongoUri = Try(config.getString("mongouri")).toOption match {
+    case Some(uri) => uri
+    case None => // Use legacy approach
+      val Urls = config.getStringList("urls").asScala.toList
+      val Username = Try(config.getString("username")).toOption
+      val Password = Try(config.getString("password")).toOption
+      val DbName = config.getString("db")
+      (for {
+        user <- Username
+        password <- Password
+      } yield {
+        s"mongodb://$user:$password@$Urls/$DbName"
+      }) getOrElse s"mongodb://$Urls/$DbName"
+  }
 
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")

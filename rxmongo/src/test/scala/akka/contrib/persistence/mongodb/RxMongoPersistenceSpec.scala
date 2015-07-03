@@ -2,9 +2,8 @@ package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
-import org.scalatest.concurrent.ScalaFutures
 import reactivemongo.api.MongoDriver
-import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
@@ -17,15 +16,18 @@ trait RxMongoPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: Tes
     def execute(runnable: Runnable) { runnable.run() }
   }
 
-  lazy val connection = MongoDriver(system).connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
+  lazy val connection = {
+    val conn = new MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
+    Await.result(conn.waitForPrimary(3.seconds),4.seconds)
+    conn
+  }
   lazy val specDb = connection(embedDB)
 
   class SpecDriver extends RxMongoPersistenceDriver {
     val actorSystem = system
-    override lazy val db = specDb
+    override def db = specDb
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
     override def collection(name: String) = specDb(name)
-    override def mongoDbName = embedDB
   }
 
   val driver = new SpecDriver

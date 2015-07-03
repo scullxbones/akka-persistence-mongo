@@ -1,23 +1,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import com.mongodb.ServerAddress
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import scala.concurrent.duration._
-
-@RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverSpec extends BaseUnitTest{
-
-  "A collection of mongo urls" should "be transformed to ServerAddresses" in {
-    val mongoUrls = List("localhost:123","localhost:345","localhost:27017")
-    val converted = CasbahPersistenceDriver.convertListOfStringsToListOfServerAddresses(mongoUrls)
-    converted should have size 3
-    converted should equal (List(new ServerAddress("localhost",123), new ServerAddress("localhost",345), new ServerAddress("localhost",27017)))
-  }
-
-}
 
 import ConfigLoanFixture._
 
@@ -26,7 +13,7 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | urls = [ "localhost:$embedConnectionPort" ]
+        | mongouri = "mongodb://localhost:$embedConnectionPort"
         | db = "shutdown-spec"
         |}
       """.stripMargin)
@@ -60,10 +47,7 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
   val authConfig = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
-        | urls = [ "localhost:$embedConnectionPort" ]
-        | db = "admin"
-        | username = "admin"
-        | password = "password"
+        | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin"
         |}
       """.stripMargin)
 

@@ -17,7 +17,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
-  implicit object PersistentReprHandler extends BSONDocumentReader[PersistentRepr] with BSONDocumentWriter[PersistentRepr] {
+  implicit object PersistentReprReader extends BSONDocumentReader[PersistentRepr] {
     def read(document: BSONDocument): PersistentRepr = {
       val repr: PersistentRepr = document.get(SERIALIZED).get match {
         case b: BSONDocument =>
@@ -47,6 +47,9 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
         confirmTarget = repr.confirmTarget,
         sender = repr.sender)
     }
+  }
+
+  implicit object PersistentReprWriter extends BSONDocumentWriter[PersistentRepr] {
 
     def write(persistent: PersistentRepr): BSONDocument = {
       val content: BSONValue = persistent.payload match {
@@ -85,7 +88,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     journal.find(journalRangeQuery(pid, from, to)).cursor[PersistentRepr].collect[Vector]().map(_.iterator.asInstanceOf[Iterator[PersistentRepr]])
 
   private[mongodb] override def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) =
-    journal.bulkInsert(Enumerator.enumerate(persistent), writeConcern).map(_ => ())
+    journal.bulkInsert(persistent.toStream.map(PersistentReprWriter.write), ordered = true, writeConcern).map(_ => ())
 
   private[this] def hardOrSoftDelete(query: BSONDocument, permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] = {
     val result =
@@ -157,7 +160,6 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
 
   private[this] def journal(implicit ec: ExecutionContext) = {
     val journal = driver.collection(driver.journalCollectionName)
-    println(s"driver class = ${driver.getClass.getName} db name = ${journal.db.name}  coll name = ${journal.name}")
     journal.indexesManager.ensure(new Index(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),
         (SEQUENCE_NUMBER, IndexType.Ascending),

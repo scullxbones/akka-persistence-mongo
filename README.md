@@ -5,18 +5,37 @@
 
 ## A MongoDB plugin for [akka-persistence](http://akka.io)
 
+ * Only supports akka persistence version `2.3.x`.  The `2.4.x` series is unsupported for now, but is a priority
  * Three projects, a core and two driver implementations.  To use you must pull jars for *only one* of the drivers. Common will be pulled in as a transitive dependency:
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver
    * rxmongo provides an implementation against the ReactiveMongo driver
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
- * Supports MongoDB major versions 2.4 and 2.6
+ * Supports MongoDB major versions 2.6 and 3.0
+ * Cross compiled to `2.11` and `2.10` series.  When `2.12` is released, will drop support for `2.10`.
 
 ### Outstanding tasks:
 
  - Tracked in issue log
 
 ### What's new?
+
+#### 0.4.0 (the MongoDB 3.0 release)
+ - Support for `ErrorsIgnored` write concern has been dropped
+ - Now supporting mongodb version 3.0, dropping support for version 2.4
+   - The Casbah driver fully supports 3.0, including `SCRAM-SHA1` authentication
+   - The RxMongo driver (0.11) does not fully support 3.0: 
+     - `SCRAM-SHA1` is not supported yet, please refer to [this Mongo ticket](https://jira.mongodb.org/browse/SERVER-17459) for details on a workaround
+     - Use without authentication seems to be solid
+ - Now supporting URI-based connection, instead of `urls` + `db` + (optional) `user` and `password`. [Details below](#uribased)
+    - The legacy configuration is still supported for now
+ - Built against akka `2.3.11`, cross-compiled to scala `2.11.7` and `2.10.5`
+ - This will likely be one of the last releases supporting akka `2.3.x`
+
+##### RxMongo flavor
+ - Make sure deletes block until complete to be compatible with akka snapshot api, addresses occasional test failure
+ - Remove noisy print statement
+    
 
 #### 0.3.0
  - Migrated to build.sbt
@@ -89,7 +108,7 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.3.0` is tracking Akka `2.3.9` as a `provided` dependency and passing the TCK now delivered with Akka
+Version `0.4.0` is tracking Akka `2.3.11` as a `provided` dependency and passing the TCK now delivered with Akka
 
 Driver dependencies are also `provided`, meaning they must be included in the application project's dependencies.
 
@@ -97,12 +116,12 @@ Driver dependencies are also `provided`, meaning they must be included in the ap
 
 ##### Casbah
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.3.0"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.4.0"
 ```
 
 ##### Reactive Mongo
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.3.0"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.4.0"
 ```
 
 #### Using Maven?
@@ -112,7 +131,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
@@ -121,7 +140,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-rxmongo_2.10</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
@@ -130,12 +149,12 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 
 ##### Casbah
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.3.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.4.0'
 ```
 
 ##### Reactive Mongo
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.3.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.4.0'
 ```
 
 ### How to use with akka-persistence?
@@ -162,34 +181,46 @@ The only thing you have to provide is the driver implementation:
 akka.contrib.persistence.mongodb.mongo.driver = "akka.contrib.persistence.mongodb.RxMongoPersistenceExtension" // or CasbahPersistenceExtension
 ```
 
-#### Mongo URLs
+#### <a href="#uribased"></a> Mongo URI
 
-A list of urls can be supplied.  These are specified as host:port.  For example `localhost:27017`
+A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
+
+For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
+
+```
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2:27017/replicated-database"
+```
+
+If the `mongouri` is used, the legacy fields (`urls`,`db`,`username`,`password`) will be ignored.
+
+#### Mongo URLs (legacy)
+
+A list of urls can be supplied.  These are specified as host:port.  For example `localhost:27017`.
+
+If these are used, the db should also be specified.
 
 ```
 akka.contrib.persistence.mongodb.mongo.urls = ["192.168.0.1:27017","192.168.0.2:27017"]
+akka.contrib.persistence.mongodb.mongo.db = "my_akka_persistence"
 ```
 
-#### Mongo DB, Collection, Index settings
+If authentication credentials are required, both username and password can be specified.
+
+```
+akka.contrib.persistence.mongodb.mongo.username = "my.mongo.user"
+akka.contrib.persistence.mongodb.mongo.password = "secret"
+```
+
+#### Mongo Collection, Index settings
 
 A DB name can be specified, as can the names of the collections and indices used (one for journal, one for snapshots).
 
 ```
-akka.contrib.persistence.mongodb.mongo.db = "my_akka_persistence"
 akka.contrib.persistence.mongodb.mongo.journal-collection = "my_persistent_journal"
 akka.contrib.persistence.mongodb.mongo.journal-index = "my_journal_index"
 akka.contrib.persistence.mongodb.mongo.snaps-collection = "my_persistent_snapshots"
 akka.contrib.persistence.mongodb.mongo.snaps-index = "my_snaps_index"
 akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
-```
-
-#### Mongo authentication settings
-
-Both username and password can be specified.  Currently MONGO-CR is the only authentication mode supported.
-
-```
-akka.contrib.persistence.mongodb.mongo.username = "my.mongo.user"
-akka.contrib.persistence.mongodb.mongo.password = "secret"
 ```
 
 #### Mongo Write Concern settings
@@ -202,7 +233,8 @@ The write concern can be set both for the journal plugin as well as the snapshot
  * `Journaled` <DEFAULT> - requires that the change be journaled on the server that was written to.  Other replicas may not see this write on a network partition
  * `Acknowledged` - also known as "Safe", requires that the MongoDB server acknowledges the write.  This does not require that the change be persistent anywhere but memory.
  * `Unacknowledged` - does not require the MongoDB server to acknowledge the write.  It may raise an error in cases of network issues.  This was the default setting that MongoDB caught a lot of flak for, as it masked errors in exchange for straight-line speed.  This is no longer a default in the driver.
- * `ErrorsIgnored` - !WARNING! Extremely unsafe.  This level may not be able to detect if the MongoDB server is even running.  It will also not detect errors such as key collisions.  This makes data loss likely.  In general, don't use this.
+ * ~~`ErrorsIgnored` - !WARNING! Extremely unsafe.  This level may not be able to detect if the MongoDB server is even running.  It will also not detect errors such as key collisions.  This makes data loss likely.  In general, don't use this.~~
+ * Errors ignored is no longer supported as a write concern.
 
 It is a bad idea&trade; to use anything less safe than `Acknowledged` on the journal.  The snapshots can be played a bit more fast and loose, but the recommendation is not to go below `Acknowledged` for any serious work.
 
@@ -254,7 +286,7 @@ akka {
 
           journal-collection = "akka_persistence_journal"
           journal-index = "akka_persistence_journal_index"
-          # Write concerns are one of: ErrorsIgnored, Unacknowledged, Acknowledged, Journaled, ReplicaAcknowledged
+          # Write concerns are one of: Unacknowledged, Acknowledged, Journaled, ReplicaAcknowledged
           journal-write-concern = "Journaled"
           journal-wtimeout = 3s
           journal-fsync = false
@@ -327,7 +359,7 @@ class SampleActor extends PersistentActor {
 
 During replay, events will be sent to your actor as-is. It is the application's duty to handle BSON (de)serialization in this case.
 
-This funcationality is also exposed for snapshots.
+This functionality is also exposed for snapshots.
 
 ### <a name="metrics"></a> Metrics (optional functionality)
 

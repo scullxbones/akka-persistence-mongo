@@ -62,10 +62,12 @@ class RxMongoSnapshotSerialization(implicit serialization: Serialization) extend
 class RxMongoSnapshotter(driver: RxMongoPersistenceDriver) extends MongoPersistenceSnapshottingApi {
 
   import SnapshottingFieldNames._
+  import concurrent.duration._
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
   private[this] implicit lazy val snapshotSerialization = new RxMongoSnapshotSerialization()
+  private[this] lazy val deleteTimeout = 5.seconds
 
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     val selected =
@@ -83,13 +85,13 @@ class RxMongoSnapshotter(driver: RxMongoPersistenceDriver) extends MongoPersiste
     snaps.insert(snapshot, writeConcern).map(_ => ())
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
-    snaps.remove(BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq, TIMESTAMP -> ts), writeConcern)
+    Await.result(snaps.remove(BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq, TIMESTAMP -> ts), writeConcern), deleteTimeout)
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
-    snaps.remove(BSONDocument(PROCESSOR_ID -> pid,
-      SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-      TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
-      writeConcern)
+    Await.result(snaps.remove(BSONDocument(PROCESSOR_ID -> pid,
+                                            SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
+                                            TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
+                                            writeConcern), deleteTimeout)
 
   private[this] def snaps(implicit ec: ExecutionContext) = {
     val snaps = driver.collection(driver.snapsCollectionName)

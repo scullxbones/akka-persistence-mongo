@@ -1,18 +1,13 @@
 package akka.contrib.persistence.mongodb
 
-import java.util.{List => JList}
-
 import akka.actor.ActorSystem
-import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.persistence.PersistentRepr
 import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
-import play.api.libs.iteratee.Enumerator
-import reactivemongo.bson.{BSON, BSONArray, BSONDocument}
-import reactivemongo.core.commands.Count
+import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
-import duration._
+import scala.concurrent.duration._
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -36,8 +31,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
   "A reactive mongo journal implementation" should "insert journal records" in new Fixture { withJournal { journal =>
     val inserted = for {
       inserted <- underTest.appendToJournal(records)
-      range <- journal.find(BSONDocument()).cursor[BSONDocument].collect[List]()
-      head <- journal.find(BSONDocument()).cursor.headOption
+      range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
+      head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)
     val (range,head) = await(inserted)
     range should have size 3
@@ -51,8 +46,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
   it should "insert records with documents as payload" in new Fixture { withJournal { journal =>
     val inserted = for {
       inserted <- underTest.appendToJournal(documents)
-      range <- journal.find(BSONDocument()).cursor[BSONDocument].collect[List]()
-      head <- journal.find(BSONDocument()).cursor.headOption
+      range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
+      head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)
     val (range,head) = await(inserted)
     range should have size 3
