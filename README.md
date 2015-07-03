@@ -181,7 +181,7 @@ The only thing you have to provide is the driver implementation:
 akka.contrib.persistence.mongodb.mongo.driver = "akka.contrib.persistence.mongodb.RxMongoPersistenceExtension" // or CasbahPersistenceExtension
 ```
 
-#### <a href="#uribased"></a> Mongo URI
+#### <a name="uribased"></a> Mongo URI
 
 A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
 
