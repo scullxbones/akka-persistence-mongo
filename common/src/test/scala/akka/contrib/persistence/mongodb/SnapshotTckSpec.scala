@@ -2,12 +2,11 @@ package akka.contrib.persistence.mongodb
 
 import akka.persistence.snapshot.SnapshotStoreSpec
 import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterAll
 
-abstract class SnapshotTckSpec extends SnapshotStoreSpec with EmbeddedMongo {
+object SnapshotTckSpec extends EmbeddedMongo {
 
-  def extensionClass: Class[_]
-
-  lazy val config = ConfigFactory.parseString(s"""
+  def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
     |akka.persistence.journal.leveldb.native = off
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -17,5 +16,18 @@ abstract class SnapshotTckSpec extends SnapshotStoreSpec with EmbeddedMongo {
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     """.stripMargin)
+}
 
+abstract class SnapshotTckSpec(extensionClass: Class[_])
+  extends SnapshotStoreSpec(SnapshotTckSpec.config(extensionClass)) with BeforeAndAfterAll {
+
+  override def beforeAll() {
+    SnapshotTckSpec.doBefore()
+    super.beforeAll()
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    SnapshotTckSpec.doAfter()
+  }
 }

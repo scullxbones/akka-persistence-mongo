@@ -2,6 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import java.util
 
+import com.mongodb.client.MongoDatabase
 import de.flapdoodle.embed.mongo.{MongodStarter, Command}
 import de.flapdoodle.embed.mongo.config._
 import de.flapdoodle.embed.mongo.distribution.Version
@@ -10,22 +11,21 @@ import de.flapdoodle.embed.process.distribution.Distribution
 import de.flapdoodle.embed.process.extract.UUIDTempNaming
 import de.flapdoodle.embed.process.io.directories.PlatformTempDir
 import de.flapdoodle.embed.process.runtime.{Network, ICommandLinePostProcessor}
-import org.scalatest.{Suite, BeforeAndAfterAll}
 import scala.collection.JavaConverters._
 import com.mongodb._
 
 trait Authentication {
   implicit class MongoFiedMap(map: Map[String,Any]) {
-    def asDBObject: DBObject = {
+    def asDBObject: BasicDBObject = {
       map.foldLeft(BasicDBObjectBuilder.start()) { case(builder,(k,v)) => v match {
         case v:Map[String,Any] => builder.add(k,v.asDBObject)
         case v:List[Any] => builder.add(k,v.asJava)
         case _ => builder.add(k,v)
-      }}.get()
+      }}.get().asInstanceOf[BasicDBObject]
     }
   }
 
-  def injectCredentials(db: DB, user: String = "admin", pass: String = "password"): Unit = {
+  def injectCredentials(db: MongoDatabase, user: String = "admin", pass: String = "password"): Unit = {
     val roles = BasicDBObjectBuilder.start("role","userAdminAnyDatabase").add("db","admin").get ::
                 BasicDBObjectBuilder.start("role","dbAdminAnyDatabase").add("db","admin").get ::
                 BasicDBObjectBuilder.start("role","readWrite").add("db","admin").get ::
@@ -34,20 +34,18 @@ trait Authentication {
     val command = Map("createUser" -> user,
                       "pwd" -> pass,
                       "roles" -> List("userAdminAnyDatabase","dbAdminAnyDatabase","readWrite"))
-    val result = db.command(command.asDBObject)
-    if (!result.ok()) {
+    val result = db.runCommand(command.asDBObject)
+    if (result.getInteger("ok") != 1) {
       result.keySet().asScala.foreach(k => println(s"k-v: $k = ${result.get(k)}"))
-      println(s"${result.getErrorMessage}")
-      println(s"${result.getException}")
       println(s"${command.asDBObject}")
-      result.throwOnError()
+      throw new Exception("Could not successfully create user")
     }
   }
 }
 
 class NoOpCommandLinePostProcessor extends ICommandLinePostProcessor with Authentication {
   override def process(distribution: Distribution, args: util.List[String]): util.List[String] = args
-  override def injectCredentials(db: DB, user: String = "admin", pass: String = "password") = ()
+  override def injectCredentials(db: MongoDatabase, user: String = "admin", pass: String = "password") = ()
 }
 
 class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") extends ICommandLinePostProcessor with Authentication {
@@ -55,7 +53,7 @@ class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") e
     (args.asScala - "--noauth" :+ "--auth").asJava
 }
 
-trait EmbeddedMongo extends BeforeAndAfterAll { this: Suite =>
+trait EmbeddedMongo {
   def embedConnectionURL: String = { "localhost" }
   lazy val embedConnectionPort: Int = { Network.getFreeServerPort }
   def embedDB: String = "test"
@@ -93,14 +91,12 @@ trait EmbeddedMongo extends BeforeAndAfterAll { this: Suite =>
 
   lazy val mongoClient = new MongoClient(embedConnectionURL,embedConnectionPort)
 
-  override def beforeAll() {
+  def doBefore(): Unit = {
     mongodExe
-    auth.injectCredentials(mongoClient.getDB("admin"))
-    super.beforeAll()
+    auth.injectCredentials(mongoClient.getDatabase("admin"))
   }
 
-  override def afterAll() {
-    super.afterAll()
+  def doAfter(): Unit = {
     mongod.stop(); mongodExe.stop()
   }
 }

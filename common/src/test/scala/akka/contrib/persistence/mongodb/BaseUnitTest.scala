@@ -14,7 +14,7 @@ object ConfigLoanFixture {
     try {
       testCode(actorSystem)
     } finally {
-      actorSystem.shutdown()
+      actorSystem.awaitTermination()
     }
   }
 }

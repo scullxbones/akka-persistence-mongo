@@ -29,7 +29,7 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
 trait MongoPersistenceExtension extends Extension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
-  def registry: MetricRegistry = MongoPersistenceBase.registry
+  def registry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
 class MongoSettings(val systemSettings: ActorSystem.Settings) {

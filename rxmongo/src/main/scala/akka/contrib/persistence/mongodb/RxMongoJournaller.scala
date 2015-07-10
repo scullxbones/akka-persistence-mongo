@@ -75,11 +75,17 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
     }
   }
 
-  private[this] def journalEntryQuery(pid: String, seq: Long) =
+  private[this] def journalEntryQueryLegacy(pid: String, seq: Long) =
     BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq)
 
-  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
+  private[this] def journalRangeQueryLegacy(pid: String, from: Long, to: Long) =
     BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> BSONDocument("$gte" -> from, "$lte" -> to))
+
+  private[this] def journalEntryQuery(pid: String, seq: Long) =
+    journalRangeQuery(pid,seq,seq)
+
+  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
+    BSONDocument(ATOM $elemMatch BSONDocument(PROCESSOR_ID -> pid, FROM -> BSONDocument("$gte" -> from), TO -> MongoDBObject("$lte" -> to)))
 
   private[mongodb] override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext) =
     journal.find(journalEntryQuery(pid, seq)).one[PersistentRepr]

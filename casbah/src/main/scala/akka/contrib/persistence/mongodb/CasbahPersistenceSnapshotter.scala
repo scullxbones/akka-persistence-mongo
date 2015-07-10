@@ -81,16 +81,22 @@ class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends Mong
     snaps.insert(snapshot, writeConcern)
   }
 
-  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
+  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = Future {
     snaps.remove($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq, TIMESTAMP $eq ts), writeConcern)
+  }
 
-  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
+  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
+  }
 
 
   private[mongodb] def snaps(implicit ec: ExecutionContext): MongoCollection = {
     val snapsCollection = driver.collection(driver.snapsCollectionName)
-    snapsCollection.ensureIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1),
+    snapsCollection.createIndex(
+      MongoDBObject(
+        PROCESSOR_ID -> 1,
+        SEQUENCE_NUMBER -> -1,
+        TIMESTAMP -> -1),
       MongoDBObject("unique" -> true, "name" -> driver.snapsIndexName))
     snapsCollection
   }

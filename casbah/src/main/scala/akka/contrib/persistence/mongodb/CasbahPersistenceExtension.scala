@@ -1,14 +1,17 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.persistence.PersistentRepr
+import akka.serialization.Serialization
 import com.mongodb.casbah.Imports._
-import com.mongodb.casbah.WriteConcern
+import com.mongodb.casbah.{Imports, WriteConcern}
 
+import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 
 object CasbahPersistenceDriver {
-  import akka.contrib.persistence.mongodb.MongoPersistenceBase._
+  import MongoPersistenceDriver._
   
   def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
     case (Unacknowledged,w,f) => WriteConcern(0,wTimeout = w, fsync = f)
@@ -18,11 +21,13 @@ object CasbahPersistenceDriver {
   }
 }
 
-trait CasbahPersistenceDriver extends MongoPersistenceDriver with MongoPersistenceBase {
+trait CasbahPersistenceDriver extends MongoPersistenceDriver {
   import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
   
   // Collection type
   type C = MongoCollection
+
+  type D = DBObject
 
   private[this] lazy val url = MongoClientURI(mongoUri)
 

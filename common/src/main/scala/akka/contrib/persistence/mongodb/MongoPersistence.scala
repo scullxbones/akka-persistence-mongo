@@ -2,12 +2,14 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.pattern.CircuitBreaker
-import akka.serialization.SerializationExtension
+import akka.persistence.{AtomicWrite, PersistentRepr}
+import akka.serialization.{Serialization, SerializationExtension}
 import com.codahale.metrics.SharedMetricRegistries
 
+import scala.collection.immutable.Seq
 import scala.language.implicitConversions
 
-object MongoPersistenceBase {
+object MongoPersistenceDriver {
 
   sealed trait WriteSafety
   case object Unacknowledged extends WriteSafety
@@ -26,20 +28,33 @@ object MongoPersistenceBase {
   private[mongodb] lazy val registry = SharedMetricRegistries.getOrCreate("mongodb")
 }
 
+trait CanSerialize[D] {
+  import collection.immutable.{Seq => ISeq}
 
-trait MongoPersistenceDriver {
-  // Collection type
-  type C
-  
-  private[mongodb] def collection(name: String): C
+  def serializeAtomic(payload: ISeq[PersistentRepr])(implicit serialization: Serialization, system: ActorSystem): D
+  def serializeRepr(repr: PersistentRepr)(implicit serialization: Serialization, system: ActorSystem): D
 }
 
-trait MongoPersistenceBase {
-  import akka.contrib.persistence.mongodb.MongoPersistenceBase._
-  
-  val actorSystem: ActorSystem
+trait CanDeserialize[D] {
+  def deserializeRepr(implicit serialization: Serialization, system: ActorSystem): PartialFunction[D,PersistentRepr]
+}
 
-  lazy val settings = new MongoSettings(actorSystem.settings)
+trait Formats[D] extends CanSerialize[D] with CanDeserialize[D]
+
+trait MongoPersistenceDriver {
+  import MongoPersistenceDriver._
+
+  // Collection type
+  type C
+
+  // Document type
+  type D
+
+  private[mongodb] def collection(name: String): C
+
+  implicit val actorSystem: ActorSystem
+
+  val settings = new MongoSettings(actorSystem.settings)
   
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
@@ -55,6 +70,15 @@ trait MongoPersistenceBase {
 
   val DEFAULT_DB_NAME = "akka-persistence"
 
-  lazy val serialization = SerializationExtension.get(actorSystem)
-  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+  implicit val serialization = SerializationExtension.get(actorSystem)
+  val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+
+  def deserialize(dbo: D)(implicit ev: CanDeserialize[D]) =
+    ev.deserializeRepr.lift.apply(dbo).getOrElse(throw new IllegalArgumentException(s"Unable to deserialize document $dbo"))
+
+  def serialize(aw: AtomicWrite)(implicit ev: CanSerialize[D]) =
+    ev.serializeAtomic(aw.payload)
+
+  def serialize(repr: PersistentRepr)(implicit ev: CanSerialize[D]) =
+    ev.serializeRepr(repr)
 }

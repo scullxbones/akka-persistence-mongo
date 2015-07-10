@@ -25,7 +25,7 @@ object RxMongoPersistenceExtension {
 }
 
 object RxMongoPersistenceDriver {
-  import MongoPersistenceBase._
+  import MongoPersistenceDriver._
 
   def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean):WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
     case (Unacknowledged,wt,f) =>
@@ -39,7 +39,7 @@ object RxMongoPersistenceDriver {
   }
 }
 
-trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersistenceBase {
+trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
   import RxMongoPersistenceDriver._
   import concurrent.Await
   import concurrent.duration._

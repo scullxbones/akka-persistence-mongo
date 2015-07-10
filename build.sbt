@@ -4,7 +4,7 @@ val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.3.11"
+val AkkaV = "2.4-M2"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -32,16 +32,14 @@ val commonDeps = Seq(
   ("com.typesafe.akka" %% "akka-persistence-experimental" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  "nl.grons" %% "metrics-scala" % "3.3.0_a2.3",
+  "nl.grons" %% "metrics-scala" % "3.5.1_a2.3",
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
-  "org.scalamock" %% "scalamock-scalatest-support" % "3.2.1" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
-  "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.2" % "test",
   "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.0" % "test",
-  "org.mongodb" % "mongo-java-driver" % "2.12.4" % "test",
+  "org.mongodb" % "mongo-java-driver" % "3.0.1" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
-  "com.typesafe.akka" %% "akka-persistence-tck-experimental" % AkkaV % "test"
+  "com.typesafe.akka" %% "akka-persistence-experimental-tck" % AkkaV % "test"
 )
 
 val commonSettings = Seq(
