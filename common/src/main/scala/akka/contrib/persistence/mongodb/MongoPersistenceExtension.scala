@@ -48,7 +48,7 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
   val MongoUri = Try(config.getString("mongouri")).toOption match {
     case Some(uri) => uri
     case None => // Use legacy approach
-      val Urls = config.getStringList("urls").asScala.toList
+      val Urls = config.getStringList("urls").asScala.toList.mkString(",")
       val Username = Try(config.getString("username")).toOption
       val Password = Try(config.getString("password")).toOption
       val DbName = config.getString("db")
