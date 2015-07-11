@@ -1,4 +1,4 @@
-val releaseV = "0.4.0"
+val releaseV = "0.4.1"
 
 val scalaV = "2.11.7"
 
@@ -57,7 +57,7 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   )
-) ++ sonatypeSettings
+)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
   .settings(commonSettings:_*)
