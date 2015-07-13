@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
 import ConfigLoanFixture._
@@ -20,8 +21,8 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 
   "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig) { actorSystem =>
     val underTest = new CasbahMongoDriver(actorSystem)
-    underTest.actorSystem.shutdown()
-    underTest.actorSystem.awaitTermination(10.seconds)
+    underTest.actorSystem.terminate()
+    Await.result(underTest.actorSystem.whenTerminated,10.seconds)
     intercept[IllegalStateException] {
       underTest.db.stats()
     }
@@ -30,8 +31,8 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 
   it should "reconnect if a new driver is created" in withConfig(shutdownConfig)  { actorSystem =>
     val underTest = new CasbahMongoDriver(actorSystem)
-    underTest.actorSystem.shutdown()
-    underTest.actorSystem.awaitTermination(10.seconds)
+    underTest.actorSystem.terminate()
+    Await.result(underTest.actorSystem.whenTerminated,10.seconds)
 
     val underTest2 = new CasbahMongoDriver(ActorSystem("test2",shutdownConfig))
     underTest2.db.stats() // Should not throw exception

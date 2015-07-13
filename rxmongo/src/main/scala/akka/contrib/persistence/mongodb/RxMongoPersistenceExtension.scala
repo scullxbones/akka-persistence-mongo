@@ -3,26 +3,15 @@ package akka.contrib.persistence.mongodb
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteConcern
+import reactivemongo.api.indexes.{IndexType, Index}
 import reactivemongo.bson._
-import reactivemongo.bson.buffer.ArrayReadableBuffer
 
 import akka.actor.ActorSystem
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
-
-object RxMongoPersistenceExtension {
-  implicit object BsonBinaryHandler extends BSONHandler[BSONBinary, Array[Byte]] {
-    def read(bson: reactivemongo.bson.BSONBinary): Array[Byte] = {
-      val buffer = bson.value
-      buffer.readArray(buffer.size)
-    }
-
-    def write(t: Array[Byte]): reactivemongo.bson.BSONBinary =
-      BSONBinary(ArrayReadableBuffer(t), Subtype.GenericBinarySubtype)
-  }
-}
 
 object RxMongoPersistenceDriver {
   import MongoPersistenceDriver._
@@ -47,6 +36,8 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
   // Collection type
   type C = BSONCollection
 
+  type D = BSONDocument
+
   private[mongodb] lazy val driver = MongoDriver()
   private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
     case Success(parsed) => parsed
@@ -66,6 +57,15 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
+  private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext) = {
+    val ky:Seq[(String,IndexType)] = keys.map { case(f,o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
+    collection.indexesManager.ensure(new Index(
+      key = ky,
+      background = true,
+      unique = true,
+      name = Some(indexName)))
+    collection
+  }
 }
 
 class RxMongoDriver(val actorSystem: ActorSystem) extends RxMongoPersistenceDriver {

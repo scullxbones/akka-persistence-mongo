@@ -1,12 +1,14 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.persistence.PersistentRepr
 import akka.serialization.Serialization
 import com.mongodb.casbah.Imports._
-import com.mongodb.casbah.{Imports, WriteConcern}
+import com.mongodb.casbah.{MongoCollection, Imports, WriteConcern}
 
 import scala.collection.immutable.Seq
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 
@@ -40,6 +42,15 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver {
   private[mongodb] def collection(name: String) = db(name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
+
+
+  private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext): MongoCollection = {
+    collection.createIndex(
+      MongoDBObject(keys :_*),
+      MongoDBObject("unique" -> true, "name" -> indexName))
+    collection
+  }
+
 }
 
 class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceDriver {

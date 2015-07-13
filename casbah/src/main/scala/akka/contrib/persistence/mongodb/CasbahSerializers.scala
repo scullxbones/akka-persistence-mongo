@@ -5,10 +5,10 @@ import akka.persistence.PersistentRepr
 import akka.serialization.Serialization
 import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
-import collection.immutable.{Seq => ISeq}
 
-object CasbahSerializers {
-  import JournallingFieldNames._
+object CasbahSerializers extends JournallingFieldNames {
+
+  implicit val dt: DocumentType[DBObject] = new DocumentType[DBObject] { }
 
   object Version {
     def unapply(dbo: DBObject): Option[(Int,DBObject)] = {
@@ -16,105 +16,93 @@ object CasbahSerializers {
     }
   }
 
-  implicit object V1Deser extends CanDeserialize[DBObject] {
+  implicit object Deserializer extends CanDeserializeJournal[DBObject] {
 
-    override def deserializeRepr(implicit serialization: Serialization, system: ActorSystem) = {
-      case Version(1,dbo) =>
-        PersistentRepr(
-          payload = None,
-          persistenceId = dbo.as[String](PROCESSOR_ID),
-          sequenceNr = dbo.as[Long](SEQUENCE_NUMBER),
-          sender = dbo.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption).getOrElse(system.deadLetters),
-          manifest = dbo.getAs[String](MANIFEST).getOrElse(PersistentRepr.Undefined)
-        ).withPayload {
-          dbo.as[String](TYPE) match {
-            case "bson" => dbo.as[DBObject](PayloadKey)
-            case "bin" => dbo.as[Array[Byte]](PayloadKey)
-            case "s" => dbo.as[String](PayloadKey)
-            case "d" => dbo.as[Double](PayloadKey)
-            case "f" => dbo.as[Float](PayloadKey)
-            case "l" => dbo.as[Long](PayloadKey)
-            case "i" => dbo.as[Int](PayloadKey)
-            case "sh" => dbo.as[Short](PayloadKey)
-            case "by" => dbo.as[Byte](PayloadKey)
-            case "c" => dbo.as[Char](PayloadKey)
-            case "b" => dbo.as[Boolean](PayloadKey)
-            case "ser" =>
-              val hint = dbo.as[String](HINT)
-              dbo.getAs[Array[Byte]](PayloadKey).flatMap(serialization.deserialize(_, Class.forName(hint)).toOption)
-          }
-        }
-      case Version(0,dbo) => deserializeReprLegacy(dbo)
+    override def deserializeDocument(dbo: DBObject)(implicit serialization: Serialization, system: ActorSystem): Event = dbo match {
+      case Version(1,d) => deserializeVersionOne(d)
+      case Version(0,d) => deserializeDocumentLegacy(d)
+      case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
     }
+
+    private def deserializeVersionOne(d: DBObject)(implicit serialization: Serialization, system: ActorSystem) = Event(
+      pid = d.as[String](PROCESSOR_ID),
+      sn = d.as[Long](SEQUENCE_NUMBER),
+      payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT)),
+      sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
+      manifest = d.getAs[String](MANIFEST)
+    )
+
+    private def deserializeDocumentLegacy(d: DBObject)(implicit serialization: Serialization, system: ActorSystem) = {
+      d.get(SERIALIZED) match {
+        case b: DBObject =>
+          Event(
+            pid = d.as[String](PROCESSOR_ID),
+            sn = d.as[Long](SEQUENCE_NUMBER),
+            payload = Bson(b.as[DBObject](PayloadKey)),
+            sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
+            manifest = None
+          )
+        case _ =>
+          val content = d.as[Array[Byte]](SERIALIZED)
+          val repr = Serialized(content, classOf[PersistentRepr])
+          Event(
+            pid = d.as[String](PROCESSOR_ID),
+            sn = d.as[Long](SEQUENCE_NUMBER),
+            payload = repr,
+            sender = Option(repr.content.sender),
+            manifest = None)
+      }
+
+    }
+
   }
 
-  def deserializeReprLegacy(document: DBObject)(implicit serialization: Serialization, system: ActorSystem): PersistentRepr = {
-    document.get(SERIALIZED) match {
-      case b: DBObject =>
-        PersistentRepr.apply(
-          payload = b.as[DBObject](PayloadKey),
-          sequenceNr = document.as[Long](SEQUENCE_NUMBER),
-          persistenceId = document.as[String](PROCESSOR_ID),
-          deleted = document.as[Boolean](DELETED),
-          sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption).getOrElse(system.deadLetters)
-        )
-      case _ =>
-        val content = document.as[Array[Byte]](SERIALIZED)
-        val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
-        PersistentRepr(
-          payload = repr.payload,
-          sequenceNr = document.as[Long](SEQUENCE_NUMBER),
-          persistenceId = document.as[String](PROCESSOR_ID),
-          deleted = document.as[Boolean](DELETED),
-          sender = repr.sender)
-    }
-  }
-
-  implicit object V1Ser extends CanSerialize[DBObject] {
-    override def serializeAtomic(payload: ISeq[PersistentRepr])(implicit serialization: Serialization, system: ActorSystem): DBObject = {
-      val serialized = payload.groupBy(_.persistenceId).map { case (persistenceId, batch) =>
-        val (minSeq, maxSeq) = batch.foldLeft((Long.MaxValue, 0L)) { case ((min, max), repr) =>
-          (if (repr.sequenceNr < min) repr.sequenceNr else min, if (repr.sequenceNr > max) repr.sequenceNr else max)
-        }
+  implicit object Serializer extends CanSerializeJournal[DBObject] {
+    override def serializeAtom(atoms: TraversableOnce[Atom])(implicit serialization: Serialization, system: ActorSystem): DBObject = {
+      val serd = atoms.map( atom =>
         MongoDBObject(
-          PROCESSOR_ID -> persistenceId,
-          FROM -> minSeq,
-          TO -> maxSeq,
-          EVENTS -> MongoDBList(batch.map(serializeRepr): _*)
+          PROCESSOR_ID -> atom.pid,
+          FROM -> atom.from,
+          TO -> atom.to,
+          EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*)
         )
-      }
-      MongoDBObject(ATOM -> serialized, VERSION -> 1)
+      )
+      MongoDBObject(ATOM -> serd, VERSION -> 1)
     }
 
-    override def serializeRepr(repr: PersistentRepr)(implicit serialization: Serialization, system: ActorSystem): DBObject = {
-      val builder = MongoDBObject.newBuilder ++= (
-        VERSION -> 1 ::
-          PROCESSOR_ID -> repr.persistenceId ::
-          SEQUENCE_NUMBER -> repr.sequenceNr ::
-          SenderKey -> Option(repr.sender).filterNot(_ == system.deadLetters).flatMap(serialization.serialize(_).toOption) ::
-          MANIFEST -> repr.manifest :: Nil
-        )
-
-      repr.payload match {
-        case dbo: DBObject => builder ++= PayloadKey -> dbo :: TYPE -> "bson" :: Nil
-        case bin: Array[Byte] => builder ++= PayloadKey -> bin :: TYPE -> "bin" :: Nil
-        case s: String => builder ++= PayloadKey -> s :: TYPE -> "s" :: Nil
-        case d: Double => builder ++= PayloadKey -> d :: TYPE -> "d" :: Nil
-        case f: Float => builder ++= PayloadKey -> f :: TYPE -> "f" :: Nil
-        case l: Long => builder ++= PayloadKey -> l :: TYPE -> "l" :: Nil
-        case i: Int => builder ++= PayloadKey -> i :: TYPE -> "i" :: Nil
-        case s: Short => builder ++= PayloadKey -> s :: TYPE -> "sh" :: Nil
-        case b: Byte => builder ++= PayloadKey -> b :: TYPE -> "by" :: Nil
-        case c: Char => builder ++= PayloadKey -> c :: TYPE -> "c" :: Nil
-        case b: Boolean => builder ++= PayloadKey -> b :: TYPE -> "b" :: Nil
-        case x: AnyRef => builder ++=
-          PayloadKey -> serialization.serializerFor(x.getClass).toBinary(x) ::
-            TYPE -> "ser" ::
-            HINT -> x.getClass.getName ::
+    private def serializeEvent(event: Event)(implicit serialization: Serialization, system: ActorSystem): DBObject = {
+      val b = serializePayload(event.payload)(MongoDBObject.newBuilder ++= (
+          VERSION -> 1 ::
+            PROCESSOR_ID -> event.pid ::
+            SEQUENCE_NUMBER -> event.sn ::
             Nil
-      }
+        ))
+      (for {
+        bldr <- Option(b)
+        bldr <- event.manifest.map(s => bldr += (MANIFEST -> s)).orElse(Option(bldr))
+        bldr <- event.sender
+          .filterNot(_ == system.deadLetters)
+          .flatMap(serialization.serialize(_).toOption)
+          .map(s => bldr += (SenderKey -> s)).orElse(Option(bldr))
+      } yield bldr).getOrElse(b).result()
+    }
 
-      builder.result()
+    private def serializePayload(payload: Payload)(b: collection.mutable.Builder[(String,Any),DBObject]) = {
+      val builder = b += (TYPE -> payload.hint)
+      payload match {
+        case Bson(doc: DBObject) => builder += PayloadKey -> doc
+        case Bin(bytes) => builder += PayloadKey -> bytes
+        case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.clazz.getName :: Nil)
+        case StringPayload(str) => builder += PayloadKey -> str
+        case DoublePayload(d) => builder += PayloadKey -> d
+        case FloatPayload(f) => builder += PayloadKey -> f
+        case IntPayload(i) => builder += PayloadKey -> i
+        case LongPayload(l) => builder += PayloadKey -> l
+        case ShortPayload(s) => builder += PayloadKey -> s
+        case BytePayload(by) => builder += PayloadKey -> by
+        case CharPayload(c) => builder += PayloadKey -> c
+        case BooleanPayload(bl) => builder += PayloadKey -> bl
+      }
     }
   }
 }

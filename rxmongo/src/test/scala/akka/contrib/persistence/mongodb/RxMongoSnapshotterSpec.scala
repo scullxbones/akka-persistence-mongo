@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.contrib.persistence.mongodb.RxMongoSerializers.RxMongoSnapshotSerialization
 import akka.persistence.{SnapshotMetadata, SelectedSnapshot}
 import akka.serialization.SerializationExtension
 import akka.testkit.TestKit

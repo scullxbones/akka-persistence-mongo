@@ -1,12 +1,15 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.contrib.persistence.mongodb.JournallingFieldNames.PROCESSOR_ID
+import akka.contrib.persistence.mongodb.JournallingFieldNames.SEQUENCE_NUMBER
+import akka.contrib.persistence.mongodb.JournallingFieldNames._
+import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
-import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import com.codahale.metrics.SharedMetricRegistries
 
-import scala.collection.immutable.Seq
+import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
 
 object MongoPersistenceDriver {
@@ -28,18 +31,15 @@ object MongoPersistenceDriver {
   private[mongodb] lazy val registry = SharedMetricRegistries.getOrCreate("mongodb")
 }
 
-trait CanSerialize[D] {
-  import collection.immutable.{Seq => ISeq}
-
-  def serializeAtomic(payload: ISeq[PersistentRepr])(implicit serialization: Serialization, system: ActorSystem): D
-  def serializeRepr(repr: PersistentRepr)(implicit serialization: Serialization, system: ActorSystem): D
+trait CanSerializeJournal[D] {
+  def serializeAtom(atoms: TraversableOnce[Atom])(implicit serialization: Serialization, system: ActorSystem): D
 }
 
-trait CanDeserialize[D] {
-  def deserializeRepr(implicit serialization: Serialization, system: ActorSystem): PartialFunction[D,PersistentRepr]
+trait CanDeserializeJournal[D] {
+  def deserializeDocument(document: D)(implicit serialization: Serialization, system: ActorSystem): Event
 }
 
-trait Formats[D] extends CanSerialize[D] with CanDeserialize[D]
+trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
 trait MongoPersistenceDriver {
   import MongoPersistenceDriver._
@@ -51,6 +51,24 @@ trait MongoPersistenceDriver {
   type D
 
   private[mongodb] def collection(name: String): C
+
+  private[mongodb] def ensureUniqueIndex(collection: C, indexName: String, fields: (String,Int)*)(implicit ec: ExecutionContext): C
+
+  private[mongodb] def journal(implicit ec: ExecutionContext): C = {
+    val journalCollection = collection(journalCollectionName)
+    ensureUniqueIndex(journalCollection, journalIndexName,
+                      s"$ATOM.${JournallingFieldNames.PROCESSOR_ID}" -> 1,
+                      s"$ATOM.$FROM" -> 1,
+                      s"$ATOM.$TO" -> 1)
+  }
+
+  private[mongodb] def snaps(implicit ec: ExecutionContext): C = {
+    val snapsCollection = collection(snapsCollectionName)
+    ensureUniqueIndex(snapsCollection, snapsIndexName,
+                      SnapshottingFieldNames.PROCESSOR_ID -> 1,
+                      SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
+                      TIMESTAMP -> -1)
+  }
 
   implicit val actorSystem: ActorSystem
 
@@ -73,12 +91,6 @@ trait MongoPersistenceDriver {
   implicit val serialization = SerializationExtension.get(actorSystem)
   val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 
-  def deserialize(dbo: D)(implicit ev: CanDeserialize[D]) =
-    ev.deserializeRepr.lift.apply(dbo).getOrElse(throw new IllegalArgumentException(s"Unable to deserialize document $dbo"))
-
-  def serialize(aw: AtomicWrite)(implicit ev: CanSerialize[D]) =
-    ev.serializeAtomic(aw.payload)
-
-  def serialize(repr: PersistentRepr)(implicit ev: CanSerialize[D]) =
-    ev.serializeRepr(repr)
+  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
+  def serializeJournal(aw: TraversableOnce[Atom])(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
 }

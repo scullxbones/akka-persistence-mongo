@@ -1,7 +1,9 @@
 package akka.contrib.persistence.mongodb
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import akka.actor.Actor
-import akka.pattern.CircuitBreaker
+import akka.pattern.{CircuitBreakerOpenException, CircuitBreaker}
 
 import scala.collection.immutable
 import akka.persistence.journal.AsyncWriteJournal
@@ -12,6 +14,7 @@ import nl.grons.metrics.scala.InstrumentedBuilder
 import nl.grons.metrics.scala.Timer
 
 import scala.util.Try
+import scala.concurrent.duration._
 
 class MongoJournal extends AsyncWriteJournal {
   
@@ -116,7 +119,7 @@ class MongoJournal extends AsyncWriteJournal {
 
 }
 
-object JournallingFieldNames {
+trait JournallingFieldNames {
   final val PROCESSOR_ID = "pid"
   final val SEQUENCE_NUMBER = "sn"
   final val CONFIRMS = "cs"
@@ -138,13 +141,11 @@ object JournallingFieldNames {
   final val MANIFEST = "manifest"
   final val TYPE = "_t"
   final val HINT = "_h"
+
 }
+object JournallingFieldNames extends JournallingFieldNames
 
 trait MongoPersistenceJournallingApi {
-  private[mongodb] def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext): Future[Option[PersistentRepr]]
-
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Future[Iterator[PersistentRepr]]
-  
   private[mongodb] def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]]
 
   private[mongodb] def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit]
@@ -158,11 +159,18 @@ trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
 
   private[mongodb] val breaker: CircuitBreaker
 
-  private[mongodb] abstract override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.journalEntry(pid,seq))
+  private lazy val cbOpen = {
+    val ab = new AtomicBoolean(false)
+    breaker.onOpen(ab.set(true))
+    breaker.onHalfOpen(ab.set(false))
+    breaker.onClose(ab.set(false))
+    ab
+  }
 
-  private[mongodb] abstract override def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.journalRange(pid,from,to))
+  private def onlyWhenClosed[A](thunk: => A) = {
+    if (cbOpen.get()) throw new CircuitBreakerOpenException(0.seconds)
+    else thunk
+  }
 
   private[mongodb] abstract override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]] =
     breaker.withCircuitBreaker(super.atomicAppend(write))
@@ -171,7 +179,7 @@ trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
     breaker.withCircuitBreaker(super.deleteFrom(persistenceId, toSequenceNr))
 
   private[mongodb] abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.replayJournal(pid,from,to,max)(replayCallback))
+    onlyWhenClosed(super.replayJournal(pid,from,to,max)(breaker.withSyncCircuitBreaker(replayCallback)))
 
   private[mongodb] abstract override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) =
     breaker.withCircuitBreaker(super.maxSequenceNr(pid,from))
@@ -185,19 +193,15 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
   private def fullyQualifiedName(metric: String, metricType: String) = s"akka-persistence-mongo.journal.$driverName.$metric-$metricType"
 
   private def timerName(metric: String) = fullyQualifiedName(metric,"timer")
-  private def meterName(metric: String) = fullyQualifiedName(metric, "meter")
   private def histName(metric: String) = fullyQualifiedName(metric, "histo")
   
   // Timers
-  private lazy val jeTimer = metrics.timer(timerName("read.one"))
-  private lazy val jrTimer = metrics.timer(timerName("read.range"))
   private lazy val appendTimer = metrics.timer(timerName("write.append"))
   private lazy val deleteTimer = metrics.timer(timerName("write.delete-range"))
   private lazy val replayTimer = metrics.timer(timerName("read.replay"))
   private lazy val maxTimer = metrics.timer(timerName("read.max-seq"))
   
   // Histograms
-  private lazy val readBatchSize = metrics.histogram(histName("read.range.batch-size"))
   private lazy val writeBatchSize = metrics.histogram(histName("write.append.batch-size"))
 
   private def timeIt[A](timer: Timer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
@@ -205,15 +209,6 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
     val result = block
     result.onComplete(_ => ctx.stop())
     result
-  }
-  
-  private[mongodb] abstract override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext): Future[Option[PersistentRepr]] = timeIt (jeTimer) { 
-    super.journalEntry(pid, seq) 
-  }
-
-  private[mongodb] abstract override def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Future[Iterator[PersistentRepr]] = timeIt (jrTimer) {
-    readBatchSize += (to-from)
-    super.journalRange(pid, from, to) 
   }
   
   private[mongodb] abstract override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]] = timeIt (appendTimer) {

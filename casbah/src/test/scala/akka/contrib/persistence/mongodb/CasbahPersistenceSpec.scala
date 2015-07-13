@@ -18,7 +18,7 @@ trait CasbahPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: Test
 
     val driver = new CasbahPersistenceDriver {
       val actorSystem = system
-      override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
+      override val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
       override def collection(name: String) = mongoDB(name)
     }
 

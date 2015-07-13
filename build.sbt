@@ -29,10 +29,13 @@ val pomXtra = {
 }
 
 val commonDeps = Seq(
+  "com.typesafe.akka" %% "akka-actor" % AkkaV % "provided",
   ("com.typesafe.akka" %% "akka-persistence-experimental" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  "nl.grons" %% "metrics-scala" % "3.5.1_a2.3",
+  ("nl.grons" %% "metrics-scala" % "3.5.1_a2.3")
+    .exclude("com.typesafe.akka", "akka-actor_2.10")
+    .exclude("com.typesafe.akka", "akka-actor_2.11"),
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
@@ -74,7 +77,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.11.0" % "provided"
+      "org.reactivemongo" %% "reactivemongo" % "0.11.2" % "provided"
     )
   )
 

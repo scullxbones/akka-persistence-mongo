@@ -28,8 +28,8 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
 
   "An rxmongo driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig,"shutdown-config") { actorSystem =>
     val underTest = new MockRxMongoPersistenceDriver(actorSystem)
-    underTest.actorSystem.shutdown()
-    underTest.actorSystem.awaitTermination(10.seconds)
+    underTest.actorSystem.terminate()
+    Await.result(underTest.actorSystem.whenTerminated, 10.seconds)
     intercept[IllegalStateException] {
       Await.result(underTest.showCollections,3.seconds).size
     }
@@ -38,15 +38,15 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
 
   it should "reconnect if a new driver is created" in withConfig(shutdownConfig,"shutdown-config") { actorSystem =>
     val underTest = new MockRxMongoPersistenceDriver(actorSystem)
-    underTest.actorSystem.shutdown()
-    underTest.actorSystem.awaitTermination(10.seconds)
+    underTest.actorSystem.terminate()
+    Await.result(underTest.actorSystem.whenTerminated, 10.seconds)
 
     val test2 = ActorSystem("test2",shutdownConfig)
     try {
       val underTest2 = new MockRxMongoPersistenceDriver(test2)
       Await.result(underTest2.showCollections, 3.seconds).size should be(0)
     } finally {
-      test2.shutdown()
+      test2.terminate()
     }
   }
 }

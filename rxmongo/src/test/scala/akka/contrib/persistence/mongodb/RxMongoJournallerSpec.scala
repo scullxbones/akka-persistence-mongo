@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.persistence.PersistentRepr
+import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
 import reactivemongo.bson.BSONDocument
@@ -30,7 +30,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   "A reactive mongo journal implementation" should "insert journal records" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.appendToJournal(records)
+      inserted <- underTest.atomicAppend(AtomicWrite(records))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)
@@ -45,7 +45,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   it should "insert records with documents as payload" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.appendToJournal(documents)
+      inserted <- underTest.atomicAppend(AtomicWrite(documents))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)

@@ -6,15 +6,18 @@ import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.FlatSpecLike
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 trait BaseUnitTest extends FlatSpecLike with MockitoSugar with Matchers
 
 object ConfigLoanFixture {
   def withConfig[T](config: Config, name: String = "unit-test")(testCode: ActorSystem => T):T = {
-    val actorSystem = ActorSystem(name,config)
+    val actorSystem: ActorSystem = ActorSystem(name,config)
     try {
       testCode(actorSystem)
     } finally {
-      actorSystem.awaitTermination()
+      Await.result(actorSystem.whenTerminated, Duration.Inf)
     }
   }
 }
