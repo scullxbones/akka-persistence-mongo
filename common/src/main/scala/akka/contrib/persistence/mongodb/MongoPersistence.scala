@@ -72,7 +72,7 @@ trait MongoPersistenceDriver {
 
   implicit val actorSystem: ActorSystem
 
-  val settings = new MongoSettings(actorSystem.settings)
+  lazy val settings = new MongoSettings(actorSystem.settings)
   
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
@@ -88,8 +88,8 @@ trait MongoPersistenceDriver {
 
   val DEFAULT_DB_NAME = "akka-persistence"
 
-  implicit val serialization = SerializationExtension.get(actorSystem)
-  val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+  implicit lazy val serialization = SerializationExtension(actorSystem)
+  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
   def serializeJournal(aw: TraversableOnce[Atom])(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)

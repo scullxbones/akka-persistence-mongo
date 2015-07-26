@@ -1,28 +1,22 @@
 package akka.contrib.persistence.mongodb
 
-import scala.concurrent.ExecutionContext
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.mongodb.casbah.{MongoClient, MongoCollection}
 
-trait CasbahPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: TestKit =>
+trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahPersistenceDriver,MongoCollection] { self: TestKit =>
 
     lazy val mongoDB = MongoClient(embedConnectionURL,embedConnectionPort)(embedDB)
 
-    implicit val callerRuns = new ExecutionContext {
-      def reportFailure(t: Throwable) { t.printStackTrace() }
-      def execute(runnable: Runnable) { runnable.run() }
-    }
-
-    val driver = new CasbahPersistenceDriver {
+    override val driver = new CasbahPersistenceDriver {
       val actorSystem = system
-      override val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
+      override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
       override def collection(name: String) = mongoDB(name)
     }
 
-    def withCollection(name: String)(testCode: MongoCollection => Any) = {
+    override def withCollection(name: String)(testCode: MongoCollection => Any) = {
       val collection = mongoDB(name)
       try {
         testCode(collection)
@@ -30,11 +24,11 @@ trait CasbahPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: Test
         collection.dropCollection()
       }
     }
-    
-    def withJournal(testCode: MongoCollection => Any) = 
+
+    override def withJournal(testCode: MongoCollection => Any) =
       withCollection(driver.journalCollectionName)(testCode)
 
-    def withSnapshot(testCode: MongoCollection => Any) =
+    override def withSnapshot(testCode: MongoCollection => Any) =
       withCollection(driver.snapsCollectionName)(testCode)
   
 }

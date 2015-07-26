@@ -1,25 +1,21 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.contrib.persistence.mongodb.JournallingFieldNames._
-import akka.persistence.PersistentRepr
-import akka.serialization.Serialization
 import com.mongodb.casbah.Imports._
-import com.mongodb.casbah.{MongoCollection, Imports, WriteConcern}
+import com.mongodb.casbah.MongoCollection
+import com.mongodb.WriteConcern
 
-import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.language.implicitConversions
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
   
   def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern = (writeSafety,wtimeout.toMillis.toInt,fsync) match {
-    case (Unacknowledged,w,f) => WriteConcern(0,wTimeout = w, fsync = f)
-    case (Acknowledged,w,f) => WriteConcern(1,wTimeout = w, fsync = f)
-    case (Journaled,w,_) => WriteConcern(1,j=true,wTimeout = w)
-    case (ReplicaAcknowledged,w,f) => WriteConcern.withRule("majority",w,fsync = f,j = !f)
+    case (Unacknowledged,w,f) => new WriteConcern(0, w, f)
+    case (Acknowledged,w,f) => new WriteConcern(1, w, f)
+    case (Journaled,w,_) => new WriteConcern(1,w,false,true)
+    case (ReplicaAcknowledged,w,f) => WriteConcern.majorityWriteConcern(w,f,!f)
   }
 }
 

@@ -152,13 +152,14 @@ object Payload {
 }
 
 
-case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None) {
+case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
   def toRepr = PersistentRepr(
     persistenceId = pid,
     sequenceNr = sn,
     payload = payload.content,
     sender = sender.orNull,
-    manifest = manifest.getOrElse(PersistentRepr.Undefined)
+    manifest = manifest.getOrElse(PersistentRepr.Undefined),
+    writerUuid = writerUuid.getOrElse(PersistentRepr.Undefined)
   )
 }
 
@@ -168,7 +169,8 @@ object Event {
     sn = repr.sequenceNr,
     payload = Payload(repr.payload),
     sender = Option(repr.sender),
-    manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined)
+    manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
+    writerUuid = Option(repr.writerUuid).filterNot(_ == PersistentRepr.Undefined)
   )
 }
 
@@ -178,9 +180,9 @@ object Atom {
   def apply[D](aw: AtomicWrite)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): TraversableOnce[Atom] = {
     aw.payload.groupBy(_.persistenceId).map { case(pid, reprs) =>
       val (minSn,maxSn) = reprs.foldLeft((Long.MaxValue,0L)) { case ((min,max),repr) =>
-        if (repr.sequenceNr < min) (repr.sequenceNr, max)
-        else if (repr.sequenceNr > max) (min, repr.sequenceNr)
-        else (min,max)
+        val newMin = if (repr.sequenceNr < min) repr.sequenceNr else min
+        val newMax = if (repr.sequenceNr > max) repr.sequenceNr else max
+        (newMin, newMax)
       }
       Atom(pid = pid, from = minSn, to = maxSn, events = reprs.map(Event.apply(_)(ser,ev,dt)))
     }

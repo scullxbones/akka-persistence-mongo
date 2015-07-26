@@ -29,7 +29,8 @@ object CasbahSerializers extends JournallingFieldNames {
       sn = d.as[Long](SEQUENCE_NUMBER),
       payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT)),
       sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
-      manifest = d.getAs[String](MANIFEST)
+      manifest = d.getAs[String](MANIFEST),
+      writerUuid = d.getAs[String](WRITER_UUID)
     )
 
     private def deserializeDocumentLegacy(d: DBObject)(implicit serialization: Serialization, system: ActorSystem) = {
@@ -40,7 +41,8 @@ object CasbahSerializers extends JournallingFieldNames {
             sn = d.as[Long](SEQUENCE_NUMBER),
             payload = Bson(b.as[DBObject](PayloadKey)),
             sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
-            manifest = None
+            manifest = None,
+            writerUuid = None
           )
         case _ =>
           val content = d.as[Array[Byte]](SERIALIZED)
@@ -50,7 +52,9 @@ object CasbahSerializers extends JournallingFieldNames {
             sn = d.as[Long](SEQUENCE_NUMBER),
             payload = repr,
             sender = Option(repr.content.sender),
-            manifest = None)
+            manifest = None,
+            writerUuid = None
+          )
       }
 
     }
@@ -66,8 +70,8 @@ object CasbahSerializers extends JournallingFieldNames {
           TO -> atom.to,
           EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*)
         )
-      )
-      MongoDBObject(ATOM -> serd, VERSION -> 1)
+      ).toSeq
+      MongoDBObject(ATOM -> MongoDBList(serd: _*), VERSION -> 1)
     }
 
     private def serializeEvent(event: Event)(implicit serialization: Serialization, system: ActorSystem): DBObject = {
@@ -80,6 +84,7 @@ object CasbahSerializers extends JournallingFieldNames {
       (for {
         bldr <- Option(b)
         bldr <- event.manifest.map(s => bldr += (MANIFEST -> s)).orElse(Option(bldr))
+        bldr <- event.writerUuid.map(s => bldr += (WRITER_UUID -> s)).orElse(Option(bldr))
         bldr <- event.sender
           .filterNot(_ == system.deadLetters)
           .flatMap(serialization.serialize(_).toOption)

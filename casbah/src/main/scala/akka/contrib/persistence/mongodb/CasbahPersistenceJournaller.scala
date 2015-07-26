@@ -18,16 +18,18 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long): DBObject =
-    ATOM $elemMatch $and(PROCESSOR_ID $eq pid, FROM $lte from, TO $gte to)
+    ATOM $elemMatch MongoDBObject(PROCESSOR_ID -> pid, FROM -> MongoDBObject("$gte" -> from), FROM -> MongoDBObject("$lte" -> to))
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
-  private[this] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Iterator[Event] =
     journal.find(journalRangeQuery(pid, from, to))
-      .flatMap(_.getAs[MongoDBList](ATOM,EVENTS))
-      .flatMap(lst => lst.map(_.asInstanceOf[DBObject]))
-      .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to))
-      .map(driver.deserializeJournal)
+           .flatMap(_.getAs[MongoDBList](ATOM))
+           .flatMap(lst => lst.collect { case x:DBObject => x })
+           .flatMap(_.getAs[MongoDBList](EVENTS))
+           .flatMap(lst => lst.collect { case x:DBObject => x })
+           .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to))
+           .map(driver.deserializeJournal)
 
   private[mongodb] override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext):Future[Try[Unit]] = Future {
     Try(driver.serializeJournal(Atom[DBObject](write)))
@@ -37,13 +39,13 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
     val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
-    journal.update(
-      query,
-      $pull(
-        $and(s"$ATOM.$EVENTS.$PROCESSOR_ID" $eq persistenceId,
-             s"$ATOM.$EVENTS.$SEQUENCE_NUMBER" $lte toSequenceNr)
-      ),
-      upsert = false, multi = true, writeConcern)
+    val pull = MongoDBObject(
+      "$pull" -> MongoDBObject(s"$ATOM.$$.$EVENTS" ->
+        MongoDBObject(PROCESSOR_ID -> persistenceId,
+          SEQUENCE_NUMBER -> MongoDBObject("$lte" -> toSequenceNr))),
+      "$set" -> MongoDBObject(s"$ATOM.$$.$FROM" -> (toSequenceNr+1))
+    )
+    journal.update(query, pull, upsert = false, multi = true, writeConcern)
     journal.remove($and(query, s"$ATOM.$EVENTS" $size 0), writeConcern)
     ()
   }
@@ -52,10 +54,14 @@ class CasbahPersistenceJournaller(driver: CasbahPersistenceDriver) extends Mongo
     val query = MongoDBObject(s"$ATOM.$PROCESSOR_ID" -> pid)
     val projection = MongoDBObject(s"$ATOM.$TO" -> 1)
     val sort = MongoDBObject(s"$ATOM.$TO" -> -1)
-    val maxCursor = journal.find(query, projection).sort(sort).limit(1)
-    if (maxCursor.hasNext)
-      maxCursor.next().as[Long](s"$ATOM.$TO")
-    else 0L
+    val max = journal.find(query, projection).sort(sort).limit(1).one()
+    max.getAs[BasicDBList](ATOM).map(
+      lst => lst.foldLeft(MongoDBList.newBuilder)((accum,el) => accum += el)
+        .result()
+        .collect{ case d: DBObject => d }
+        .map(_.as[Long](TO))
+        .max
+    ).getOrElse(0L)
   }
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = Future {

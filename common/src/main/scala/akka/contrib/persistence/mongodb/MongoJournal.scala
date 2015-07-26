@@ -139,6 +139,7 @@ trait JournallingFieldNames {
   final val FROM = "from"
   final val TO = "to"
   final val MANIFEST = "manifest"
+  final val WRITER_UUID = "_w"
   final val TYPE = "_t"
   final val HINT = "_h"
 

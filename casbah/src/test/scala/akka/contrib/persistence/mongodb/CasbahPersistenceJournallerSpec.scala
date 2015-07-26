@@ -23,6 +23,12 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   implicit val serialization = SerializationExtension(system)
 
+  implicit class PimpedDBObject(dbo: DBObject) {
+    def firstAtom =  dbo.as[MongoDBList](ATOM).as[DBObject](0)
+
+    def firstEvent = dbo.as[MongoDBList](ATOM).as[DBObject](0).as[MongoDBList](EVENTS).as[DBObject](0)
+  }
+
   trait Fixture {
     val underTest = new CasbahPersistenceJournaller(driver)
     val records:List[PersistentRepr] = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test") }
@@ -34,11 +40,13 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     val serialized = serializeAtom(repr :: Nil)
 
-    serialized(s"$ATOM.$PROCESSOR_ID") should be("pid")
-    serialized(s"$ATOM.$FROM") should be(1L)
-    serialized(s"$ATOM.$TO") should be(1L)
+    val atom = serialized.firstAtom
 
-    val deserialized = deserializeDocument(serialized.as[BasicDBList](ATOM,EVENTS).get(0).asInstanceOf[DBObject])
+    atom.getAs[String](PROCESSOR_ID) shouldBe Some("pid")
+    atom.getAs[Long](FROM) shouldBe Some(1L)
+    atom.getAs[Long](TO) shouldBe Some(1L)
+
+    val deserialized = deserializeDocument(serialized.firstEvent)
 
     deserialized.payload shouldBe StringPayload("TEST")
     deserialized.pid should be("pid")
@@ -52,19 +60,24 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
     idx("unique") should ===(true)
-    idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))
+    idx("key") should be(MongoDBObject(s"$ATOM.$PROCESSOR_ID" -> 1, s"$ATOM.$FROM" -> 1, s"$ATOM.$TO" -> 1))
   }}
 
   it should "insert journal records" in new Fixture { withJournal { journal =>
     underTest.atomicAppend(AtomicWrite(records))
 
-    journal.size should be(3)
+    journal.size should be(1)
 
-    val recone = journal.head
-    recone(PROCESSOR_ID) should be("unit-test")
-    recone(SEQUENCE_NUMBER) should be(1)
-    recone(DELETED) should ===(false)
-    recone(CONFIRMS).asInstanceOf[JList[_]] shouldBe empty
+    val atom = journal.head.firstAtom
+
+
+    atom(PROCESSOR_ID) should be("unit-test")
+    atom(FROM) should be(1)
+    atom(TO) should be(3)
+    val event = atom.as[MongoDBList](EVENTS).as[DBObject](0)
+    event(PROCESSOR_ID) should be("unit-test")
+    event(SEQUENCE_NUMBER) should be(1)
+    event(PayloadKey) should be("payload")
   }}
 
   it should "hard delete journal entries" in new Fixture { withJournal { journal =>
@@ -73,30 +86,30 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     underTest.deleteFrom("unit-test", 2L)
 
     journal.size should be(1)
-    val recone = journal.head
+    val recone = journal.head.firstAtom
     recone(PROCESSOR_ID) should be("unit-test")
-    recone(SEQUENCE_NUMBER) should be(3)
-    recone(DELETED) should ===(false)
+    recone(FROM) should be(3)
+    recone(TO) should be(3)
+    val events = recone.as[MongoDBList](EVENTS)
+    events should have size 1
   }}
   
-  it should "replay journal entries" in new Fixture { withJournal { journal =>
+  it should "replay journal entries for a single atom" in new Fixture { withJournal { journal =>
     underTest.atomicAppend(AtomicWrite(records))
 
-    var buf = mutable.Buffer[PersistentRepr]()
+    val buf = mutable.Buffer[PersistentRepr]()
     underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
     buf should have size 2
     buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
   }}
 
-  it should "not replay deleted journal entries" in new Fixture { withJournal { journal =>
-    underTest.atomicAppend(AtomicWrite(records))
+  it should "replay journal entries for multiple atoms" in new Fixture { withJournal { journal =>
+    records.foreach(r => underTest.atomicAppend(AtomicWrite(r)))
 
-    underTest.deleteFrom("unit-test", 2L)
-
-    var buf = mutable.Buffer[PersistentRepr]()
-    underTest.replayJournal("unit-test", 1, 15, 10)(buf += _).value.get.get
-    buf should have size 1
-    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 3, persistenceId = "unit-test"))
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
+    buf should have size 2
+    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
   }}
 
   it should "have a default sequence nr when journal is empty" in new Fixture { withJournal { journal =>
@@ -114,15 +127,17 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   it should "support BSON payloads as MongoDBObjects" in new Fixture { withJournal { journal =>
     val documents = List(1,2,3).map(sn => PersistentRepr(persistenceId = "unit-test", sequenceNr = sn, payload = MongoDBObject("foo" -> "bar", "baz" -> 1)))
     underTest.atomicAppend(AtomicWrite(documents))
-    val results = journal.find().toList
-    results should have size 3
+    val results = journal.find().limit(1)
+      .one()
+      .as[MongoDBList](ATOM).collect({case x:DBObject => x})
+      .flatMap(_.as[MongoDBList](EVENTS).collect({case x:DBObject => x}))
+
     val first = results.head
-    first.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
-    first.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
-    first.getAs[Boolean](DELETED) shouldBe Some(false)
-    val blob = first.getAs[MongoDBObject](SERIALIZED).get
-    val payload = blob.getAs[MongoDBObject](PayloadKey).get
-    payload.getAs[String]("foo") shouldBe Some("bar")
-    payload.getAs[Int]("baz") shouldBe Some(1)
+    first.getAs[String](PROCESSOR_ID) shouldBe Option("unit-test")
+    first.getAs[Long](SEQUENCE_NUMBER) shouldBe Option(1)
+    first.getAs[String](TYPE) shouldBe Option("bson")
+    val payload = first.as[MongoDBObject](PayloadKey)
+    payload.getAs[String]("foo") shouldBe Option("bar")
+    payload.getAs[Int]("baz") shouldBe Option(1)
   }}
 }

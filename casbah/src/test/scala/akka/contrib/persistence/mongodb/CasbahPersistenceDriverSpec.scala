@@ -3,6 +3,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -10,11 +11,19 @@ import scala.concurrent.duration._
 import ConfigLoanFixture._
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo {
+class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+
+  override def beforeAll() {
+    doBefore()
+  }
+
+  override def afterAll() {
+    doAfter()
+  }
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort"
+        | mongouri = "mongodb://localhost:$embedConnectionPort/shutdown-spec"
         | db = "shutdown-spec"
         |}
       """.stripMargin)
@@ -31,16 +40,27 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 
   it should "reconnect if a new driver is created" in withConfig(shutdownConfig)  { actorSystem =>
     val underTest = new CasbahMongoDriver(actorSystem)
+    underTest.db.collectionNames()
     underTest.actorSystem.terminate()
     Await.result(underTest.actorSystem.whenTerminated,10.seconds)
 
-    val underTest2 = new CasbahMongoDriver(ActorSystem("test2",shutdownConfig))
-    underTest2.db.stats() // Should not throw exception
+    val newAs:ActorSystem = ActorSystem("test2",shutdownConfig)
+    val underTest2 = new CasbahMongoDriver(newAs)
+    underTest2.db.collectionNames()
+    newAs.terminate()
   }
 }
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo {
+class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+
+  override def beforeAll() {
+    doBefore()
+  }
+
+  override def afterAll() {
+    doAfter()
+  }
 
   override def embedDB = "admin"
   override def auth = new AuthenticatingCommandLinePostProcessor()

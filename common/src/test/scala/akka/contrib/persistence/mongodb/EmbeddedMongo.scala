@@ -1,16 +1,12 @@
 package akka.contrib.persistence.mongodb
 
-import java.util
-
-import com.mongodb.client.MongoDatabase
 import de.flapdoodle.embed.mongo.{MongodStarter, Command}
 import de.flapdoodle.embed.mongo.config._
-import de.flapdoodle.embed.mongo.distribution.Version
+import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
-import de.flapdoodle.embed.process.distribution.Distribution
 import de.flapdoodle.embed.process.extract.UUIDTempNaming
 import de.flapdoodle.embed.process.io.directories.PlatformTempDir
-import de.flapdoodle.embed.process.runtime.{Network, ICommandLinePostProcessor}
+import de.flapdoodle.embed.process.runtime.Network
 import scala.collection.JavaConverters._
 import com.mongodb._
 
@@ -25,39 +21,43 @@ trait Authentication {
     }
   }
 
-  def injectCredentials(db: MongoDatabase, user: String = "admin", pass: String = "password"): Unit = {
-    val roles = BasicDBObjectBuilder.start("role","userAdminAnyDatabase").add("db","admin").get ::
-                BasicDBObjectBuilder.start("role","dbAdminAnyDatabase").add("db","admin").get ::
-                BasicDBObjectBuilder.start("role","readWrite").add("db","admin").get ::
-//                BasicDBObjectBuilder.start("role","root").add("db","admin").get ::
-                Nil
+  def injectCredentials(db: DB, user: String = "admin", pass: String = "password"): Unit = {
     val command = Map("createUser" -> user,
                       "pwd" -> pass,
                       "roles" -> List("userAdminAnyDatabase","dbAdminAnyDatabase","readWrite"))
-    val result = db.runCommand(command.asDBObject)
-    if (result.getInteger("ok") != 1) {
+    val result = db.command(command.asDBObject)
+    if (!result.ok()) {
       result.keySet().asScala.foreach(k => println(s"k-v: $k = ${result.get(k)}"))
+      println(s"${result.getErrorMessage}")
+      println(s"${result.getException}")
       println(s"${command.asDBObject}")
-      throw new Exception("Could not successfully create user")
+      result.throwOnError()
     }
   }
 }
 
-class NoOpCommandLinePostProcessor extends ICommandLinePostProcessor with Authentication {
-  override def process(distribution: Distribution, args: util.List[String]): util.List[String] = args
-  override def injectCredentials(db: MongoDatabase, user: String = "admin", pass: String = "password") = ()
+class NoOpCommandLinePostProcessor extends (MongoCmdOptionsBuilder => MongoCmdOptionsBuilder) with Authentication {
+  override def apply(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder = builder.enableAuth(false)
+  override def injectCredentials(db: DB, user: String = "admin", pass: String = "password") = ()
 }
 
-class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") extends ICommandLinePostProcessor with Authentication {
-  override def process(distribution: Distribution, args: util.List[String]): util.List[String] =
-    (args.asScala - "--noauth" :+ "--auth").asJava
+class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") extends (MongoCmdOptionsBuilder => MongoCmdOptionsBuilder) with Authentication {
+  override def apply(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder = builder.enableAuth(true)
 }
 
 trait EmbeddedMongo {
   def embedConnectionURL: String = { "localhost" }
   lazy val embedConnectionPort: Int = { Network.getFreeServerPort }
   def embedDB: String = "test"
-  def auth: ICommandLinePostProcessor with Authentication = new NoOpCommandLinePostProcessor
+  def auth: (MongoCmdOptionsBuilder => MongoCmdOptionsBuilder) with Authentication = new NoOpCommandLinePostProcessor
+
+  def overrideOptions: MongoCmdOptionsBuilder => MongoCmdOptionsBuilder = auth
+  def determineVersion: IFeatureAwareVersion =
+    Option(System.getenv("MONGODB.VERSION")).orElse(Option("3.0")).collect {
+      case "2.4" => Version.Main.V2_4
+      case "2.6" => Version.Main.V2_6
+      case "3.0" => Version.Main.V3_0
+    }.getOrElse(Version.Main.PRODUCTION)
 
   val artifactStorePath = new PlatformTempDir()
   val executableNaming = new UUIDTempNaming()
@@ -65,23 +65,24 @@ trait EmbeddedMongo {
   val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
     .defaults(command)
     .artifactStore(new ArtifactStoreBuilder()
-    .defaults(command)
-    .download(new DownloadConfigBuilder()
-    .defaultsForCommand(command)
-    .artifactStorePath(artifactStorePath))
-    .executableNaming(executableNaming))
-    .commandLinePostProcessor(auth)
-    .build()
+                      .defaults(command)
+                      .download(new DownloadConfigBuilder()
+                                    .defaultsForCommand(command)
+                                    .artifactStorePath(artifactStorePath)
+                      ).executableNaming(executableNaming)
+    ).build()
 
   val mongodConfig = new MongodConfigBuilder()
-    .version(Version.Main.V3_0)
-    .cmdOptions(new MongoCmdOptionsBuilder()
-    .syncDelay(1)
-    .useNoJournal(false)
-    .useNoPrealloc(true)
-    .useSmallFiles(true)
-    .verbose(false)
-    .build())
+    .version(determineVersion)
+    .cmdOptions(
+      overrideOptions(new MongoCmdOptionsBuilder()
+                          .syncDelay(1)
+                          .useNoJournal(false)
+                          .useNoPrealloc(true)
+                          .useSmallFiles(true)
+                          .verbose(false)
+      ).build()
+    )
     .net(new Net("127.0.0.1",embedConnectionPort, Network.localhostIsIPv6()))
     .build()
 
@@ -93,7 +94,7 @@ trait EmbeddedMongo {
 
   def doBefore(): Unit = {
     mongodExe
-    auth.injectCredentials(mongoClient.getDatabase("admin"))
+    auth.injectCredentials(mongoClient.getDB("admin"))
   }
 
   def doAfter(): Unit = {

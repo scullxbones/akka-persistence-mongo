@@ -26,7 +26,7 @@ trait RxMongoPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: Tes
   class SpecDriver extends RxMongoPersistenceDriver {
     val actorSystem = system
     override def db = specDb
-    override val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
+    override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
     override def collection(name: String) = specDb(name)
   }
 

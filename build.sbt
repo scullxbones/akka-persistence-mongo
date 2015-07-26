@@ -29,21 +29,22 @@ val pomXtra = {
 }
 
 val commonDeps = Seq(
-  "com.typesafe.akka" %% "akka-actor" % AkkaV % "provided",
   ("com.typesafe.akka" %% "akka-persistence-experimental" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
   ("nl.grons" %% "metrics-scala" % "3.5.1_a2.3")
     .exclude("com.typesafe.akka", "akka-actor_2.10")
     .exclude("com.typesafe.akka", "akka-actor_2.11"),
+  "org.mongodb" % "mongo-java-driver" % "2.13.1" % "test",
+  "org.slf4j" % "slf4j-simple" % "1.7.12" % "test",
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
   "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.0" % "test",
-  "org.mongodb" % "mongo-java-driver" % "3.0.1" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-experimental-tck" % AkkaV % "test"
 )
+// "com.typesafe.akka" %% "akka-actor" % AkkaV % "provided",
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
