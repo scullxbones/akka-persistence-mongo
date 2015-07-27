@@ -1,4 +1,4 @@
-val releaseV = "0.4.1"
+val releaseV = "1.0.0-SNAPSHOT"
 
 val scalaV = "2.11.7"
 
@@ -54,6 +54,7 @@ val commonSettings = Seq(
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
   scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
+  javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint"),
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
@@ -78,7 +79,9 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.11.2" % "provided"
+      ("org.reactivemongo" %% "reactivemongo" % "0.11.4" % "provided")
+        .exclude("com.typesafe.akka","akka-actor_2.10")
+        .exclude("com.typesafe.akka","akka-actor_2.11")
     )
   )
 

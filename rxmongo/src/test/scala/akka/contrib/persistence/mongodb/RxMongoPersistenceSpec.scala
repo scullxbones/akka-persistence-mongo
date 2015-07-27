@@ -9,12 +9,7 @@ import reactivemongo.bson.BSONDocument
 import scala.concurrent._
 import duration._
 
-trait RxMongoPersistenceSpec extends BaseUnitTest with EmbeddedMongo { self: TestKit =>
-
-  implicit val callerRuns = new ExecutionContext {
-    def reportFailure(t: Throwable) { t.printStackTrace() }
-    def execute(runnable: Runnable) { runnable.run() }
-  }
+trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoPersistenceDriver, BSONCollection] { self: TestKit =>
 
   lazy val connection = {
     val conn = new MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)

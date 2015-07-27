@@ -53,7 +53,7 @@ trait EmbeddedMongo {
 
   def overrideOptions: MongoCmdOptionsBuilder => MongoCmdOptionsBuilder = auth
   def determineVersion: IFeatureAwareVersion =
-    Option(System.getenv("MONGODB.VERSION")).orElse(Option("3.0")).collect {
+    Option(System.getenv("MONGODB_VERSION")).orElse(Option("3.0")).collect {
       case "2.4" => Version.Main.V2_4
       case "2.6" => Version.Main.V2_6
       case "3.0" => Version.Main.V3_0

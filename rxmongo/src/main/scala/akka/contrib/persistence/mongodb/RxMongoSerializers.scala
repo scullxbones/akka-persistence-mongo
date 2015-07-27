@@ -96,7 +96,8 @@ object RxMongoSerializers {
         sn = d.as[Long](SEQUENCE_NUMBER),
         payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT)),
         sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
-        manifest = d.getAs[String](MANIFEST)
+        manifest = d.getAs[String](MANIFEST),
+        writerUuid = d.getAs[String](WRITER_UUID)
       )
 
     private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
@@ -159,6 +160,7 @@ object RxMongoSerializers {
       (for {
         d <- Option(doc)
         d <- event.manifest.map(m => d.add(MANIFEST -> m)).orElse(Option(d))
+        d <- event.writerUuid.map(u => d.add(WRITER_UUID -> u)).orElse(Option(d))
         d <- event.sender
                   .filterNot(_ == system.deadLetters)
                   .flatMap(serialization.serialize(_).toOption)
