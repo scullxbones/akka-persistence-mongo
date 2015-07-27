@@ -49,7 +49,6 @@ val commonDeps = Seq(
 val commonSettings = Seq(
   scalaVersion := scalaV,
   libraryDependencies ++= commonDeps,
-  crossScalaVersions := Seq("2.10.5", scalaV),
   version := releaseV,
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
