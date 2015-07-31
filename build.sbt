@@ -59,7 +59,7 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  fork in Test := true
+  parallelExecution in Test := false
 )
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
