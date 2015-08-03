@@ -1,8 +1,6 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.contrib.persistence.mongodb.JournallingFieldNames.PROCESSOR_ID
-import akka.contrib.persistence.mongodb.JournallingFieldNames.SEQUENCE_NUMBER
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
@@ -32,7 +30,7 @@ object MongoPersistenceDriver {
 }
 
 trait CanSerializeJournal[D] {
-  def serializeAtom(atoms: TraversableOnce[Atom])(implicit serialization: Serialization, system: ActorSystem): D
+  def serializeAtom(atom: Atom)(implicit serialization: Serialization, system: ActorSystem): D
 }
 
 trait CanDeserializeJournal[D] {
@@ -41,7 +39,7 @@ trait CanDeserializeJournal[D] {
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
-trait MongoPersistenceDriver {
+abstract class MongoPersistenceDriver(as: ActorSystem) {
   import MongoPersistenceDriver._
 
   // Collection type
@@ -50,30 +48,43 @@ trait MongoPersistenceDriver {
   // Document type
   type D
 
+  val DEFAULT_DB_NAME = "akka-persistence"
+
+  implicit lazy val actorSystem: ActorSystem = as
+
+  lazy val settings = new MongoSettings(as.settings)
+
+  implicit lazy val serialization = SerializationExtension(actorSystem)
+  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
+
+  as.registerOnTermination {
+    closeConnections()
+  }
+
   private[mongodb] def collection(name: String): C
 
   private[mongodb] def ensureUniqueIndex(collection: C, indexName: String, fields: (String,Int)*)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def journal(implicit ec: ExecutionContext): C = {
+  private[mongodb] def closeConnections(): Unit
+
+  private[mongodb] def upgradeJournalIfNeeded(): Unit
+
+  private[mongodb] lazy val journal: C = {
     val journalCollection = collection(journalCollectionName)
-    ensureUniqueIndex(journalCollection, journalIndexName,
-                      s"$ATOM.${JournallingFieldNames.PROCESSOR_ID}" -> 1,
-                      s"$ATOM.$FROM" -> 1,
-                      s"$ATOM.$TO" -> 1)
+    val indexed = ensureUniqueIndex(journalCollection, journalIndexName,
+                      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.Implicits.global)
+    upgradeJournalIfNeeded()
+    indexed
   }
 
-  private[mongodb] def snaps(implicit ec: ExecutionContext): C = {
+  private[mongodb] lazy val snaps: C = {
     val snapsCollection = collection(snapsCollectionName)
     ensureUniqueIndex(snapsCollection, snapsIndexName,
                       SnapshottingFieldNames.PROCESSOR_ID -> 1,
                       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-                      TIMESTAMP -> -1)
+                      TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
   }
 
-  implicit val actorSystem: ActorSystem
-
-  lazy val settings = new MongoSettings(actorSystem.settings)
-  
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
@@ -86,11 +97,6 @@ trait MongoPersistenceDriver {
   def journalFsync = settings.JournalFSync
   def mongoUri = settings.MongoUri
 
-  val DEFAULT_DB_NAME = "akka-persistence"
-
-  implicit lazy val serialization = SerializationExtension(actorSystem)
-  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
-
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
-  def serializeJournal(aw: TraversableOnce[Atom])(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
+  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
 }

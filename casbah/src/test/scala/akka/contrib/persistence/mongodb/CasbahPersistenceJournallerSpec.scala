@@ -1,7 +1,5 @@
 package akka.contrib.persistence.mongodb
 
-import java.util.{List => JList}
-
 import akka.actor.ActorSystem
 import akka.persistence._
 import akka.serialization.SerializationExtension
@@ -24,9 +22,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   implicit val serialization = SerializationExtension(system)
 
   implicit class PimpedDBObject(dbo: DBObject) {
-    def firstAtom =  dbo.as[MongoDBList](ATOM).as[DBObject](0)
-
-    def firstEvent = dbo.as[MongoDBList](ATOM).as[DBObject](0).as[MongoDBList](EVENTS).as[DBObject](0)
+    def firstEvent = dbo.as[MongoDBList](EVENTS).as[DBObject](0)
   }
 
   trait Fixture {
@@ -38,9 +34,9 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = "TEST")))
 
-    val serialized = serializeAtom(repr :: Nil)
+    val serialized = serializeAtom(repr)
 
-    val atom = serialized.firstAtom
+    val atom = serialized
 
     atom.getAs[String](PROCESSOR_ID) shouldBe Some("pid")
     atom.getAs[Long](FROM) shouldBe Some(1L)
@@ -60,7 +56,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
     idx("unique") should ===(true)
-    idx("key") should be(MongoDBObject(s"$ATOM.$PROCESSOR_ID" -> 1, s"$ATOM.$FROM" -> 1, s"$ATOM.$TO" -> 1))
+    idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1, TO -> 1))
   }}
 
   it should "insert journal records" in new Fixture { withJournal { journal =>
@@ -68,7 +64,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     journal.size should be(1)
 
-    val atom = journal.head.firstAtom
+    val atom = journal.head
 
 
     atom(PROCESSOR_ID) should be("unit-test")
@@ -86,7 +82,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     underTest.deleteFrom("unit-test", 2L)
 
     journal.size should be(1)
-    val recone = journal.head.firstAtom
+    val recone = journal.head
     recone(PROCESSOR_ID) should be("unit-test")
     recone(FROM) should be(3)
     recone(TO) should be(3)
@@ -129,8 +125,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     underTest.atomicAppend(AtomicWrite(documents))
     val results = journal.find().limit(1)
       .one()
-      .as[MongoDBList](ATOM).collect({case x:DBObject => x})
-      .flatMap(_.as[MongoDBList](EVENTS).collect({case x:DBObject => x}))
+      .as[MongoDBList](EVENTS).collect({case x:DBObject => x})
 
     val first = results.head
     first.getAs[String](PROCESSOR_ID) shouldBe Option("unit-test")

@@ -57,7 +57,7 @@ object CasbahPersistenceSnapshotter {
       V1.SERIALIZED -> serialization.serializerFor(classOf[SelectedSnapshot]).toBinary(snapshot))
 }
 
-class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends MongoPersistenceSnapshottingApi {
+class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersistenceSnapshottingApi {
 
   import CasbahPersistenceSnapshotter._
   import SnapshottingFieldNames._

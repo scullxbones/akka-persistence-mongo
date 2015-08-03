@@ -141,16 +141,14 @@ object RxMongoSerializers {
 
   implicit object JournalSerializer extends CanSerializeJournal[BSONDocument] {
 
-    override def serializeAtom(atoms: TraversableOnce[Atom])(implicit serialization: Serialization, system: ActorSystem): BSONDocument = {
-      val serd = atoms.map( atom =>
-        BSONDocument(
-          PROCESSOR_ID -> atom.pid,
-          FROM -> atom.from,
-          TO -> atom.to,
-          EVENTS -> BSONArray(atom.events.map(serializeEvent))
-        )
+    override def serializeAtom(atom: Atom)(implicit serialization: Serialization, system: ActorSystem): BSONDocument = {
+      BSONDocument(
+        PROCESSOR_ID -> atom.pid,
+        FROM -> atom.from,
+        TO -> atom.to,
+        EVENTS -> BSONArray(atom.events.map(serializeEvent)),
+        VERSION -> 1
       )
-      BSONDocument(ATOM -> BSONArray(serd.toSeq), VERSION -> 1)
     }
 
     import Producer._

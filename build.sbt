@@ -44,7 +44,6 @@ val commonDeps = Seq(
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-experimental-tck" % AkkaV % "test"
 )
-// "com.typesafe.akka" %% "akka-actor" % AkkaV % "provided",
 
 val commonSettings = Seq(
   scalaVersion := scalaV,

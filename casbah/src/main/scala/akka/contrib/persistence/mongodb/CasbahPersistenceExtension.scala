@@ -19,7 +19,7 @@ object CasbahPersistenceDriver {
   }
 }
 
-trait CasbahPersistenceDriver extends MongoPersistenceDriver {
+class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) {
   import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
   
   // Collection type
@@ -27,14 +27,27 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver {
 
   type D = DBObject
 
-  private[this] lazy val url = MongoClientURI(mongoUri)
+  override private[mongodb] def closeConnections(): Unit = client.close()
+
+  override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
+    import scala.collection.immutable.{Seq => ISeq}
+    import CasbahSerializers._
+
+    val j = collection(journalCollectionName)
+    val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))
+    if(j.count(q) > 0) {
+      j.find(q)
+       .map(d => d.as[ObjectId]("_id") -> deserializeJournal(d))
+       .map{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
+    }
+  }
+
+  private[this] val url = MongoClientURI(mongoUri)
 
   private[mongodb] lazy val client = MongoClient(url)
 
   private[mongodb] lazy val db = client(url.database.getOrElse(DEFAULT_DB_NAME))
 
-
-  
   private[mongodb] def collection(name: String) = db(name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
@@ -47,12 +60,6 @@ trait CasbahPersistenceDriver extends MongoPersistenceDriver {
     collection
   }
 
-}
-
-class CasbahMongoDriver(val actorSystem: ActorSystem) extends CasbahPersistenceDriver {
-  actorSystem.registerOnTermination {
-    client.close()
-  }
 }
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {

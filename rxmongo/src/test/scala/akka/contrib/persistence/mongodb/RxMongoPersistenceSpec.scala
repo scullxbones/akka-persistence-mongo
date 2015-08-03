@@ -9,7 +9,7 @@ import reactivemongo.bson.BSONDocument
 import scala.concurrent._
 import duration._
 
-trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoPersistenceDriver, BSONCollection] { self: TestKit =>
+trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
   lazy val connection = {
     val conn = new MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
@@ -18,8 +18,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoPersistenceDriv
   }
   lazy val specDb = connection(embedDB)
 
-  class SpecDriver extends RxMongoPersistenceDriver {
-    val actorSystem = system
+  class SpecDriver extends RxMongoDriver(system) {
     override def db = specDb
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
     override def collection(name: String) = specDb(name)

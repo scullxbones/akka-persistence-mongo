@@ -43,11 +43,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
       case Success(unwrap) => unwrap.foreach(println)
     }
 
-    val recone = head.get.getAs[BSONArray](ATOM).toStream.flatMap(_.values.collect {
-      case d: BSONDocument => d
-    }).flatMap(_.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+    val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
       case e: BSONDocument => e
-    })).head
+    }).head
     recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
   } }
@@ -61,11 +59,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     val (range,head) = await(inserted)
     range should have size 1
 
-    val recone = head.get.getAs[BSONArray](ATOM).toStream.flatMap(_.values.collect {
-      case d: BSONDocument => d
-    }).flatMap(_.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+    val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
       case e: BSONDocument => e
-    })).head
+    }).head
     recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
     recone.getAs[String](TYPE) shouldBe Some("bson")

@@ -6,12 +6,11 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.mongodb.casbah.{MongoClient, MongoCollection}
 
-trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahPersistenceDriver,MongoCollection] { self: TestKit =>
+trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver,MongoCollection] { self: TestKit =>
 
     lazy val mongoDB = MongoClient(embedConnectionURL,embedConnectionPort)(embedDB)
 
-    override val driver = new CasbahPersistenceDriver {
-      val actorSystem = system
+    override val driver = new CasbahMongoDriver(system) {
       override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
       override def collection(name: String) = mongoDB(name)
     }

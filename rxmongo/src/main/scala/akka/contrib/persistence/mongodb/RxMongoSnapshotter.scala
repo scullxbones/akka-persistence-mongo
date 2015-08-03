@@ -6,7 +6,7 @@ import reactivemongo.bson._
 
 import scala.concurrent._
 
-class RxMongoSnapshotter(driver: RxMongoPersistenceDriver) extends MongoPersistenceSnapshottingApi {
+class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshottingApi {
 
   import SnapshottingFieldNames._
   import RxMongoSerializers._

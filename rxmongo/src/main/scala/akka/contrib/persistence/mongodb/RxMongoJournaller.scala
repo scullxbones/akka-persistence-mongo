@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
-import reactivemongo.api.{Cursor, ReadPreference}
+import reactivemongo.api.Cursor
 import reactivemongo.bson._
 import DefaultBSONHandlers._
 
@@ -9,7 +9,7 @@ import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.util.{Failure, Try, Success}
 
-class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersistenceJournallingApi {
+class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import RxMongoSerializers._
   import JournallingFieldNames._
@@ -19,27 +19,23 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
-  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
-    BSONDocument(ATOM ->
-      BSONDocument("$elemMatch" ->
-        BSONDocument(PROCESSOR_ID -> pid,
-                      FROM -> BSONDocument("$gte" -> from),
-                      FROM -> BSONDocument("$lte" -> to))))
+  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) = BSONDocument(
+    PROCESSOR_ID -> pid,
+    FROM -> BSONDocument("$gte" -> from),
+    FROM -> BSONDocument("$lte" -> to)
+  )
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
     journal.find(journalRangeQuery(pid, from, to))
-           .projection(BSONDocument(s"$ATOM.$$.$EVENTS" -> 1))
-           .cursor[BSONDocument](ReadPreference.primary)
+           .projection(BSONDocument(EVENTS -> 1))
+           .cursor[BSONDocument]()
            .foldWhile(ISeq.empty[Event])(unwind(to),{ case(_,thr) => Cursor.Fail(thr)})
 
   private[this] def unwind(maxSeq: Long)(s: ISeq[Event], doc: BSONDocument) = {
-    val arr = doc.as[BSONArray](ATOM).values.flatMap {
-      case a:BSONDocument => a.as[BSONArray](EVENTS).values
-    }
-    val docs = arr.collect {
+    val docs = doc.as[BSONArray](EVENTS).values.collect {
       case d:BSONDocument => driver.deserializeJournal(d)
-    }.takeWhile(_.sn <= maxSeq)
-    if (docs.size == arr.length) Cursor.Cont(s ++ docs)
+    }.filter(_.sn <= maxSeq).sorted
+    if (docs.last.sn < maxSeq) Cursor.Cont(s ++ docs)
     else Cursor.Done(s ++ docs)
   }
 
@@ -52,36 +48,39 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
     val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
-    journal.update(query,
-      BSONDocument(
-        "$pull" -> BSONDocument(s"$ATOM.$$.$EVENTS" -> BSONDocument(
-            PROCESSOR_ID -> persistenceId,
-            SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr)
-          )),
-        "$set" -> BSONDocument(s"$ATOM.$$.$FROM" -> (toSequenceNr + 1))
-      ), writeConcern, upsert = false, multi = true).andThen {
-        case Success(wr) if wr.ok =>
-          journal.remove(
-            BSONDocument("$and" -> BSONArray(query, BSONDocument(s"$ATOM.$EVENTS" -> BSONDocument("$size" -> 0)))),
-            writeConcern)
-      }.map(_ => ())
+    val update = BSONDocument(
+      "$pull" -> BSONDocument(
+        EVENTS -> BSONDocument(
+          PROCESSOR_ID -> persistenceId,
+          SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr)
+        )),
+      "$set" -> BSONDocument(FROM -> (toSequenceNr + 1))
+    )
+    val remove = BSONDocument("$and" ->
+      BSONArray(
+        BSONDocument(PROCESSOR_ID -> persistenceId),
+        BSONDocument(EVENTS -> BSONDocument("$size" -> 0))
+      ))
+    for {
+      wr <- journal.update(query, update, writeConcern, upsert = false, multi = true)
+        if wr.ok
+      wr <- journal.remove(remove, writeConcern)
+    } yield ()
   }
 
   private[mongodb] override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) =
-    journal.find(BSONDocument(s"$ATOM.$PROCESSOR_ID" -> pid))
-      .projection(BSONDocument(s"$ATOM.$TO" -> 1))
-      .sort(BSONDocument(s"$ATOM.$TO" -> -1))
-      .cursor[BSONDocument](ReadPreference.primary)
+    journal.find(BSONDocument(PROCESSOR_ID -> pid))
+      .projection(BSONDocument(TO -> 1))
+      .sort(BSONDocument(TO -> -1))
+      .cursor[BSONDocument]()
       .headOption
-      .map(l => l.map(_.as[BSONArray](ATOM).values.collect {
-        case d: BSONDocument => d.getAs[Long](TO)
-      }.flatten.foldLeft(0L)(implicitly[Ordering[Long]].max)).getOrElse(0L))
+      .map(d => d.flatMap(_.getAs[Long](TO)).getOrElse(0L))
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
     if (max == 0L) Future.successful(())
     else {
       val maxInt = max.toIntWithoutWrapping
-      journalRange(pid, from, to).map(events => events.take(maxInt).map(_.toRepr).foreach(replayCallback))
+      journalRange(pid, from, to).map(_.take(maxInt).map(_.toRepr).foreach(replayCallback))
     }
 
 }

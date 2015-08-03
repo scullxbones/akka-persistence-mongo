@@ -62,16 +62,14 @@ object CasbahSerializers extends JournallingFieldNames {
   }
 
   implicit object Serializer extends CanSerializeJournal[DBObject] {
-    override def serializeAtom(atoms: TraversableOnce[Atom])(implicit serialization: Serialization, system: ActorSystem): DBObject = {
-      val serd = atoms.map( atom =>
-        MongoDBObject(
-          PROCESSOR_ID -> atom.pid,
-          FROM -> atom.from,
-          TO -> atom.to,
-          EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*)
-        )
-      ).toSeq
-      MongoDBObject(ATOM -> MongoDBList(serd: _*), VERSION -> 1)
+    override def serializeAtom(atom: Atom)(implicit serialization: Serialization, system: ActorSystem): DBObject = {
+      MongoDBObject(
+        PROCESSOR_ID -> atom.pid,
+        FROM -> atom.from,
+        TO -> atom.to,
+        EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*),
+        VERSION -> 1
+      )
     }
 
     private def serializeEvent(event: Event)(implicit serialization: Serialization, system: ActorSystem): DBObject = {

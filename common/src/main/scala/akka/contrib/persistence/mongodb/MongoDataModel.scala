@@ -172,20 +172,23 @@ object Event {
     manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
     writerUuid = Option(repr.writerUuid).filterNot(_ == PersistentRepr.Undefined)
   )
+
+  implicit object EventOrdering extends Ordering[Event] {
+    override def compare(x: Event, y: Event): Int = Ordering[Long].compare(x.sn,y.sn)
+  }
 }
 
 case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
 
 object Atom {
-  def apply[D](aw: AtomicWrite)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): TraversableOnce[Atom] = {
-    aw.payload.groupBy(_.persistenceId).map { case(pid, reprs) =>
-      val (minSn,maxSn) = reprs.foldLeft((Long.MaxValue,0L)) { case ((min,max),repr) =>
-        val newMin = if (repr.sequenceNr < min) repr.sequenceNr else min
-        val newMax = if (repr.sequenceNr > max) repr.sequenceNr else max
-        (newMin, newMax)
-      }
-      Atom(pid = pid, from = minSn, to = maxSn, events = reprs.map(Event.apply(_)(ser,ev,dt)))
+  def apply[D](aw: AtomicWrite)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Atom = {
+    val pid = aw.payload.head.persistenceId
+    val (minSn,maxSn) = aw.payload.foldLeft((Long.MaxValue,0L)) { case ((min,max),repr) =>
+      val newMin = if (repr.sequenceNr < min) repr.sequenceNr else min
+      val newMax = if (repr.sequenceNr > max) repr.sequenceNr else max
+      (newMin, newMax)
     }
+    Atom(pid = pid, from = minSn, to = maxSn, events = aw.payload.map(Event.apply(_)(ser,ev,dt)))
   }
 }
 

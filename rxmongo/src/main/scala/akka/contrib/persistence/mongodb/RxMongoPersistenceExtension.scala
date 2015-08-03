@@ -2,13 +2,13 @@ package akka.contrib.persistence.mongodb
 
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands.WriteConcern
+import reactivemongo.api.commands.{DefaultWriteResult, WriteResult, WriteConcern}
 import reactivemongo.api.indexes.{IndexType, Index}
 import reactivemongo.bson._
 
 import akka.actor.ActorSystem
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
@@ -28,7 +28,7 @@ object RxMongoPersistenceDriver {
   }
 }
 
-trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
+class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(actorSystem) {
   import RxMongoPersistenceDriver._
   import concurrent.Await
   import concurrent.duration._
@@ -51,6 +51,48 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
     conn
   }
 
+  def walk(collection: BSONCollection)(previous: Future[WriteResult], doc: BSONDocument): Cursor.State[Future[WriteResult]] = {
+    import scala.collection.immutable.{Seq => ISeq}
+    import scala.concurrent.ExecutionContext.Implicits.global
+    import RxMongoSerializers._
+
+    val id = doc.getAs[BSONObjectID]("_id").get
+    val ev = deserializeJournal(doc)
+
+    // Wait for previous record to be updated
+    val wr = previous.flatMap(_ => collection.update(
+      BSONDocument("_id" -> id),
+      serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))),
+      journalWriteConcern))
+
+    Cursor.Cont(wr)
+  }
+
+  override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
+    import concurrent.ExecutionContext.Implicits.global
+    import JournallingFieldNames._
+
+    val j = collection(journalCollectionName)
+    val walker = walk(j) _
+    val q = BSONDocument(VERSION -> BSONDocument("$exists" -> 0))
+    val empty:Future[WriteResult] = Future.successful(
+        DefaultWriteResult(
+          ok = true, n = 0,
+          writeErrors = Seq.empty, writeConcernError = None,
+          code = None, errmsg = None
+        ))
+
+    for {
+      count <- j.count(Option(q))
+        if count > 0
+      needUpgrade <- j.find(q).cursor[BSONDocument]().foldWhile(empty)(walker, (_,t) => throw t).flatMap(identity)
+    } yield ()
+
+    ()
+  }
+
+  private[mongodb] def closeConnections(): Unit = driver.close()
+
   private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(actorSystem.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
@@ -58,19 +100,13 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver {
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
   private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext) = {
-    val ky:Seq[(String,IndexType)] = keys.map { case(f,o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
+    val ky = keys.toSeq.map{ case (f,o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending)}
     collection.indexesManager.ensure(new Index(
       key = ky,
       background = true,
       unique = true,
       name = Some(indexName)))
     collection
-  }
-}
-
-class RxMongoDriver(val actorSystem: ActorSystem) extends RxMongoPersistenceDriver {
-  actorSystem.registerOnTermination {
-    driver.close()
   }
 }
 
