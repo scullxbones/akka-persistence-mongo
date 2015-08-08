@@ -29,10 +29,16 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
            .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to))
            .map(driver.deserializeJournal)
 
-  private[mongodb] override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext):Future[Try[Unit]] = Future {
-    Try(driver.serializeJournal(Atom[DBObject](write)))
-      .map(serialized => journal.insert(serialized)(identity, writeConcern))
-      .map(_ => ())
+  import collection.immutable.{Seq => ISeq}
+  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = Future {
+    val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write))))
+    if (batch.forall(_.isSuccess)) {
+      val collected = batch.collect { case scala.util.Success(ser) => ser }
+      journal.insert(collected: _*)(identity,writeConcern)
+      batch.map(t => t.map(_ => ()))
+    } else { // degraded performance, cant batch
+      batch.map(_.map(serialized => journal.insert(serialized)(identity, writeConcern)).map(_ => ()))
+    }
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {

@@ -1,5 +1,7 @@
 package akka.contrib.persistence.mongodb
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.actor._
 import akka.persistence.PersistentActor
 import com.typesafe.config.ConfigFactory
@@ -26,6 +28,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |	  # Class name of the plugin.
@@ -38,9 +41,11 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     |}
     |""".stripMargin)
 
-  def actorProps(id: String): Props = Props(new CounterPersistentActor(id))
+  def actorProps(id: String, eventCount: Int, atMost: FiniteDuration = 60.seconds): Props =
+    Props(new CounterPersistentActor(id, eventCount, atMost))
 
   sealed trait Command
+  case class SetTarget(ar: ActorRef) extends Command
   case class IncBatch(n: Int) extends Command
   case object Stop extends Command
 
@@ -57,22 +62,37 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     }
   }
 
-  class CounterPersistentActor(id: String) extends PersistentActor with ActorLogging {
+  class CounterPersistentActor(id: String, eventCount: Int, atMost: FiniteDuration) extends PersistentActor with ActorLogging {
 
     var state = CounterState(0)
+    var inflight = new AtomicInteger(eventCount)
+    var accumulator: Option[ActorRef] = None
 
     override def receiveRecover: Receive = {
       case x:Int => (1 to x).foreach(_ => state.event(IncEvent))
     }
 
+    private def eventHandler(int: Int): Unit = {
+      state.event(IncEvent)
+      checkShutdown()
+    }
+
+    private def checkShutdown(): Unit = if (inflight.decrementAndGet() < 1) {
+      accumulator.foreach(_ ! state.counter)
+      context.stop(self)
+    }
+
     override def receiveCommand: Receive = {
+      case SetTarget(ar) =>
+        accumulator = Option(ar)
+        context.setReceiveTimeout(atMost)
       case IncBatch(count) =>
-        persistAll((1 to count).map(_ => 1)){ nbr =>
-          state.event(IncEvent)
+        persistAll((1 to count).map(_ => 1))(eventHandler)
+      case ReceiveTimeout =>
+        if (recoveryFinished) {
+          inflight.set(0)
+          checkShutdown()
         }
-      case Stop =>
-        sender() ! state.counter
-        context.stop(self)
     }
 
     override def persistenceId: String = s"counter-$id"
@@ -88,9 +108,6 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     }
 
     def receive = {
-      case d: FiniteDuration =>
-        context.setReceiveTimeout(d)
-        log.info(s"Setting receive timeout to $d")
       case x:Int =>
         accum += x
       case Terminated(ar) =>
@@ -100,10 +117,6 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
           context.stop(self)
           log.info("Shutting down")
         }
-      case ReceiveTimeout =>
-        actors foreach (_ ! Stop)
-        context.setReceiveTimeout(Duration.Inf)
-        log.info("Sending stop to actors")
     }
   }
 
@@ -112,19 +125,18 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
   val commandsPerBatch = 10
   val persistenceIds = (1 to maxActors).map(x => s"$x")
 
-  def startPersistentActors(as: ActorSystem) =
-    persistenceIds.map(nm => as.actorOf(actorProps(nm),s"counter-$nm")).toSet
+  def startPersistentActors(as: ActorSystem, eventsPer: Int, maxDuration: FiniteDuration) =
+    persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
   "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "load-test") { as =>
-    val start = System.currentTimeMillis
-    val actors = startPersistentActors(as)
     val thousand = 1 to commandsPerBatch
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
+    actors.foreach(_ ! SetTarget(accumulator))
 
-    (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(thousand.size)))
-
-    accumulator ! 1.seconds
+    val start = System.currentTimeMillis
+    (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
 
     val total = Try(Await.result(result.future, 60.seconds))
 
@@ -135,10 +147,11 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
 
   it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "load-test") { as =>
     val start = System.currentTimeMillis
-    val actors = startPersistentActors(as)
+    val actors = startPersistentActors(as, 0, 100.milliseconds)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
-    accumulator ! 1.nanosecond
+    actors.foreach(_ ! SetTarget(accumulator))
+
     val total = Try(Await.result(result.future, 60.seconds))
 
     val time = System.currentTimeMillis - start

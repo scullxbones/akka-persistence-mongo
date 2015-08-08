@@ -60,7 +60,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
 
   it should "insert journal records" in new Fixture { withJournal { journal =>
-    underTest.atomicAppend(AtomicWrite(records))
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
     journal.size should be(1)
 
@@ -77,7 +77,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
 
   it should "hard delete journal entries" in new Fixture { withJournal { journal =>
-    underTest.atomicAppend(AtomicWrite(records))
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
     underTest.deleteFrom("unit-test", 2L)
 
@@ -91,7 +91,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
   
   it should "replay journal entries for a single atom" in new Fixture { withJournal { journal =>
-    underTest.atomicAppend(AtomicWrite(records))
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
     val buf = mutable.Buffer[PersistentRepr]()
     underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
@@ -100,7 +100,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
 
   it should "replay journal entries for multiple atoms" in new Fixture { withJournal { journal =>
-    records.foreach(r => underTest.atomicAppend(AtomicWrite(r)))
+    records.foreach(r => underTest.batchAppend(ISeq(AtomicWrite(r))))
 
     val buf = mutable.Buffer[PersistentRepr]()
     underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
@@ -114,7 +114,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
 
   it should "calculate the max sequence nr" in new Fixture { withJournal { journal =>
-    underTest.atomicAppend(AtomicWrite(records))
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
     val result = underTest.maxSequenceNr("unit-test", 2).value.get.get
     result should be (3)
@@ -122,7 +122,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   it should "support BSON payloads as MongoDBObjects" in new Fixture { withJournal { journal =>
     val documents = List(1,2,3).map(sn => PersistentRepr(persistenceId = "unit-test", sequenceNr = sn, payload = MongoDBObject("foo" -> "bar", "baz" -> 1)))
-    underTest.atomicAppend(AtomicWrite(documents))
+    underTest.batchAppend(ISeq(AtomicWrite(documents)))
     val results = journal.find().limit(1)
       .one()
       .as[MongoDBList](EVENTS).collect({case x:DBObject => x})

@@ -2,8 +2,10 @@ package akka.contrib.persistence.mongodb
 
 import akka.persistence._
 import reactivemongo.api.Cursor
+import reactivemongo.api.commands.{MultiBulkWriteResult, WriteResult}
 import reactivemongo.bson._
 import DefaultBSONHandlers._
+import reactivemongo.core.errors.ReactiveMongoException
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
@@ -39,10 +41,27 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     else Cursor.Done(s ++ docs)
   }
 
-  private[mongodb] override def atomicAppend(aw: AtomicWrite)(implicit ec: ExecutionContext) = {
-    Future(Try(driver.serializeJournal(Atom[BSONDocument](aw)))).flatMap {
-      case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(_ => Success(()))
-      case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+  private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
+    if (wr.ok) Success(())
+    else throw wr
+  }
+
+  private[this] def bulkResultToUnit(bulk: ISeq[Try[BSONDocument]])(wr: MultiBulkWriteResult): ISeq[Try[Unit]] = {
+    if (wr.ok) bulk.map(t => t.map(_ => ()))
+    else
+      throw ReactiveMongoException( ("MongoException" :: wr.errmsg.toList ++ wr.writeErrors) mkString "\n" )
+  }
+
+  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
+    val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw))))
+    if (batch.forall(_.isSuccess)) {
+      val collected = batch.collect { case scala.util.Success(ser) => ser }
+      journal.bulkInsert(collected, ordered = true).map(bulkResultToUnit(batch))
+    } else {
+      Future.sequence(batch.map {
+        case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
+        case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+      })
     }
   }
 

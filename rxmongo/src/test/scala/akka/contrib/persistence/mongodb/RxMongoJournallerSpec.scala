@@ -9,6 +9,7 @@ import reactivemongo.bson._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.{Success, Failure}
+import scala.collection.immutable.{Seq => ISeq}
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -31,7 +32,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   "A reactive mongo journal implementation" should "insert journal records" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.atomicAppend(AtomicWrite(records))
+      inserted <- underTest.batchAppend(ISeq(AtomicWrite(records)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range, head)
@@ -52,7 +53,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   it should "insert records with documents as payload" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.atomicAppend(AtomicWrite(documents))
+      inserted <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)

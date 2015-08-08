@@ -65,7 +65,7 @@ class MongoJournal extends AsyncWriteJournal {
    * caching some result `Seq` for the happy path, i.e. when no messages are rejected.
    */
   override def asyncWriteMessages(messages: immutable.Seq[AtomicWrite]): Future[immutable.Seq[Try[Unit]]] =
-    Future.sequence(messages.map(impl.atomicAppend))
+    impl.batchAppend(messages)
 
   /**
    * Plugin API: asynchronously deletes all persistent messages up to `toSequenceNr`
@@ -146,7 +146,7 @@ trait JournallingFieldNames {
 object JournallingFieldNames extends JournallingFieldNames
 
 trait MongoPersistenceJournallingApi {
-  private[mongodb] def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]]
+  private[mongodb] def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]]
 
   private[mongodb] def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit]
 
@@ -172,8 +172,8 @@ trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
     else thunk
   }
 
-  private[mongodb] abstract override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]] =
-    breaker.withCircuitBreaker(super.atomicAppend(write))
+  private[mongodb] abstract override def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] =
+    breaker.withCircuitBreaker(super.batchAppend(writes))
 
   private[mongodb] abstract override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] =
     breaker.withCircuitBreaker(super.deleteFrom(persistenceId, toSequenceNr))
@@ -211,9 +211,9 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
     result
   }
   
-  private[mongodb] abstract override def atomicAppend(write: AtomicWrite)(implicit ec: ExecutionContext): Future[Try[Unit]] = timeIt (appendTimer) {
-    writeBatchSize += write.size
-    super.atomicAppend(write)
+  private[mongodb] abstract override def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = timeIt (appendTimer) {
+    writeBatchSize += writes.map(_.size).sum
+    super.batchAppend(writes)
   }
 
   private[mongodb] abstract override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = timeIt (deleteTimer) {
