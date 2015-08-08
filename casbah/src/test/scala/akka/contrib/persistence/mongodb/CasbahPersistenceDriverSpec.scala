@@ -75,7 +75,6 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo wi
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig) { actorSystem =>
     val underTest = new CasbahMongoDriver(actorSystem)
     val collections = underTest.db.collectionNames()
-    collections.size should be (3)
     collections should contain ("system.users")
   }
 }

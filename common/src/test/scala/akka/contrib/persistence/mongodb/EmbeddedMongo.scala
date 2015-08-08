@@ -51,9 +51,14 @@ trait EmbeddedMongo {
   def embedDB: String = "test"
   def auth: (MongoCmdOptionsBuilder => MongoCmdOptionsBuilder) with Authentication = new NoOpCommandLinePostProcessor
 
-  def overrideOptions: MongoCmdOptionsBuilder => MongoCmdOptionsBuilder = auth
+  private def envMongoVersion = Option(System.getenv("MONGODB_VERSION")).orElse(Option("3.0"))
+  def overrideOptions: MongoCmdOptionsBuilder => MongoCmdOptionsBuilder = auth andThen useWiredTigerOn30
+
+  def useWiredTigerOn30(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder =
+    envMongoVersion.filter(_ == "3.0").map(_ => builder.useStorageEngine("wiredTiger")).getOrElse(builder)
+
   def determineVersion: IFeatureAwareVersion =
-    Option(System.getenv("MONGODB_VERSION")).orElse(Option("3.0")).collect {
+    envMongoVersion.collect {
       case "2.4" => Version.Main.V2_4
       case "2.6" => Version.Main.V2_6
       case "3.0" => Version.Main.V3_0
@@ -78,7 +83,7 @@ trait EmbeddedMongo {
       overrideOptions(new MongoCmdOptionsBuilder()
                           .syncDelay(1)
                           .useNoJournal(false)
-                          .useNoPrealloc(true)
+                          .useNoPrealloc(false)
                           .useSmallFiles(true)
                           .verbose(false)
       ).build()

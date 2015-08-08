@@ -40,7 +40,7 @@ val commonDeps = Seq(
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.0" % "test",
+  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.2" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-experimental-tck" % AkkaV % "test"
 )
@@ -51,7 +51,7 @@ val commonSettings = Seq(
   version := releaseV,
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
-  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
+  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-target:jvm-1.8"),
   javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint"),
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
@@ -78,7 +78,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.11.4" % "provided")
+      ("org.reactivemongo" %% "reactivemongo" % "0.11.5" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.10")
         .exclude("com.typesafe.akka","akka-actor_2.11")
     )

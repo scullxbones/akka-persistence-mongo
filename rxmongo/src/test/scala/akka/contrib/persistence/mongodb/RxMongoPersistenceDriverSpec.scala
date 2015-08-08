@@ -74,7 +74,6 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
   "A secured mongodb instance" should "be connectable via user and pass" ignore withConfig(authConfig,"authentication-config") { actorSystem =>
     val underTest = new RxMongoDriver(actorSystem)
     val collections = Await.result(underTest.db.collectionNames,3.seconds)
-    collections.size should be (3)
     collections should contain ("system.users")
   }
 }
