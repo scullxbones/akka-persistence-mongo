@@ -83,7 +83,7 @@ trait EmbeddedMongo {
       overrideOptions(new MongoCmdOptionsBuilder()
                           .syncDelay(1)
                           .useNoJournal(false)
-                          .useNoPrealloc(false)
+                          .useNoPrealloc(true)
                           .useSmallFiles(true)
                           .verbose(false)
       ).build()
