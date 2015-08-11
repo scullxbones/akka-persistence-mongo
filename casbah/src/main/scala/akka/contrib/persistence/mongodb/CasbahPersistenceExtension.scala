@@ -35,10 +35,11 @@ class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(syst
 
     val j = collection(journalCollectionName)
     val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))
-    if(j.count(q) > 0) {
-      j.find(q)
+    val cnt = j.count(q)
+    if(cnt > 0) {
+      j.find[DBObject](q)
        .map(d => d.as[ObjectId]("_id") -> deserializeJournal(d))
-       .map{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
+       .foreach{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
     }
   }
 

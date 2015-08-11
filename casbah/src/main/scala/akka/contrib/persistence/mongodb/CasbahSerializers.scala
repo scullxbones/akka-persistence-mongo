@@ -34,11 +34,13 @@ object CasbahSerializers extends JournallingFieldNames {
     )
 
     private def deserializeDocumentLegacy(d: DBObject)(implicit serialization: Serialization, system: ActorSystem) = {
+      val persistenceId = d.as[String](PROCESSOR_ID)
+      val sequenceNr = d.as[Long](SEQUENCE_NUMBER)
       d.get(SERIALIZED) match {
         case b: DBObject =>
           Event(
-            pid = d.as[String](PROCESSOR_ID),
-            sn = d.as[Long](SEQUENCE_NUMBER),
+            pid = persistenceId,
+            sn = sequenceNr,
             payload = Bson(b.as[DBObject](PayloadKey)),
             sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
             manifest = None,
@@ -47,14 +49,14 @@ object CasbahSerializers extends JournallingFieldNames {
         case _ =>
           val content = d.as[Array[Byte]](SERIALIZED)
           val repr = Serialized(content, classOf[PersistentRepr])
-          Event(
-            pid = d.as[String](PROCESSOR_ID),
-            sn = d.as[Long](SEQUENCE_NUMBER),
-            payload = repr,
-            sender = Option(repr.content.sender),
-            manifest = None,
-            writerUuid = None
-          )
+          Event[DBObject](repr.content).copy(pid = persistenceId, sn = sequenceNr)
+//            pid = persistenceId,
+//            sn = sequenceNr,
+//            payload = repr,
+//            sender = Option(repr.content.sender),
+//            manifest = None,
+//            writerUuid = None
+//          )
       }
 
     }

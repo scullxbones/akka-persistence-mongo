@@ -100,6 +100,10 @@ object RxMongoSerializers {
         writerUuid = d.getAs[String](WRITER_UUID)
       )
 
+//    private def deserializePayload2(d: BSONDocument): Payload = {
+//      Payload[BSONDocument](d.getAs[String](TYPE).get,d.getAs[Any](PayloadKey).get,d.getAs[String](HINT))
+//    }
+
     private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
       case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
         val clazz = Class.forName(clazzName.get)
@@ -120,17 +124,19 @@ object RxMongoSerializers {
 
 
     private def deserializeDocumentLegacy(document: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event = {
+      val persistenceId = document.as[String](PROCESSOR_ID)
+      val sequenceNr = document.as[Long](SEQUENCE_NUMBER)
       document.get(SERIALIZED) match {
         case Some(b: BSONDocument) =>
-          Event(pid = document.as[String](PROCESSOR_ID),
-                sn = document.as[Long](SEQUENCE_NUMBER),
+          Event(pid = persistenceId,
+                sn = sequenceNr,
                 payload = Bson(b.as[BSONDocument](PayloadKey)),
                 sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
                 manifest = None)
         case Some(ser: BSONBinary) =>
           val repr = serialization.deserialize(ser.byteArray, classOf[PersistentRepr])
             .getOrElse(throw new IllegalStateException("Unable to deserialize PersistentRepr"))
-          Event[BSONDocument](repr)
+          Event[BSONDocument](repr).copy(pid = persistenceId, sn = sequenceNr)
         case Some(x) =>
           throw new IllegalStateException(s"Unexpected value $x for $SERIALIZED field in document")
         case None =>

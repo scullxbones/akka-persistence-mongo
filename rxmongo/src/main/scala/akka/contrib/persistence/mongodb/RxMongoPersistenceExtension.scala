@@ -1,5 +1,6 @@
 package akka.contrib.persistence.mongodb
 
+import play.api.libs.iteratee.Iteratee
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.{DefaultWriteResult, WriteResult, WriteConcern}
@@ -51,19 +52,23 @@ class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(act
     conn
   }
 
-  def walk(collection: BSONCollection)(previous: Future[WriteResult], doc: BSONDocument): Cursor.State[Future[WriteResult]] = {
+  def walk(collection: BSONCollection)(previous: Future[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Cursor.State[Future[WriteResult]] = {
     import scala.collection.immutable.{Seq => ISeq}
-    import scala.concurrent.ExecutionContext.Implicits.global
     import RxMongoSerializers._
+    import DefaultBSONHandlers._
+    import Producer._
 
     val id = doc.getAs[BSONObjectID]("_id").get
     val ev = deserializeJournal(doc)
+    val q = BSONDocument("_id" -> id)
+    println(s"q = ${q.elements.toList} ev = $ev")
+
+//    collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))
 
     // Wait for previous record to be updated
-    val wr = previous.flatMap(_ => collection.update(
-      BSONDocument("_id" -> id),
-      serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))),
-      journalWriteConcern))
+    val wr = previous.flatMap(_ =>
+      collection.update(BSONDocument("_id" -> id), serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))
+    )
 
     Cursor.Cont(wr)
   }
@@ -75,18 +80,19 @@ class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(act
     val j = collection(journalCollectionName)
     val walker = walk(j) _
     val q = BSONDocument(VERSION -> BSONDocument("$exists" -> 0))
-    val empty:Future[WriteResult] = Future.successful(
-        DefaultWriteResult(
-          ok = true, n = 0,
-          writeErrors = Seq.empty, writeConcernError = None,
-          code = None, errmsg = None
-        ))
+    val empty: Future[WriteResult] = Future.successful(DefaultWriteResult(
+      ok = true, n = 0,
+      writeErrors = Seq.empty, writeConcernError = None,
+      code = None, errmsg = None
+    ))
 
-    for {
+    val eventuallyUpgrade = for {
       count <- j.count(Option(q))
         if count > 0
-      needUpgrade <- j.find(q).cursor[BSONDocument]().foldWhile(empty)(walker, (_,t) => throw t).flatMap(identity)
-    } yield ()
+      wr <- j.find(q).cursor[BSONDocument]().foldWhile(empty)(walker, (_,t) => Cursor.Fail(t)).flatMap(identity)
+    } yield wr
+
+    Await.result(eventuallyUpgrade, 2.minutes) // ouch
 
     ()
   }
