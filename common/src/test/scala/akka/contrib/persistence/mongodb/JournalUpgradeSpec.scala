@@ -25,6 +25,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |	  # Class name of the plugin.

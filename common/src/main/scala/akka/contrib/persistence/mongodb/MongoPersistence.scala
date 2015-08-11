@@ -73,7 +73,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem) {
     val journalCollection = collection(journalCollectionName)
     val indexed = ensureUniqueIndex(journalCollection, journalIndexName,
                       JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.Implicits.global)
-    upgradeJournalIfNeeded()
+    if (settings.JournalAutomaticUpgrade) upgradeJournalIfNeeded()
     indexed
   }
 

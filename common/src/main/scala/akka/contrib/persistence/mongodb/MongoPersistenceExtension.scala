@@ -65,6 +65,7 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
   val JournalWriteConcern = config.getString("journal-write-concern")
   val JournalWTimeout = config.getDuration("journal-wtimeout",MILLISECONDS).millis
   val JournalFSync = config.getBoolean("journal-fsync")
+  val JournalAutomaticUpgrade = config.getBoolean("journal-automatic-upgrade")
 
   val SnapsCollection = config.getString("snaps-collection")
   val SnapsIndex = config.getString("snaps-index")
