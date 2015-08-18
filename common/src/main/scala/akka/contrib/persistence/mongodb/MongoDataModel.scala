@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorRef
+import akka.persistence.query.EventEnvelope
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.Serialization
 
@@ -161,6 +162,13 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
     manifest = manifest.getOrElse(PersistentRepr.Undefined),
     writerUuid = writerUuid.getOrElse(PersistentRepr.Undefined)
   )
+
+  def toEnvelope(offset: Long) = EventEnvelope(
+    offset = offset,
+    persistenceId = pid,
+    sequenceNr = sn,
+    event = payload.content
+  )
 }
 
 object Event {
@@ -182,13 +190,10 @@ case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
 
 object Atom {
   def apply[D](aw: AtomicWrite)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Atom = {
-    val pid = aw.payload.head.persistenceId
-    val (minSn,maxSn) = aw.payload.foldLeft((Long.MaxValue,0L)) { case ((min,max),repr) =>
-      val newMin = if (repr.sequenceNr < min) repr.sequenceNr else min
-      val newMax = if (repr.sequenceNr > max) repr.sequenceNr else max
-      (newMin, newMax)
-    }
-    Atom(pid = pid, from = minSn, to = maxSn, events = aw.payload.map(Event.apply(_)(ser,ev,dt)))
+    Atom(pid = aw.persistenceId,
+      from = aw.lowestSequenceNr,
+      to = aw.highestSequenceNr,
+      events = aw.payload.map(Event.apply(_)(ser,ev,dt)))
   }
 }
 

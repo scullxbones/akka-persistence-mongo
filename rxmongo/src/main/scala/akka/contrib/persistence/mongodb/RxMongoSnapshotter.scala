@@ -30,8 +30,12 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) =
     snaps.insert(snapshot, writeConcern).map(_ => ())
 
-  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
-    snaps.remove(BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq, TIMESTAMP -> ts), writeConcern).map(_ => ())
+  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
+    val criteria =
+      Seq[Producer[BSONElement]](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
+        Option[Producer[BSONElement]](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
+    snaps.remove(BSONDocument(criteria : _*), writeConcern).map(_ => ())
+  }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
     snaps.remove(BSONDocument(PROCESSOR_ID -> pid,

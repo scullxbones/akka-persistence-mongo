@@ -29,6 +29,7 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
 trait MongoPersistenceExtension extends Extension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
+  def readJournal: MongoPersistenceReadJournallingApi
   def registry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
@@ -77,4 +78,6 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
   val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
+
+  val ReadJournalPerFillLimit = config.getInt("journal-read-fill-limit")
 }
