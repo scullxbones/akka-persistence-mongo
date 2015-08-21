@@ -5,9 +5,11 @@ import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteConcern
 import reactivemongo.bson._
 import reactivemongo.bson.buffer.ArrayReadableBuffer
+import reactivemongo.core.nodeset.Authenticate
 
 import akka.actor.ActorSystem
 
+import scala.concurrent.Awaitable
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
@@ -52,13 +54,26 @@ trait RxMongoPersistenceDriver extends MongoPersistenceDriver with MongoPersiste
     case Success(parsed) => parsed
     case Failure(throwable) => throw throwable
   }
+  private[this] lazy val unauthenticatedConnection =
+    // create unauthenticated connection, there is no direct way to wait for authentication this way
+    // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
+    waitForPrimary(driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None)))
   private[mongodb] lazy val connection =
-    waitForPrimary(driver.connection(parsedURI = parsedMongoUri))
+    // now authenticate explicitly and wait for confirmation
+    parsedMongoUri.authenticate.fold(unauthenticatedConnection) { auth =>
+      waitForAuthentication(unauthenticatedConnection, auth)
+    }
 
   private[this] def waitForPrimary(conn: MongoConnection): MongoConnection = {
-    Await.result(conn.waitForPrimary(3.seconds),4.seconds)
+    wait(conn.waitForPrimary(3.seconds),4.seconds)
     conn
   }
+  private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
+    wait(conn.authenticate(auth.db, auth.user, auth.password), 3.seconds)
+    conn
+  }
+  private[this] def wait[T](awaitable: Awaitable[T], duration: Duration): T =
+    Await.result(awaitable, duration)
 
   private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(actorSystem.dispatcher)
 
