@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorRef
 import akka.persistence._
-import play.api.libs.iteratee.{Enumerator, Iteratee}
+import play.api.libs.iteratee.Iteratee
 import reactivemongo.api.indexes._
 import reactivemongo.bson._
 
@@ -12,7 +12,6 @@ import scala.concurrent._
 class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersistenceJournallingApi {
 
   import JournallingFieldNames._
-  import RxMongoPersistenceExtension._
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
@@ -64,7 +63,7 @@ class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersisten
             case Some(bb) => bb
           }.map(BSONDocument(_)).foldLeft(BSONDocument(PayloadKey -> b))(_ ++ _)
         case _ =>
-          BsonBinaryHandler.write(serialization.serialize(persistent).get)
+          implicitly[BSONHandler[BSONBinary, Array[Byte]]].write(serialization.serialize(persistent).get)
       }
 
       BSONDocument(PROCESSOR_ID -> persistent.processorId,

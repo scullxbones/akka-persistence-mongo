@@ -11,8 +11,6 @@ import scala.concurrent._
 
 class RxMongoSnapshotSerialization(implicit serialization: Serialization) extends BSONDocumentReader[SelectedSnapshot] with BSONDocumentWriter[SelectedSnapshot] {
 
-  import RxMongoPersistenceExtension._
-
   override def read(doc: BSONDocument): SelectedSnapshot = {
     val content = doc.getAs[Array[Byte]](V1.SERIALIZED)
     if (content.isDefined) {
@@ -40,7 +38,7 @@ class RxMongoSnapshotSerialization(implicit serialization: Serialization) extend
       case b: BSONDocument =>
         b
       case _ =>
-        BsonBinaryHandler.write(serialization.serialize(Snapshot(snap.snapshot)).get)
+        implicitly[BSONHandler[BSONBinary, Array[Byte]]].write(serialization.serialize(Snapshot(snap.snapshot)).get)
     }
     BSONDocument(PROCESSOR_ID -> snap.metadata.persistenceId,
       SEQUENCE_NUMBER -> snap.metadata.sequenceNr,

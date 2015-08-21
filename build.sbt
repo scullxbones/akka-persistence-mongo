@@ -1,10 +1,10 @@
-val releaseV = "0.4.1"
+val releaseV = "0.4.2"
 
 val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.3.11"
+val AkkaV = "2.3.12"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -76,7 +76,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.11.0" % "provided"
+      "org.reactivemongo" %% "reactivemongo" % "0.11.6" % "provided"
     )
   )
 

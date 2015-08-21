@@ -3,8 +3,6 @@ package akka.contrib.persistence.mongodb
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteConcern
-import reactivemongo.bson._
-import reactivemongo.bson.buffer.ArrayReadableBuffer
 import reactivemongo.core.nodeset.Authenticate
 
 import akka.actor.ActorSystem
@@ -13,18 +11,6 @@ import scala.concurrent.Awaitable
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
-
-object RxMongoPersistenceExtension {
-  implicit object BsonBinaryHandler extends BSONHandler[BSONBinary, Array[Byte]] {
-    def read(bson: reactivemongo.bson.BSONBinary): Array[Byte] = {
-      val buffer = bson.value
-      buffer.readArray(buffer.size)
-    }
-
-    def write(t: Array[Byte]): reactivemongo.bson.BSONBinary =
-      BSONBinary(ArrayReadableBuffer(t), Subtype.GenericBinarySubtype)
-  }
-}
 
 object RxMongoPersistenceDriver {
   import MongoPersistenceBase._
