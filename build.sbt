@@ -4,7 +4,7 @@ val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.4-M3"
+val AkkaV = "2.4.0-RC1"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
