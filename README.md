@@ -20,6 +20,10 @@
 
 ### What's new?
 
+#### 0.4.1
+ - Fixes issue #32 with handling of legacy configuration format
+ - Please note, 0.4.x requires a minimum version of 0.11 if using the reactive mongo driver
+
 #### 0.4.0 (the MongoDB 3.0 release)
  - Support for `ErrorsIgnored` write concern has been dropped
  - Now supporting mongodb version 3.0, dropping support for version 2.4
@@ -108,7 +112,7 @@
 
 ### Jars now available in central snapshots repo:
 
-Version `0.4.0` is tracking Akka `2.3.11` as a `provided` dependency and passing the TCK now delivered with Akka
+Version `0.4.1` is tracking Akka `2.3.11` as a `provided` dependency and passing the TCK now delivered with Akka
 
 Driver dependencies are also `provided`, meaning they must be included in the application project's dependencies.
 
@@ -116,12 +120,12 @@ Driver dependencies are also `provided`, meaning they must be included in the ap
 
 ##### Casbah
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.4.0"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "0.4.1"
 ```
 
 ##### Reactive Mongo
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.4.0"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "0.4.1"
 ```
 
 #### Using Maven?
@@ -131,7 +135,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-casbah_2.10</artifactId>
-    <version>0.4.0</version>
+    <version>0.4.1</version>
 </dependency>
 ```
 
@@ -140,7 +144,7 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 <dependency>
     <groupId>com.github.scullxbones</groupId>
     <artifactId>akka-persistence-mongo-rxmongo_2.10</artifactId>
-    <version>0.4.0</version>
+    <version>0.4.1</version>
 </dependency>
 ```
 
@@ -149,12 +153,12 @@ libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmong
 
 ##### Casbah
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.4.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-casbah_2.10:0.4.1'
 ```
 
 ##### Reactive Mongo
 ```groovy
-compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.4.0'
+compile 'com.github.scullxbones:akka-persistence-mongo-rxmongo_2.10:0.4.1'
 ```
 
 ### How to use with akka-persistence?
