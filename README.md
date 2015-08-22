@@ -1,7 +1,7 @@
 # Akka Persistence MongoDB driver (Journal + Read Journal, Snapshots)
 
 ### 1.x Series 
-[![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.png?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
+[![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
 
 [Docs](docs/akka24.md)
 
@@ -12,7 +12,7 @@
 * Latest version is 1.0.0 (unreleased)
 
 ### 0.x Series 
-[![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.png?branch=akka23)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
+[![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka23)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
 
 [Docs](docs/akka23.md)
  
