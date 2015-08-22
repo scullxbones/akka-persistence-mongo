@@ -2,19 +2,32 @@ package akka.contrib.persistence.mongodb
 
 import akka.persistence.journal.JournalSpec
 import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterAll
 
-abstract class JournalTckSpec extends JournalSpec with EmbeddedMongo {
+object JournalTckSpec extends EmbeddedMongo {
 
-    def extensionClass: Class[_]
+  def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
+     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
+     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort"
+     |akka-contrib-mongodb-persistence-journal {
+     |	  # Class name of the plugin.
+     |  class = "akka.contrib.persistence.mongodb.MongoJournal"
+     |}""".stripMargin)
 
-    lazy val config = ConfigFactory.parseString(s"""
-      |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
-      |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-      |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort"
-      |akka-contrib-mongodb-persistence-journal {
-      |	  # Class name of the plugin.
-      |  class = "akka.contrib.persistence.mongodb.MongoJournal"
-      |}
-    """.stripMargin)
+}
+
+abstract class JournalTckSpec(extensionClass: Class[_])
+  extends JournalSpec(JournalTckSpec.config(extensionClass)) with BeforeAndAfterAll {
+
+  override def beforeAll() {
+    JournalTckSpec.doBefore()
+    super.beforeAll()
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    JournalTckSpec.doAfter()
+  }
 
 }

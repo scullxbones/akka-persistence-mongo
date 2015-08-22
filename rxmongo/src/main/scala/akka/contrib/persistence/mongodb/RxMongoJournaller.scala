@@ -1,172 +1,105 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorRef
 import akka.persistence._
-import play.api.libs.iteratee.Iteratee
-import reactivemongo.api.indexes._
+import reactivemongo.api.Cursor
+import reactivemongo.api.commands.{MultiBulkWriteResult, WriteResult}
 import reactivemongo.bson._
+import DefaultBSONHandlers._
+import reactivemongo.core.errors.ReactiveMongoException
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
+import scala.util.{Failure, Try, Success}
 
-class RxMongoJournaller(driver: RxMongoPersistenceDriver) extends MongoPersistenceJournallingApi {
+class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
+  import RxMongoSerializers._
   import JournallingFieldNames._
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
-  implicit object PersistentReprReader extends BSONDocumentReader[PersistentRepr] {
-    def read(document: BSONDocument): PersistentRepr = {
-      val repr: PersistentRepr = document.get(SERIALIZED).get match {
-        case b: BSONDocument =>
-          PersistentRepr(
-            payload = b.get(PayloadKey).get,
-            sender = b.getAsTry[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef])).getOrElse(driver.actorSystem.deadLetters),
-            redeliveries = b.getAsTry[Int](RedeliveriesKey).getOrElse(0),
-            confirmable = b.getAsTry[Boolean](ConfirmableKey).getOrElse(false),
-            confirmMessage = b.getAsTry[Array[Byte]](ConfirmMessageKey).flatMap(serialization.deserialize(_, classOf[Delivered])).getOrElse(null),
-            confirmTarget = b.getAsTry[Array[Byte]](ConfirmTargetKey).flatMap(serialization.deserialize(_, classOf[ActorRef])).getOrElse(null)
-          )
-        case v =>
-          serialization.deserialize(document.getAsTry[Array[Byte]](SERIALIZED).get, classOf[PersistentRepr]).get
-      }
+  private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
-      val confirms = ISeq(document.getAs[Seq[String]](CONFIRMS).getOrElse(Seq.empty[String]): _*)
+  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) = BSONDocument(
+    PROCESSOR_ID -> pid,
+    FROM -> BSONDocument("$gte" -> from),
+    FROM -> BSONDocument("$lte" -> to)
+  )
 
-      PersistentRepr(
-        payload = repr.payload,
-        sequenceNr = document.getAs[Long](SEQUENCE_NUMBER).get,
-        persistenceId = document.getAs[String](PROCESSOR_ID).get,
-        deleted = document.getAs[Boolean](DELETED).getOrElse(false),
-        redeliveries = repr.redeliveries,
-        confirms = confirms,
-        confirmable = repr.confirmable,
-        confirmMessage = repr.confirmMessage,
-        confirmTarget = repr.confirmTarget,
-        sender = repr.sender)
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
+    journal.find(journalRangeQuery(pid, from, to))
+           .projection(BSONDocument(EVENTS -> 1))
+           .cursor[BSONDocument]()
+           .foldWhile(ISeq.empty[Event])(unwind(to),{ case(_,thr) => Cursor.Fail(thr)})
+
+  private[this] def unwind(maxSeq: Long)(s: ISeq[Event], doc: BSONDocument) = {
+    val docs = doc.as[BSONArray](EVENTS).values.collect {
+      case d:BSONDocument => driver.deserializeJournal(d)
+    }.filter(_.sn <= maxSeq).sorted
+    if (docs.last.sn < maxSeq) Cursor.Cont(s ++ docs)
+    else Cursor.Done(s ++ docs)
+  }
+
+  private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
+    if (wr.ok) Success(())
+    else throw wr
+  }
+
+  private[this] def bulkResultToUnit(bulk: ISeq[Try[BSONDocument]])(wr: MultiBulkWriteResult): ISeq[Try[Unit]] = {
+    if (wr.ok) bulk.map(t => t.map(_ => ()))
+    else
+      throw ReactiveMongoException( ("MongoException" :: wr.errmsg.toList ++ wr.writeErrors) mkString "\n" )
+  }
+
+  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
+    val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw))))
+    if (batch.forall(_.isSuccess)) {
+      val collected = batch.collect { case scala.util.Success(ser) => ser }
+      journal.bulkInsert(collected, ordered = true).map(bulkResultToUnit(batch))
+    } else {
+      Future.sequence(batch.map {
+        case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
+        case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+      })
     }
   }
 
-  implicit object PersistentReprWriter extends BSONDocumentWriter[PersistentRepr] {
-
-    def write(persistent: PersistentRepr): BSONDocument = {
-      val content: BSONValue = persistent.payload match {
-        case b: BSONDocument =>
-          Seq {
-            Option(persistent.sender).filterNot(_ == driver.actorSystem.deadLetters).flatMap(serialization.serialize(_).toOption).map(SenderKey -> _)
-            Option(persistent.redeliveries).filterNot(_ == 0).map(RedeliveriesKey -> _)
-            Option(persistent.confirmable).filter(identity).map(ConfirmableKey -> _)
-            Option(persistent.confirmMessage).flatMap(serialization.serialize(_).toOption).map(ConfirmMessageKey -> _)
-            Option(persistent.confirmTarget).flatMap(serialization.serialize(_).toOption).map(ConfirmTargetKey -> _)
-          }.collect {
-            case Some(bb) => bb
-          }.map(BSONDocument(_)).foldLeft(BSONDocument(PayloadKey -> b))(_ ++ _)
-        case _ =>
-          implicitly[BSONHandler[BSONBinary, Array[Byte]]].write(serialization.serialize(persistent).get)
-      }
-
-      BSONDocument(PROCESSOR_ID -> persistent.processorId,
-        SEQUENCE_NUMBER -> persistent.sequenceNr,
-        DELETED -> persistent.deleted,
-        CONFIRMS -> persistent.confirms,
-        SERIALIZED -> content)
-    }
+  private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
+    val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
+    val update = BSONDocument(
+      "$pull" -> BSONDocument(
+        EVENTS -> BSONDocument(
+          PROCESSOR_ID -> persistenceId,
+          SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr)
+        )),
+      "$set" -> BSONDocument(FROM -> (toSequenceNr + 1))
+    )
+    val remove = BSONDocument("$and" ->
+      BSONArray(
+        BSONDocument(PROCESSOR_ID -> persistenceId),
+        BSONDocument(EVENTS -> BSONDocument("$size" -> 0))
+      ))
+    for {
+      wr <- journal.update(query, update, writeConcern, upsert = false, multi = true)
+        if wr.ok
+      wr <- journal.remove(remove, writeConcern)
+    } yield ()
   }
-
-  private[this] def journalEntryQuery(pid: String, seq: Long) =
-    BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq)
-
-  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
-    BSONDocument(PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> BSONDocument("$gte" -> from, "$lte" -> to))
-
-  private[mongodb] override def journalEntry(pid: String, seq: Long)(implicit ec: ExecutionContext) =
-    journal.find(journalEntryQuery(pid, seq)).one[PersistentRepr]
-
-  private[mongodb] override def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
-    journal.find(journalRangeQuery(pid, from, to)).cursor[PersistentRepr].collect[Vector]().map(_.iterator.asInstanceOf[Iterator[PersistentRepr]])
-
-  private[mongodb] override def appendToJournal(persistent: TraversableOnce[PersistentRepr])(implicit ec: ExecutionContext) =
-    journal.bulkInsert(persistent.toStream.map(PersistentReprWriter.write), ordered = true, writeConcern).map(_ => ())
-
-  private[this] def hardOrSoftDelete(query: BSONDocument, permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] = {
-    val result =
-      if (permanent) {
-        journal.remove(query, writeConcern)
-      } else {
-        journal.update(query, BSONDocument("$set" -> BSONDocument(DELETED -> true)), writeConcern, multi = true)
-      }
-    result.map(_ => ())
-  }
-
-  private[mongodb] override def deleteAllMatchingJournalEntries(ids: ISeq[PersistentId], permanent: Boolean)(implicit ec: ExecutionContext): Future[Unit] = {
-    Future.reduce(ids.map { pi =>
-      hardOrSoftDelete(journalEntryQuery(pi.processorId, pi.sequenceNr), permanent)
-    })((r, u) => u)
-  }
-
-  private[mongodb] override def deleteJournalEntries(pid: String, from: Long, to: Long, permanent: Boolean)(implicit ec: ExecutionContext) = {
-    val query = journalRangeQuery(pid, from, to)
-    hardOrSoftDelete(query, permanent)
-  }
-
-  private[mongodb] override def confirmJournalEntries(confirms: ISeq[PersistentConfirmation])(implicit ec: ExecutionContext) = {
-    val grouped = confirms.groupBy(c => (c.persistenceId, c.sequenceNr))
-
-    Future.reduce(grouped.map { case ((id, seq), groupedConfirms) =>
-      val channels = groupedConfirms.map(c => c.channelId).toSeq
-      val update = BSONDocument("$push" -> BSONDocument(CONFIRMS -> BSONDocument("$each" -> channels)))
-      journal.update(
-        journalEntryQuery(id, seq),
-        update,
-        writeConcern
-      ).map(_ => ())
-    })((u, t) => u)
-  }
-
 
   private[mongodb] override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) =
     journal.find(BSONDocument(PROCESSOR_ID -> pid))
-      .sort(BSONDocument(SEQUENCE_NUMBER -> -1))
-      .cursor[PersistentRepr]
+      .projection(BSONDocument(TO -> 1))
+      .sort(BSONDocument(TO -> -1))
+      .cursor[BSONDocument]()
       .headOption
-      .map(l => l.map(_.sequenceNr).getOrElse(0L))
+      .map(d => d.flatMap(_.getAs[Long](TO)).getOrElse(0L))
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
     if (max == 0L) Future.successful(())
     else {
-      val cursor = journal
-        .find(journalRangeQuery(pid, from, to))
-        .cursor[PersistentRepr]
-
-      val maxInt = toInt(max)
-
-      val it = Iteratee.fold2[PersistentRepr, Int](maxInt) {
-        case (remaining, el) =>
-          replayCallback(el)
-          Future.successful((remaining - 1, remaining <= 1))
-      }
-      cursor.enumerate(maxInt, stopOnError = true).run(it).map(_ => ())
+      val maxInt = max.toIntWithoutWrapping
+      journalRange(pid, from, to).map(_.take(maxInt).map(_.toRepr).foreach(replayCallback))
     }
-
-  private[this] def toInt(long: Long): Int = {
-    if (long > Int.MaxValue) {
-      Int.MaxValue
-    } else {
-      long.intValue
-    }
-  }
-
-  private[this] def journal(implicit ec: ExecutionContext) = {
-    val journal = driver.collection(driver.journalCollectionName)
-    journal.indexesManager.ensure(new Index(
-      key = Seq((PROCESSOR_ID, IndexType.Ascending),
-        (SEQUENCE_NUMBER, IndexType.Ascending),
-        (DELETED, IndexType.Ascending)),
-      background = true,
-      unique = true,
-      name = Some(driver.journalIndexName)))
-    journal
-  }
 
 }

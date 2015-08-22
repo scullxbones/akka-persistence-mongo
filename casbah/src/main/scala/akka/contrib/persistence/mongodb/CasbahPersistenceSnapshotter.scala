@@ -57,13 +57,15 @@ object CasbahPersistenceSnapshotter {
       V1.SERIALIZED -> serialization.serializerFor(classOf[SelectedSnapshot]).toBinary(snapshot))
 }
 
-class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends MongoPersistenceSnapshottingApi {
+class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersistenceSnapshottingApi {
 
   import CasbahPersistenceSnapshotter._
   import SnapshottingFieldNames._
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
+
+  private[this] def snaps(implicit ec: ExecutionContext) = driver.snaps
 
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =
     $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $lte maxSeq, TIMESTAMP $lte maxTs)
@@ -81,17 +83,12 @@ class CasbahPersistenceSnapshotter(driver: CasbahPersistenceDriver) extends Mong
     snaps.insert(snapshot, writeConcern)
   }
 
-  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
-    snaps.remove($and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq, TIMESTAMP $eq ts), writeConcern)
+  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = Future {
+    val criteria = Seq(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq) ++ Option(TIMESTAMP $eq ts).filter(_ => ts > 0).toList
+    snaps.remove($and(criteria : _*), writeConcern)
+  }
 
-  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
+  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
-
-
-  private[mongodb] def snaps(implicit ec: ExecutionContext): MongoCollection = {
-    val snapsCollection = driver.collection(driver.snapsCollectionName)
-    snapsCollection.ensureIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1),
-      MongoDBObject("unique" -> true, "name" -> driver.snapsIndexName))
-    snapsCollection
   }
 }

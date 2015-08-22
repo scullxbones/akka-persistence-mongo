@@ -29,7 +29,8 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
 trait MongoPersistenceExtension extends Extension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
-  def registry: MetricRegistry = MongoPersistenceBase.registry
+  def readJournal: MongoPersistenceReadJournallingApi
+  def registry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
 class MongoSettings(val systemSettings: ActorSystem.Settings) {
@@ -65,6 +66,7 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
   val JournalWriteConcern = config.getString("journal-write-concern")
   val JournalWTimeout = config.getDuration("journal-wtimeout",MILLISECONDS).millis
   val JournalFSync = config.getBoolean("journal-fsync")
+  val JournalAutomaticUpgrade = config.getBoolean("journal-automatic-upgrade")
 
   val SnapsCollection = config.getString("snaps-collection")
   val SnapsIndex = config.getString("snaps-index")
@@ -76,4 +78,6 @@ class MongoSettings(val systemSettings: ActorSystem.Settings) {
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
   val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
+
+  val ReadJournalPerFillLimit = config.getInt("journal-read-fill-limit")
 }

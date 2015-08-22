@@ -1,13 +1,15 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.persistence.PersistentRepr
+import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
-import reactivemongo.bson.BSONDocument
+import reactivemongo.bson._
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.{Success, Failure}
+import scala.collection.immutable.{Seq => ISeq}
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -30,35 +32,41 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   "A reactive mongo journal implementation" should "insert journal records" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.appendToJournal(records)
+      inserted <- underTest.batchAppend(ISeq(AtomicWrite(records)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
-    } yield (range,head)
-    val (range,head) = await(inserted)
-    range should have size 3
+    } yield (range, head)
+    val (range, head) = await(inserted)
+    range should have size 1
 
-    val recone = head.get
+    underTest.journalRange("unit-test",1,3) onComplete {
+      case Failure(t) => t.printStackTrace()
+      case Success(unwrap) => unwrap.foreach(println)
+    }
+
+    val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+      case e: BSONDocument => e
+    }).head
     recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
-    recone.getAs[Boolean](DELETED) shouldBe Some(false)
   } }
 
   it should "insert records with documents as payload" in new Fixture { withJournal { journal =>
     val inserted = for {
-      inserted <- underTest.appendToJournal(documents)
+      inserted <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
       head <- journal.find(BSONDocument()).cursor().headOption
     } yield (range,head)
     val (range,head) = await(inserted)
-    range should have size 3
+    range should have size 1
 
-    val recone = head.get
+    val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+      case e: BSONDocument => e
+    }).head
     recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
-    recone.getAs[Boolean](DELETED) shouldBe Some(false)
-    recone.getAs[BSONDocument](SERIALIZED) foreach { s =>
-      s.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
-    }
+    recone.getAs[String](TYPE) shouldBe Some("bson")
+    recone.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
   } }
 
 }

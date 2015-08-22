@@ -1,30 +1,29 @@
 package akka.contrib.persistence.mongodb
 
-import java.util.{List => JList}
-
 import akka.actor.ActorSystem
-import akka.persistence.{PersistentConfirmation, PersistentId, PersistentRepr}
+import akka.persistence._
 import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
 import com.mongodb.casbah.Imports._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
-import scala.collection.JavaConverters._
-import scala.collection.immutable.{Seq => ISeq}
 import scala.collection.mutable
 import scala.language.postfixOps
-
-case class PersistentConfirmationImpl(persistenceId: String, sequenceNr: Long, channelId: String) extends PersistentConfirmation
-case class PersistentIdImpl(processorId: String, sequenceNr: Long) extends PersistentId
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
 
-  import akka.contrib.persistence.mongodb.CasbahPersistenceJournaller._
-  import akka.contrib.persistence.mongodb.JournallingFieldNames._
+  import collection.immutable.{Seq => ISeq}
+  import CasbahSerializers.Deserializer._
+  import CasbahSerializers.Serializer._
+  import JournallingFieldNames._
 
   implicit val serialization = SerializationExtension(system)
+
+  implicit class PimpedDBObject(dbo: DBObject) {
+    def firstEvent = dbo.as[MongoDBList](EVENTS).as[DBObject](0)
+  }
 
   trait Fixture {
     val underTest = new CasbahPersistenceJournaller(driver)
@@ -33,210 +32,107 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in new Fixture {
 
-    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, persistenceId = "pid")
+    val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = "TEST")))
 
-    val serialized = serializeJournal(repr)
+    val serialized = serializeAtom(repr)
 
-    serialized(PROCESSOR_ID) should be("pid")
-    serialized(DELETED) should ===(false)
-    serialized(SEQUENCE_NUMBER) should be(1)
+    val atom = serialized
 
-    val deserialized = deserializeJournal(serialized)
+    atom.getAs[String](PROCESSOR_ID) shouldBe Some("pid")
+    atom.getAs[Long](FROM) shouldBe Some(1L)
+    atom.getAs[Long](TO) shouldBe Some(1L)
 
-    deserialized.payload should be("TEST")
-    deserialized.persistenceId should be("pid")
-    deserialized.deleted should ===(false)
-    deserialized.sequenceNr should be(1)
+    val deserialized = deserializeDocument(serialized.firstEvent)
 
-  }
-
-  it should "serialize and deserialize confirmable data" in new Fixture {
-    val repr = PersistentRepr(payload = "TEST", sequenceNr = 1, persistenceId = "pid", confirmable = true, confirms = ISeq("uno"))
-
-    val serialized = serializeJournal(repr)
-
-    serialized(PROCESSOR_ID) should be("pid")
-    serialized(DELETED) should ===(false)
-    serialized(SEQUENCE_NUMBER) should be(1)
-
-    serialized(CONFIRMS).asInstanceOf[Seq[_]] should have size 1
-    serialized(CONFIRMS).asInstanceOf[Seq[_]] should contain("uno")
-
-    val deserialized = deserializeJournal(serialized)
-
-    deserialized.payload should be("TEST")
-    deserialized.processorId should be("pid")
-    deserialized.deleted should ===(false)
-    deserialized.sequenceNr should be(1)
-    deserialized.confirms should contain("uno")
+    deserialized.payload shouldBe StringPayload("TEST")
+    deserialized.pid should be("pid")
+    deserialized.sn should be(1)
+    deserialized.manifest shouldBe empty
+    deserialized.sender shouldBe empty
   }
 
   it should "create an appropriate index" in new Fixture { withJournal { journal =>
-      underTest.journal
+    driver.journal
 
-      val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
-      idx("unique") should ===(true)
-      idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))
-    }
-  }
+    val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
+    idx("unique") should ===(true)
+    idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1, TO -> 1))
+  }}
 
   it should "insert journal records" in new Fixture { withJournal { journal =>
-      underTest.appendToJournal(records)
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
-      journal.size should be(3)
+    journal.size should be(1)
 
-      val recone = journal.head
-      recone(PROCESSOR_ID) should be("unit-test")
-      recone(SEQUENCE_NUMBER) should be(1)
-      recone(DELETED) should ===(false)
-      recone(CONFIRMS).asInstanceOf[JList[_]] shouldBe empty
-    }
-  }
+    val atom = journal.head
+
+
+    atom(PROCESSOR_ID) should be("unit-test")
+    atom(FROM) should be(1)
+    atom(TO) should be(3)
+    val event = atom.as[MongoDBList](EVENTS).as[DBObject](0)
+    event(PROCESSOR_ID) should be("unit-test")
+    event(SEQUENCE_NUMBER) should be(1)
+    event(PayloadKey) should be("payload")
+  }}
 
   it should "hard delete journal entries" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
-      underTest.deleteJournalEntries("unit-test", 1, 2, permanent = true)
+    underTest.deleteFrom("unit-test", 2L)
 
-      journal.size should be(1)
-      val recone = journal.head
-      recone(PROCESSOR_ID) should be("unit-test")
-      recone(SEQUENCE_NUMBER) should be(3)
-      recone(DELETED) should ===(false)
-    }
-  }
+    journal.size should be(1)
+    val recone = journal.head
+    recone(PROCESSOR_ID) should be("unit-test")
+    recone(FROM) should be(3)
+    recone(TO) should be(3)
+    val events = recone.as[MongoDBList](EVENTS)
+    events should have size 1
+  }}
   
-  it should "hard delete all journal entries by key" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
+  it should "replay journal entries for a single atom" in new Fixture { withJournal { journal =>
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
-      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
-      
-      underTest.deleteAllMatchingJournalEntries(ids, permanent = true)
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
+    buf should have size 2
+    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
+  }}
 
-      journal.size should be(1)
-      val recone = journal.head
-      recone(PROCESSOR_ID) should be("unit-test")
-      recone(SEQUENCE_NUMBER) should be(3)
-      recone(DELETED) should ===(false)
-  	}
-  }
+  it should "replay journal entries for multiple atoms" in new Fixture { withJournal { journal =>
+    records.foreach(r => underTest.batchAppend(ISeq(AtomicWrite(r))))
 
-  it should "soft delete journal entries" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
-
-      underTest.deleteJournalEntries("unit-test", 1, 2, permanent = false)
-
-      journal.size should be(3)
-      val recone = journal.head
-      recone(PROCESSOR_ID) should be("unit-test")
-      recone(SEQUENCE_NUMBER) should be(1)
-      recone(DELETED) should ===(true)
-
-      val rectwo = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 2)).get
-      rectwo(SEQUENCE_NUMBER) should be(2)
-      rectwo(DELETED) should ===(true)
-
-      val recthree = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 3)).get
-      recthree(SEQUENCE_NUMBER) should be(3)
-      recthree(DELETED) should ===(false)
-    }
-  }
-
-  it should "soft delete all journal entries by key" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
-
-      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
-      
-      underTest.deleteAllMatchingJournalEntries(ids, permanent = false)
-
-      journal.size should be(3)
-      val recone = journal.head
-      recone(PROCESSOR_ID) should be("unit-test")
-      recone(SEQUENCE_NUMBER) should be(1)
-      recone(DELETED) should ===(true)
-
-      val rectwo = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 2)).get
-      rectwo(SEQUENCE_NUMBER) should be(2)
-      rectwo(DELETED) should ===(true)
-
-      val recthree = journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> 3)).get
-      recthree(SEQUENCE_NUMBER) should be(3)
-      recthree(DELETED) should ===(false)
-    }
-  }
-
-  it should "confirm journal entries" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
-
-      
-      val confirms = List(1, 2, 3).flatMap { sq =>
-        List(PersistentConfirmationImpl("unit-test", sq, "1chan"),
-            PersistentConfirmationImpl("unit-test", sq, "2chan"),
-            PersistentConfirmationImpl("unit-test", sq, "3chan"))
-      }
-      
-      underTest.confirmJournalEntries(PersistentConfirmationImpl("unit-test", 1, "4chan") :: confirms)
-
-      val consone :: constwo :: consthree :: _ = List(1, 2, 3).map { sq =>
-        journal.findOne(MongoDBObject(SEQUENCE_NUMBER -> sq)).get(CONFIRMS).asInstanceOf[JList[String]].asScala
-      }
-
-      consone should contain inOrder ("4chan", "1chan", "2chan", "3chan")
-      constwo should contain only ("1chan", "2chan", "3chan")
-      consthree should contain only ("1chan", "2chan", "3chan")
-    }
-  }
-
-  it should "replay journal entries" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
-
-      var buf = mutable.Buffer[PersistentRepr]()
-      val result = underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
-      buf should have size 2
-      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
-    }
-  }
-
-  it should "not replay deleted journal entries" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
-
-      val ids = List(1,2).map { seq => PersistentIdImpl("unit-test",seq) }
-      
-      underTest.deleteAllMatchingJournalEntries(ids, permanent = true)
-      
-      var buf = mutable.Buffer[PersistentRepr]()
-      underTest.replayJournal("unit-test", 1, 15, 10)(buf += _).value.get.get
-      buf should have size 1
-      buf should contain(PersistentRepr(payload = "payload", sequenceNr = 3, persistenceId = "unit-test"))
-    }
-  }
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
+    buf should have size 2
+    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
+  }}
 
   it should "have a default sequence nr when journal is empty" in new Fixture { withJournal { journal =>
-      val result = underTest.maxSequenceNr("unit-test", 5).value.get.get
-      result should be (0)
-    }
-  }
+    val result = underTest.maxSequenceNr("unit-test", 5).value.get.get
+    result should be (0)
+  }}
 
   it should "calculate the max sequence nr" in new Fixture { withJournal { journal =>
-      journal.insert(records: _*)
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
 
-      val result = underTest.maxSequenceNr("unit-test", 2).value.get.get
-      result should be (3)
-    }
-  }
+    val result = underTest.maxSequenceNr("unit-test", 2).value.get.get
+    result should be (3)
+  }}
 
   it should "support BSON payloads as MongoDBObjects" in new Fixture { withJournal { journal =>
     val documents = List(1,2,3).map(sn => PersistentRepr(persistenceId = "unit-test", sequenceNr = sn, payload = MongoDBObject("foo" -> "bar", "baz" -> 1)))
-    underTest.appendToJournal(documents)
-    val results = journal.find().toList
-    results should have size 3
+    underTest.batchAppend(ISeq(AtomicWrite(documents)))
+    val results = journal.find().limit(1)
+      .one()
+      .as[MongoDBList](EVENTS).collect({case x:DBObject => x})
+
     val first = results.head
-    first.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
-    first.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
-    first.getAs[Boolean](DELETED) shouldBe Some(false)
-    val blob = first.getAs[MongoDBObject](SERIALIZED).get
-    val payload = blob.getAs[MongoDBObject](PayloadKey).get
-    payload.getAs[String]("foo") shouldBe Some("bar")
-    payload.getAs[Int]("baz") shouldBe Some(1)
+    first.getAs[String](PROCESSOR_ID) shouldBe Option("unit-test")
+    first.getAs[Long](SEQUENCE_NUMBER) shouldBe Option(1)
+    first.getAs[String](TYPE) shouldBe Option("bson")
+    val payload = first.as[MongoDBObject](PayloadKey)
+    payload.getAs[String]("foo") shouldBe Option("bar")
+    payload.getAs[Int]("baz") shouldBe Option(1)
   }}
 }

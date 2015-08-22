@@ -31,7 +31,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
     serialized(TIMESTAMP) should be(100)
 
     val deserialized = deserializeSnapshot(serialized)
-    deserialized.metadata.processorId should be("unit-test")
+    deserialized.metadata.persistenceId should be("unit-test")
     deserialized.metadata.sequenceNr should be(10)
     deserialized.metadata.timestamp should be(100)
     deserialized.snapshot should be("snapshot-data")
@@ -39,7 +39,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "create an appropriate index" in new Fixture {
     withSnapshot { snapshot =>
-      underTest.snaps
+      driver.snaps
       val idx = snapshot.getIndexInfo.filter(obj => obj("name").equals(driver.snapsIndexName)).head
       idx("unique") should ===(true)
       idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
@@ -50,7 +50,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
     withSnapshot { snapshot =>
       snapshot.insert(records: _*)
 
-      underTest.findYoungestSnapshotByMaxSequence("unit-test", 10, 10).value.get.get shouldBe (None)
+      underTest.findYoungestSnapshotByMaxSequence("unit-test", 10, 10).value.get.get shouldBe None
     }
   }
 
@@ -141,7 +141,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       underTest.deleteMatchingSnapshots("unit-test", 30, 350)
       snapshot.size should be(1)
 
-      snapshot.findOne($and(PROCESSOR_ID $eq "unit-test", SEQUENCE_NUMBER $eq 30, TIMESTAMP $eq 10000)) should be('defined)
+      snapshot.findOne($and(PROCESSOR_ID $eq "unit-test", SEQUENCE_NUMBER $eq 30, TIMESTAMP $eq 10000)) shouldBe defined
 
     }
   }

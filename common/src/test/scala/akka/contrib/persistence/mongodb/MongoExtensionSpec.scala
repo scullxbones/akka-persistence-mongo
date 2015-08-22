@@ -26,5 +26,7 @@ class StubbyMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPer
   override def journaler: MongoPersistenceJournallingApi = null
 
   override def snapshotter: MongoPersistenceSnapshottingApi = null
+
+  override def readJournal: MongoPersistenceReadJournallingApi = null
 }
 

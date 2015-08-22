@@ -1,10 +1,10 @@
-val releaseV = "0.4.2"
+val releaseV = "1.0.0-SNAPSHOT"
 
 val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.3.12"
+val AkkaV = "2.4-M3"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -29,34 +29,37 @@ val pomXtra = {
 }
 
 val commonDeps = Seq(
-  ("com.typesafe.akka" %% "akka-persistence-experimental" % AkkaV % "provided")
+  ("com.typesafe.akka" %% "akka-persistence" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  "nl.grons" %% "metrics-scala" % "3.3.0_a2.3",
+  ("nl.grons" %% "metrics-scala" % "3.5.1_a2.3")
+    .exclude("com.typesafe.akka", "akka-actor_2.10")
+    .exclude("com.typesafe.akka", "akka-actor_2.11"),
+  "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaV % "provided",
+  "org.mongodb" % "mongo-java-driver" % "2.13.1" % "test",
+  "org.slf4j" % "slf4j-simple" % "1.7.12" % "test",
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
-  "org.scalamock" %% "scalamock-scalatest-support" % "3.2.1" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
-  "com.github.simplyscala" %% "scalatest-embedmongo" % "0.2.2" % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.0" % "test",
-  "org.mongodb" % "mongo-java-driver" % "2.12.4" % "test",
+  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.2" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
-  "com.typesafe.akka" %% "akka-persistence-tck-experimental" % AkkaV % "test"
+  "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test"
 )
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
   libraryDependencies ++= commonDeps,
-  crossScalaVersions := Seq("2.10.5", scalaV),
   version := releaseV,
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
-  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
+  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-target:jvm-1.8"),
+  javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint"),
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
-  )
+  ),
+  parallelExecution in Test := false
 )
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
@@ -76,7 +79,9 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.reactivemongo" %% "reactivemongo" % "0.11.6" % "provided"
+      ("org.reactivemongo" %% "reactivemongo" % "0.11.6" % "provided")
+        .exclude("com.typesafe.akka","akka-actor_2.10")
+        .exclude("com.typesafe.akka","akka-actor_2.11")
     )
   )
 
