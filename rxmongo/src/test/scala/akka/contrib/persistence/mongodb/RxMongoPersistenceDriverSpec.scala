@@ -64,14 +64,16 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
   override def embedDB = "admin"
   override def auth = new AuthenticatingCommandLinePostProcessor()
 
+  val authMode = if(envMongoVersion.contains("3.0")) "?authMode=scram-sha1" else ""
+
   val authConfig = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin?authMode=scram-sha1"
+        | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin$authMode"
         |}
       """.stripMargin)
 
-  "A secured mongodb instance" should "be connectable via user and pass" ignore withConfig(authConfig,"authentication-config") { actorSystem =>
+  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"authentication-config") { actorSystem =>
     val underTest = new RxMongoDriver(actorSystem)
     val collections = Await.result(underTest.db.collectionNames,3.seconds)
     collections should contain ("system.users")

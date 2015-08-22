@@ -100,10 +100,6 @@ object RxMongoSerializers {
         writerUuid = d.getAs[String](WRITER_UUID)
       )
 
-//    private def deserializePayload2(d: BSONDocument): Payload = {
-//      Payload[BSONDocument](d.getAs[String](TYPE).get,d.getAs[Any](PayloadKey).get,d.getAs[String](HINT))
-//    }
-
     private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
       case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
         val clazz = Class.forName(clazzName.get)
@@ -111,13 +107,8 @@ object RxMongoSerializers {
       case ("bson",d:BSONDocument) => Bson(d)
       case ("bin",BSONBinary(bfr, _)) => Bin(bfr.readArray(bfr.size))
       case ("s",BSONString(s)) => StringPayload(s)
-      case ("d",BSONDouble(d)) => DoublePayload(d)
-      case ("f",BSONDouble(d)) => FloatPayload(d.toFloat)
-      case ("l",BSONLong(l)) => LongPayload(l)
-      case ("i",BSONInteger(i)) => IntPayload(i)
-      case ("sh",BSONInteger(i)) => ShortPayload(i.toShort)
-      case ("by",BSONInteger(i)) => BytePayload(i.toByte)
-      case ("c",BSONInteger(i)) => CharPayload(i.toChar)
+      case ("d",BSONDouble(d)) => FloatingPointPayload(d)
+      case ("l",BSONLong(l)) => FixedPointPayload(l)
       case ("b",BSONBoolean(bln)) => BooleanPayload(bln)
       case (x,y) => throw new IllegalArgumentException(s"Unknown hint $x or type for payload content $y")
     }
@@ -181,13 +172,8 @@ object RxMongoSerializers {
           BSONDocument(PayloadKey -> BSON.write(s.bytes),
                        HINT -> s.clazz.getName)
         case StringPayload(str) => BSONDocument(PayloadKey -> str)
-        case DoublePayload(dbl) => BSONDocument(PayloadKey -> dbl)
-        case FloatPayload(f) => BSONDocument(PayloadKey -> BSONDouble(f))
-        case IntPayload(i) => BSONDocument(PayloadKey -> i)
-        case LongPayload(l) => BSONDocument(PayloadKey -> l)
-        case ShortPayload(s) => BSONDocument(PayloadKey -> BSONInteger(s))
-        case BytePayload(by) => BSONDocument(PayloadKey -> BSONInteger(by))
-        case CharPayload(c) => BSONDocument(PayloadKey -> BSONInteger(c))
+        case FloatingPointPayload(dbl) => BSONDocument(PayloadKey -> dbl)
+        case FixedPointPayload(lng) => BSONDocument(PayloadKey -> lng)
         case BooleanPayload(bl) => BSONDocument(PayloadKey -> bl)
         case x => throw new IllegalArgumentException(s"Unable to serialize payload of type $x")
       }

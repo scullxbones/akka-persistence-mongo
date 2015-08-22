@@ -51,7 +51,7 @@ trait EmbeddedMongo {
   def embedDB: String = "test"
   def auth: (MongoCmdOptionsBuilder => MongoCmdOptionsBuilder) with Authentication = new NoOpCommandLinePostProcessor
 
-  private def envMongoVersion = Option(System.getenv("MONGODB_VERSION")).orElse(Option("3.0"))
+  def envMongoVersion = Option(System.getenv("MONGODB_VERSION")).orElse(Option("3.0"))
   def overrideOptions: MongoCmdOptionsBuilder => MongoCmdOptionsBuilder = auth andThen useWiredTigerOn30
 
   def useWiredTigerOn30(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder =

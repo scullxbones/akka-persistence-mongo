@@ -99,13 +99,8 @@ object CasbahSerializers extends JournallingFieldNames {
         case Bin(bytes) => builder += PayloadKey -> bytes
         case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.clazz.getName :: Nil)
         case StringPayload(str) => builder += PayloadKey -> str
-        case DoublePayload(d) => builder += PayloadKey -> d
-        case FloatPayload(f) => builder += PayloadKey -> f
-        case IntPayload(i) => builder += PayloadKey -> i
-        case LongPayload(l) => builder += PayloadKey -> l
-        case ShortPayload(s) => builder += PayloadKey -> s
-        case BytePayload(by) => builder += PayloadKey -> by
-        case CharPayload(c) => builder += PayloadKey -> c
+        case FloatingPointPayload(d) => builder += PayloadKey -> d
+        case FixedPointPayload(l) => builder += PayloadKey -> l
         case BooleanPayload(bl) => builder += PayloadKey -> bl
       }
     }
