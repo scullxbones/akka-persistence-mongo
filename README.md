@@ -295,7 +295,7 @@ akka {
           journal-wtimeout = 3s
           journal-fsync = false
 
-          snaps-collection = "akka_persistsence_snaps"
+          snaps-collection = "akka_persistence_snaps"
           snaps-index = "akka_persistence_snaps_index"
           snaps-write-concern = "Journaled"
           snaps-wtimeout = 3s
