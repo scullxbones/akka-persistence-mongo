@@ -13,7 +13,7 @@
 
 ### Quick Start
 
-* Choose a driver - Casbah and ReactiveMongo are supported
+* Choose a driver - Casbah and ReactiveMongo are currently supported
 * Add the following to sbt:
 
 (Casbah)
@@ -38,6 +38,13 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Read Journal](#readjournal)
    * [Miscellaneous](#miscchanges)
 1. [Configuration Details](#config)
+   * [Mongo URI](#mongouri)
+   * [Collection and Index](#mongocollection)
+   * [Write Concerns](#writeconcern)
+   * [Circuit Breaker / Fail Fast](#circuitbreaker)
+   * [Dispatcher](#dispatcher)
+   * [Pass-Through BSON](#passthru)
+   * [Metrics](#metrics)
 
 <a name="major"/>
 ### Major Changes in 1.x
@@ -101,4 +108,151 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 <a name="config"/>
 #### Configuration
 
-MORE TO COME
+<a name="mongouri"/>
+##### Mongo URI
+
+A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
+
+For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
+
+```
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2:27017/replicated-database"
+```
+
+<a name="mongocollection"/>
+##### Mongo Collection, Index settings
+
+A DB name can be specified, as can the names of the collections and indices used (one for journal, one for snapshots).
+
+```
+akka.contrib.persistence.mongodb.mongo.journal-collection = "my_persistent_journal"
+akka.contrib.persistence.mongodb.mongo.journal-index = "my_journal_index"
+akka.contrib.persistence.mongodb.mongo.snaps-collection = "my_persistent_snapshots"
+akka.contrib.persistence.mongodb.mongo.snaps-index = "my_snaps_index"
+akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
+```
+
+<a name="writeconcern"/>
+##### Mongo Write Concern settings
+
+This is well described in the [MongoDB Write Concern Documentation](http://docs.mongodb.org/manual/core/write-concern/)
+
+The write concern can be set both for the journal plugin as well as the snapshot plugin.  Every level of write concern is supported.  The possible concerns are listed below in decreasing safety:
+
+ * `ReplicaAcknowledged` - requires a replica to acknowledge the write, this confirms that at least two servers have seen the write
+ * `Journaled` <DEFAULT> - requires that the change be journaled on the server that was written to.  Other replicas may not see this write on a network partition
+ * `Acknowledged` - also known as "Safe", requires that the MongoDB server acknowledges the write.  This does not require that the change be persistent anywhere but memory.
+ * `Unacknowledged` - does not require the MongoDB server to acknowledge the write.  It may raise an error in cases of network issues.  This was the default setting that MongoDB caught a lot of flak for, as it masked errors in exchange for straight-line speed.  This is no longer a default in the driver.
+ * ~~`ErrorsIgnored` - !WARNING! Extremely unsafe.  This level may not be able to detect if the MongoDB server is even running.  It will also not detect errors such as key collisions.  This makes data loss likely.  In general, don't use this.~~
+ * Errors ignored is no longer supported as a write concern.
+
+It is a bad idea&trade; to use anything less safe than `Acknowledged` on the journal.  The snapshots can be played a bit more fast and loose, but the recommendation is not to go below `Acknowledged` for any serious work.
+
+As a single data point (complete with grain of salt!) on a MBP i5 w/ SSD with [Kodemaniak's testbed](https://github.com/kodemaniak/akka-persistence-throughput-test) and mongodb running on the same physical machine, the performance difference between:
+ * `Journaled` and `Acknowledged` write concerns is two orders of magnitude
+ * `Acknowledged` and both `Unacknowledged` and `ErrorsIgnored` write concerns is one order of magnitude
+
+`Journaled` is a significant trade off of straight line performance for safety, and should be benchmarked vs. `Acknowledged` for your specific use case and treated as an engineering cost-benefit decision.  The argument for the unsafe pair of `Unacknowledged` and `ErrorsIgnored` vs. `Acknowledged` seems to be much weaker, although the functionality is left for the user to apply supersonic lead projectiles to their phalanges as necessary :).
+
+In addition to the mode of write concern, the `wtimeout` and `fsync` parameters may be configured seperately for the journal and snapshot.  FSync cannot be used with Journaling, so it will be disabled in that case.
+
+Default values below:
+```
+akka.contrib.persistence.mongodb.mongo.journal-wtimeout = 3s
+akka.contrib.persistence.mongodb.mongo.journal-fsync = false
+akka.contrib.persistence.mongodb.mongo.snaps-wtimeout = 3s
+akka.contrib.persistence.mongodb.mongo.snaps-fsync = false
+```
+
+<a name="circuitbreaker"/>
+##### Circuit breaker settings
+
+By default the circuit breaker is set up with a `maxTries` of 5, and `callTimeout` and `resetTimeout` of 5s.  [Akka's circuit breaker documentation](http://doc.akka.io/docs/akka/snapshot/common/circuitbreaker.html) covers in detail what these settings are used for.  In the context of this plugin, you can set these in the following way:
+
+```
+akka.contrib.persistence.mongodb.mongo.breaker.maxTries = 3
+akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 3s
+akka.contrib.persistence.mongodb.mongo.breaker.timeout.reset = 10s
+```
+
+These settings may need tuning depending on your particular environment.  If you are seeing `CircuitBreakerOpenException`s in the log without other errors that can mean that timeouts are occurring.  Make sure to look at the mongo slow logs as part of the research.  Here are some prior tickets where these issues have been discussed in the past (including an explanation of how to disable the Circuit Breaker):
+
+[1](https://github.com/scullxbones/akka-persistence-mongo/issues/24)
+[2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
+
+<a name="dispatcher"/>
+##### Configuring the dispatcher used
+
+The name `akka-contrib-persistence-dispatcher` is mapped to a typically configured `ThreadPoolExecutor` based dispatcher.  This is needed to support the `Future`s used to interact with MongoDB via Casbah.  More details on these settings can be found in the [Akka Dispatcher documentation](http://doc.akka.io/docs/akka/snapshot/scala/dispatchers.html).  For example the (by core-scaled) pool sizes can be set:
+
+```
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-min = 10
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-factor = 10
+akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
+```
+
+
+<a name="passthru"/>
+##### Passing DB objects directly into journal collection
+
+If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONDocument` (using reactivemongo).
+
+```scala
+case class Command(value: String)
+case class SampleState(counter: Int, lastValue: Option[String])
+
+class SampleActor extends PersistentActor {
+  
+  var state = SampleState(0,None)
+
+  def updateState(event: DBObject): Unit = {
+    state = state.copy(counter = state.counter + 1, lastValue = event.getAs[String]("value"))
+  }
+
+  val receiveCommand: Receive = {
+    case Command(value) =>
+      persist(DBObject("value" -> value))(updateState)
+  }
+
+  // receiveRecover implementation, etc rest of class 
+}
+
+```
+
+During replay, events will be sent to your actor as-is. It is the application's duty to handle BSON (de)serialization in this case.
+
+This functionality is also exposed for snapshots.
+
+<a name="metrics"/>
+##### Metrics (optional functionality)
+
+Depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
+
+For this implementation, no assumptions are made about how the results are reported.  Unfortunately this means you need to inject your own reporters.  This will require you to refer to the extension in your own code, e.g.:
+
+```scala
+
+object MyApplication {
+
+  val actorSystem = ActorSystem("my-application")
+  val registry = MongoPersistenceExtension(actorSystem).registry
+  val jmxReporter = JmxReporter.forRegistry(registry).build()
+  jmxReporter.start()
+
+}
+
+```
+
+##### What is measured?
+Timers:
+ - Journal append
+ - Journal range delete
+ - Journal replays
+ - Journal max sequence number for processor query
+
+Histograms:
+ - Batch sizes used for appends
+
+#### Future plans?
+ - Adding metrics to snapshotter
+ - Adding health checks to both
