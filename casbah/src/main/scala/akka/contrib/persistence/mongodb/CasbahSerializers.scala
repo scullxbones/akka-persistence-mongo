@@ -27,7 +27,7 @@ object CasbahSerializers extends JournallingFieldNames {
     private def deserializeVersionOne(d: DBObject)(implicit serialization: Serialization, system: ActorSystem) = Event(
       pid = d.as[String](PROCESSOR_ID),
       sn = d.as[Long](SEQUENCE_NUMBER),
-      payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT)),
+      payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT),d.getAs[String](SER_MANIFEST)),
       sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
       manifest = d.getAs[String](MANIFEST),
       writerUuid = d.getAs[String](WRITER_UUID)
@@ -48,7 +48,7 @@ object CasbahSerializers extends JournallingFieldNames {
           )
         case _ =>
           val content = d.as[Array[Byte]](SERIALIZED)
-          val repr = Serialized(content, classOf[PersistentRepr])
+          val repr = Serialized(content, classOf[PersistentRepr], None)
           Event[DBObject](repr.content).copy(pid = persistenceId, sn = sequenceNr)
 //            pid = persistenceId,
 //            sn = sequenceNr,
@@ -97,7 +97,7 @@ object CasbahSerializers extends JournallingFieldNames {
       payload match {
         case Bson(doc: DBObject) => builder += PayloadKey -> doc
         case Bin(bytes) => builder += PayloadKey -> bytes
-        case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.clazz.getName :: Nil)
+        case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.clazz.getName :: SER_MANIFEST -> s.serializedManifest :: Nil)
         case StringPayload(str) => builder += PayloadKey -> str
         case FloatingPointPayload(d) => builder += PayloadKey -> d
         case FixedPointPayload(l) => builder += PayloadKey -> l

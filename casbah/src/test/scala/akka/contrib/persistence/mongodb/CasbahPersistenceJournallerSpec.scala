@@ -9,6 +9,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
 import scala.collection.mutable
+import scala.concurrent.Await
 import scala.language.postfixOps
 
 @RunWith(classOf[JUnitRunner])
@@ -27,7 +28,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   trait Fixture {
     val underTest = new CasbahPersistenceJournaller(driver)
-    val records:List[PersistentRepr] = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test") }
+    val records:List[PersistentRepr] = List(1, 2, 3).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test", manifest = "M") }
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in new Fixture {
@@ -74,6 +75,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     event(PROCESSOR_ID) should be("unit-test")
     event(SEQUENCE_NUMBER) should be(1)
     event(PayloadKey) should be("payload")
+    event(MANIFEST) should be ("M")
   }}
 
   it should "hard delete journal entries" in new Fixture { withJournal { journal =>
@@ -96,7 +98,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val buf = mutable.Buffer[PersistentRepr]()
     underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
     buf should have size 2
-    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
+    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test", manifest = "M"))
   }}
 
   it should "replay journal entries for multiple atoms" in new Fixture { withJournal { journal =>
@@ -105,7 +107,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val buf = mutable.Buffer[PersistentRepr]()
     underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
     buf should have size 2
-    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test"))
+    buf should contain(PersistentRepr(payload = "payload", sequenceNr = 2, persistenceId = "unit-test", manifest = "M"))
   }}
 
   it should "have a default sequence nr when journal is empty" in new Fixture { withJournal { journal =>
@@ -134,5 +136,37 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val payload = first.as[MongoDBObject](PayloadKey)
     payload.getAs[String]("foo") shouldBe Option("bar")
     payload.getAs[Int]("baz") shouldBe Option(1)
+  }}
+
+  import concurrent.duration._
+  it should "support Serializable w/ Manifest payloads like cluster sharding ones" in new Fixture { withJournal {journal =>
+    val ar = system.deadLetters
+    val msg = akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionRegistered(ar)
+    val withSerializedObjects = records.map(_.withPayload(msg))
+    val result =  underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+
+    val writeResult = Await.result(result,5.seconds)
+    writeResult.foreach(wr => wr shouldBe 'success)
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
+    buf should have size 2
+    buf should contain(PersistentRepr(payload = msg, sequenceNr = 2, persistenceId = "unit-test", manifest = "M"))
+
+  }}
+
+  it should "support old-school Serializable payloads" in new Fixture { withJournal {journal =>
+    val msg = system.deadLetters
+    val withSerializedObjects = records.map(_.withPayload(msg))
+    val result =  underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+
+    val writeResult = Await.result(result,5.seconds)
+    writeResult.foreach(wr => wr shouldBe 'success)
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(buf += _).value.get.get
+    buf should have size 2
+    buf should contain(PersistentRepr(payload = msg, sequenceNr = 2, persistenceId = "unit-test", manifest = "M"))
+
   }}
 }

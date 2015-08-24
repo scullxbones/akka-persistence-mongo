@@ -43,7 +43,8 @@ val commonDeps = Seq(
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
   "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.2" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
-  "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test"
+  "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test",
+  "com.typesafe.akka" %% "akka-cluster-sharding" % AkkaV % "test"
 )
 
 val commonSettings = Seq(
@@ -52,8 +53,29 @@ val commonSettings = Seq(
   version := releaseV,
   organization := "com.github.scullxbones",
   pomExtra := pomXtra,
-  scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-target:jvm-1.8"),
-  javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint"),
+  scalacOptions ++= Seq(
+    "-unchecked",
+    "-deprecation",
+    "-encoding", "UTF-8",       // yes, this is 2 args
+    "-feature",
+    "-language:existentials",
+    "-language:higherKinds",
+    "-language:implicitConversions",
+    "-Xfatal-warnings",
+    "-Xlint",
+    "-Yno-adapted-args",
+    "-Ywarn-dead-code",        // N.B. doesn't work well with the ??? hole
+    "-Ywarn-numeric-widen",
+    "-Ywarn-value-discard",
+    "-Xfuture",
+    "-Ywarn-unused-import",     // 2.11 only
+    "-target:jvm-1.8"
+  ),
+  javacOptions ++= Seq(
+    "-source", "1.8",
+    "-target", "1.8",
+    "-Xlint"
+  ),
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",

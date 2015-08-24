@@ -55,15 +55,16 @@ class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(act
       waitForAuthentication(unauthenticatedConnection, auth)
     }
 
+  implicit val waitFor = 4.seconds
   private[this] def waitForPrimary(conn: MongoConnection): MongoConnection = {
-    wait(conn.waitForPrimary(3.seconds),4.seconds)
+    wait(conn.waitForPrimary(waitFor minus 1.seconds))
     conn
   }
   private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password), 3.seconds)
+    wait(conn.authenticate(auth.db, auth.user, auth.password))
     conn
   }
-  private[this] def wait[T](awaitable: Awaitable[T], duration: Duration): T =
+  private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
   def walk(collection: BSONCollection)(previous: Future[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Cursor.State[Future[WriteResult]] = {

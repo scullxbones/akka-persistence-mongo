@@ -3,10 +3,11 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorRef
 import akka.persistence.query.EventEnvelope
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.Serialization
+import akka.serialization.{SerializerWithStringManifest, Serialization}
 
 import scala.collection.immutable.{Seq => ISeq}
-import scala.util.{Failure, Success}
+import scala.language.existentials
+import scala.util.{Try, Failure, Success}
 
 sealed trait Payload {
   type Content
@@ -22,20 +23,33 @@ case class Bson[D: DocumentType](content: D) extends Payload {
   val hint = "bson"
 }
 
-case class Serialized[C](bytes: Array[Byte], clazz: Class[C])(implicit ser: Serialization) extends Payload {
+case class Serialized[C <: AnyRef](bytes: Array[Byte], clazz: Class[C], serializedManifest: Option[String])(implicit ser: Serialization) extends Payload {
   type Content = C
 
   val hint = "ser"
-  val content = ser.deserialize(bytes, clazz) match {
-    case Success(deser) => deser
-    case Failure(x) => throw x
+  lazy val content = {
+    val tried = ser.serializerFor(clazz) match {
+      case s:SerializerWithStringManifest =>
+        ser.deserialize(bytes,s.identifier,serializedManifest.getOrElse(clazz.getName))
+      case s => ser.deserialize(bytes, clazz).asInstanceOf[Try[AnyRef]]
+    }
+
+    tried match {
+      case Success(deser) => deser.asInstanceOf[C]
+      case Failure(x) => throw x
+    }
   }
 }
 
 object Serialized {
   def apply(any: AnyRef)(implicit ser: Serialization) = {
     val clazz = any.getClass
-    new Serialized(ser.serializerFor(clazz).toBinary(any),clazz)
+    ser.findSerializerFor(any) match {
+      case s:SerializerWithStringManifest =>
+        new Serialized(s.toBinary(any), clazz, Option(s.manifest(any)))
+      case s =>
+        new Serialized(s.toBinary(any), clazz, None)
+    }
   }
 }
 
@@ -84,7 +98,7 @@ object Payload {
   implicit def bln2payload(bool: Boolean): BooleanPayload = BooleanPayload(bool)
   implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf)
 
-  def apply[D](any: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Payload = any match {
+  def apply[D](payload: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Payload = payload match {
     case d:D => Bson(d)
     case bytes: Array[Byte] => Bin(bytes)
     case str: String => StringPayload(str)
@@ -95,10 +109,10 @@ object Payload {
     case x => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
   }
 
-  def apply[D](hint: String, any: Any, clazzName: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
+  def apply[D](hint: String, any: Any, clazzName: Option[String], serManifest: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
     case ("ser",ser:Array[Byte]) if clazzName.isDefined =>
-      val clazz = Class.forName(clazzName.get)
-      Serialized(ser,clazz)
+      val clazz = Class.forName(clazzName.get).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
+      Serialized(ser, clazz, serManifest)
     case ("bson",d:D) => Bson(d)
     case ("bin",b:Array[Byte]) => Bin(b)
     case ("s",s:String) => StringPayload(s)

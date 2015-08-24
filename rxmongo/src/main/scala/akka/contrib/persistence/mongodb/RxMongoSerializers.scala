@@ -94,13 +94,13 @@ object RxMongoSerializers {
       Event(
         pid = d.as[String](PROCESSOR_ID),
         sn = d.as[Long](SEQUENCE_NUMBER),
-        payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT)),
+        payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT),d.getAs[String](SER_MANIFEST)),
         sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
         manifest = d.getAs[String](MANIFEST),
         writerUuid = d.getAs[String](WRITER_UUID)
       )
 
-    private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
+    private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String], serializedManifest: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
       case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
         val clazz = Class.forName(clazzName.get)
         Serialized(bfr.readArray(bfr.size),clazz)
@@ -170,7 +170,8 @@ object RxMongoSerializers {
         case Bin(bytes) => BSONDocument(PayloadKey -> bytes)
         case s: Serialized[_] =>
           BSONDocument(PayloadKey -> BSON.write(s.bytes),
-                       HINT -> s.clazz.getName)
+                       HINT -> s.clazz.getName,
+                       SER_MANIFEST -> s.serializedManifest)
         case StringPayload(str) => BSONDocument(PayloadKey -> str)
         case FloatingPointPayload(dbl) => BSONDocument(PayloadKey -> dbl)
         case FixedPointPayload(lng) => BSONDocument(PayloadKey -> lng)
