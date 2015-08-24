@@ -15,8 +15,10 @@ class MongoExtensionSpec extends BaseUnitTest {
 
     try {
       MongoPersistenceExtension.get(system) // Should not throw an exception
+      ()
     } finally {
       system.terminate()
+      ()
     }
   }
 

@@ -44,7 +44,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
     val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
-    val pull = MongoDBObject(
+    val update:DBObject = MongoDBObject(
       "$pull" -> MongoDBObject(
         EVENTS -> MongoDBObject(
           PROCESSOR_ID -> persistenceId,
@@ -52,7 +52,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
         )),
       "$set" -> MongoDBObject(FROM -> (toSequenceNr+1))
     )
-    journal.update(query, pull, upsert = false, multi = true, writeConcern)
+    journal.update(query, update, upsert = false, multi = true, writeConcern)
     journal.remove($and(query, EVENTS $size 0), writeConcern)
     ()
   }

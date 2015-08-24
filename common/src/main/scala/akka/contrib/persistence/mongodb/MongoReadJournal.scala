@@ -111,6 +111,7 @@ trait NonBlockingBufferingActorPublisher[A] extends ActorPublisher[A] {
     implicit val ec = context.dispatcher
 
     if (totalDemand > 0) next(offset).map{ case(v,o) => More(v,o) }.pipeTo(context.self)
+    ()
   }
 
   protected final def drainBuf(buf: Vector[A]): Vector[A] = {

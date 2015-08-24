@@ -14,11 +14,11 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
 
   override def embedDB = "upgrade-test"
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 

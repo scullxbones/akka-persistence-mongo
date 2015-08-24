@@ -81,14 +81,17 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
 
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = Future {
     snaps.insert(snapshot, writeConcern)
+    ()
   }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = Future {
     val criteria = Seq(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq) ++ Option(TIMESTAMP $eq ts).filter(_ => ts > 0).toList
     snaps.remove($and(criteria : _*), writeConcern)
+    ()
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
+    ()
   }
 }

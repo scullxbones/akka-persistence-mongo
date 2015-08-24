@@ -20,12 +20,12 @@ object JournalTckSpec extends EmbeddedMongo {
 abstract class JournalTckSpec(extensionClass: Class[_])
   extends JournalSpec(JournalTckSpec.config(extensionClass)) with BeforeAndAfterAll {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     JournalTckSpec.doBefore()
     super.beforeAll()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     super.afterAll()
     JournalTckSpec.doAfter()
   }

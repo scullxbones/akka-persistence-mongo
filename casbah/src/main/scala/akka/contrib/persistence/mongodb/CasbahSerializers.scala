@@ -50,13 +50,6 @@ object CasbahSerializers extends JournallingFieldNames {
           val content = d.as[Array[Byte]](SERIALIZED)
           val repr = Serialized(content, classOf[PersistentRepr], None)
           Event[DBObject](repr.content).copy(pid = persistenceId, sn = sequenceNr)
-//            pid = persistenceId,
-//            sn = sequenceNr,
-//            payload = repr,
-//            sender = Option(repr.content.sender),
-//            manifest = None,
-//            writerUuid = None
-//          )
       }
 
     }
@@ -102,6 +95,7 @@ object CasbahSerializers extends JournallingFieldNames {
         case FloatingPointPayload(d) => builder += PayloadKey -> d
         case FixedPointPayload(l) => builder += PayloadKey -> l
         case BooleanPayload(bl) => builder += PayloadKey -> bl
+        case x => throw new IllegalArgumentException(s"Unable to serialize payload for unknown type ${x.getClass.getName} with hint ${payload.hint}")
       }
     }
   }

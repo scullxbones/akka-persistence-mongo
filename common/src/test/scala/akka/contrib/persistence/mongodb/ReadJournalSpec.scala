@@ -17,11 +17,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   override def embedDB = "read-journal-test"
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 
@@ -51,6 +51,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       readJournal.query(EventsByPersistenceId("foo"))
         .runForeach(_.getClass shouldBe classOf[UnsupportedOperationException])
     }
+    ()
   }
 
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))

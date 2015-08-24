@@ -102,8 +102,8 @@ object RxMongoSerializers {
 
     private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String], serializedManifest: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
       case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
-        val clazz = Class.forName(clazzName.get)
-        Serialized(bfr.readArray(bfr.size),clazz)
+        val clazz = Class.forName(clazzName.get).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
+        Serialized(bfr.readArray(bfr.size), clazz, serializedManifest)
       case ("bson",d:BSONDocument) => Bson(d)
       case ("bin",BSONBinary(bfr, _)) => Bin(bfr.readArray(bfr.size))
       case ("s",BSONString(s)) => StringPayload(s)

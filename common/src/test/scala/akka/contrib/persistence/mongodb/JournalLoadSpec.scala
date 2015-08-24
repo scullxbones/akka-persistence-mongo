@@ -17,11 +17,11 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
 
   override def embedDB = "load-test"
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 

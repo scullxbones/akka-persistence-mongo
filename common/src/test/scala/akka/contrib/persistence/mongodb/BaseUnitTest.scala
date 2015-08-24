@@ -21,6 +21,7 @@ object ConfigLoanFixture {
     } finally {
       actorSystem.terminate()
       Await.result(actorSystem.whenTerminated, 3.seconds)
+      ()
     }
   }
 }

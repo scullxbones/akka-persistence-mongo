@@ -18,12 +18,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   trait Fixture {
     val underTest = new CasbahPersistenceSnapshotter(driver)
-    val records = List(10, 20, 30).map { sq =>
-      SelectedSnapshot(SnapshotMetadata("unit-test", sq, 10 * sq), "snapshot-data")
-    } :+ SelectedSnapshot(SnapshotMetadata("unit-test", 30, 10000), "snapshot-data")
+    val records = List(10L, 20L, 30L).map { sq =>
+      SelectedSnapshot(SnapshotMetadata("unit-test", sq, 10L * sq), "snapshot-data")
+    } :+ SelectedSnapshot(SnapshotMetadata("unit-test", 30L, 10000L), "snapshot-data")
   }
 
-  "A mongo snapshot implementation" should "serialize and deserialize snapshots" in new Fixture {
+  "A mongo snapshot implementation" should "serialize and deserialize snapshots" in { new Fixture {
     val snapshot = records.head
     val serialized = serializeSnapshot(snapshot)
     serialized(PROCESSOR_ID) should be("unit-test")
@@ -36,8 +36,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
     deserialized.metadata.timestamp should be(100)
     deserialized.snapshot should be("snapshot-data")
   }
+  () }
 
-  it should "create an appropriate index" in new Fixture {
+  it should "create an appropriate index" in { new Fixture {
     withSnapshot { snapshot =>
       driver.snaps
       val idx = snapshot.getIndexInfo.filter(obj => obj("name").equals(driver.snapsIndexName)).head
@@ -45,16 +46,18 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
     }
   }
+  () }
 
-  it should "find nothing by sequence where time is earlier than first snapshot" in new Fixture {
+  it should "find nothing by sequence where time is earlier than first snapshot" in { new Fixture {
     withSnapshot { snapshot =>
       snapshot.insert(records: _*)
 
       underTest.findYoungestSnapshotByMaxSequence("unit-test", 10, 10).value.get.get shouldBe None
     }
   }
+  () }
 
-  it should "find a prior sequence where time is earlier than first snapshot for the max sequence" in new Fixture {
+  it should "find a prior sequence where time is earlier than first snapshot for the max sequence" in { new Fixture {
     withSnapshot { snapshot =>
       snapshot.insert(records: _*)
 
@@ -62,8 +65,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
         Some(SelectedSnapshot(SnapshotMetadata("unit-test", 20, 200), "snapshot-data"))
     }
   }
+  () }
 
-  it should "find the first snapshot by sequence where time is between the first and second snapshot" in new Fixture {
+  it should "find the first snapshot by sequence where time is between the first and second snapshot" in { new Fixture {
     withSnapshot { snapshot =>
       snapshot.insert(records: _*)
 
@@ -71,8 +75,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
         Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 300), "snapshot-data"))
     }
   }
+  () }
 
-  it should "find the last snapshot by sequence where time is after the second snapshot" in new Fixture {
+  it should "find the last snapshot by sequence where time is after the second snapshot" in { new Fixture {
     withSnapshot { snapshot =>
       snapshot.insert(records: _*)
 
@@ -80,8 +85,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
         Some(SelectedSnapshot(SnapshotMetadata("unit-test", 30, 10000), "snapshot-data"))
     }
   }
+  () }
 
-  it should "save a snapshot" in new Fixture {
+  it should "save a snapshot" in { new Fixture {
     withSnapshot { snapshot =>
 
       snapshot.insert(records: _*)
@@ -94,8 +100,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       saved(TIMESTAMP) should be(1000)
     }
   }
+  () }
 
-  it should "not delete non-existent snapshots" in new Fixture {
+  it should "not delete non-existent snapshots" in { new Fixture {
     withSnapshot { snapshot =>
 
       snapshot.insert(records: _*)
@@ -106,8 +113,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
     }
   }
+  () }
 
-  it should "only delete the specified snapshot" in new Fixture {
+  it should "only delete the specified snapshot" in { new Fixture {
     withSnapshot { snapshot =>
 
       snapshot.insert(records: _*)
@@ -120,8 +128,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       result should be('defined)
     }
   }
+  () }
 
-  it should "delete nothing if nothing matches the criteria" in new Fixture {
+  it should "delete nothing if nothing matches the criteria" in { new Fixture {
     withSnapshot { snapshot =>
 
       snapshot.insert(records: _*)
@@ -131,8 +140,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
     }
   }
+  () }
 
-  it should "delete only what matches the criteria" in new Fixture {
+  it should "delete only what matches the criteria" in { new Fixture {
     withSnapshot { snapshot =>
 
       snapshot.insert(records: _*)
@@ -145,8 +155,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
     }
   }
+  () }
 
-  it should "read legacy snapshot formats" in new Fixture {
+  it should "read legacy snapshot formats" in { new Fixture {
     withSnapshot { snapshot =>
       val legacies = records.map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
       snapshot.insert(legacies: _*)
@@ -157,8 +168,9 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       }
     }
   }
+  () }
 
-  it should "read mixed snapshot formats" in new Fixture {
+  it should "read mixed snapshot formats" in { new Fixture {
     withSnapshot { snapshot =>
       val legacies = records.take(2).map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
       val newVersions = records.drop(2).map(CasbahPersistenceSnapshotter.serializeSnapshot)
@@ -170,4 +182,5 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       }
     }
   }
+  () }
 }

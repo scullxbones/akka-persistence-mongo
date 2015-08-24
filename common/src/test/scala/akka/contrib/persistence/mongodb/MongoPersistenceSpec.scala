@@ -8,8 +8,8 @@ import scala.concurrent.ExecutionContext
 trait MongoPersistenceSpec[D,C] extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll { self: TestKit =>
 
   implicit val callerRuns = new ExecutionContext {
-    def reportFailure(t: Throwable) { t.printStackTrace() }
-    def execute(runnable: Runnable) { runnable.run() }
+    def reportFailure(t: Throwable): Unit = { t.printStackTrace() }
+    def execute(runnable: Runnable): Unit = { runnable.run() }
   }
 
   def driver:D
@@ -20,11 +20,11 @@ trait MongoPersistenceSpec[D,C] extends BaseUnitTest with EmbeddedMongo with Bef
 
   def withSnapshot(testCode: C => Any):Any
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 }

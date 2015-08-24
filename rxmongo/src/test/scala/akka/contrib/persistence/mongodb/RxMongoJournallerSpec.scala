@@ -22,15 +22,15 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   trait Fixture {
     val underTest = new RxMongoJournaller(driver)
-    val records:List[PersistentRepr] = List(1, 2, 3).map { sq =>
+    val records:List[PersistentRepr] = List(1L, 2L, 3L).map { sq =>
       PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test")
     }
-    val documents:List[PersistentRepr]  = List(10, 20, 30).map { sq =>
+    val documents:List[PersistentRepr]  = List(10L, 20L, 30L).map { sq =>
       PersistentRepr(payload = BSONDocument("foo" -> "bar", "baz" -> 1), sequenceNr = sq, persistenceId = "unit-test")
     }
   }
 
-  "A reactive mongo journal implementation" should "insert journal records" in new Fixture { withJournal { journal =>
+  "A reactive mongo journal implementation" should "insert journal records" in { new Fixture { withJournal { journal =>
     val inserted = for {
       inserted <- underTest.batchAppend(ISeq(AtomicWrite(records)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
@@ -49,9 +49,11 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     }).head
     recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
-  } }
 
-  it should "insert records with documents as payload" in new Fixture { withJournal { journal =>
+  } }
+  () }
+
+  it should "insert records with documents as payload" in { new Fixture { withJournal { journal =>
     val inserted = for {
       inserted <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
       range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
@@ -67,6 +69,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
     recone.getAs[String](TYPE) shouldBe Some("bson")
     recone.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
+    ()
   } }
+  () }
 
 }

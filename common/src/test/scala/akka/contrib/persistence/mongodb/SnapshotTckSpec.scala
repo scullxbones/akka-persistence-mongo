@@ -21,12 +21,12 @@ object SnapshotTckSpec extends EmbeddedMongo {
 abstract class SnapshotTckSpec(extensionClass: Class[_])
   extends SnapshotStoreSpec(SnapshotTckSpec.config(extensionClass)) with BeforeAndAfterAll {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     SnapshotTckSpec.doBefore()
     super.beforeAll()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     super.afterAll()
     SnapshotTckSpec.doAfter()
   }

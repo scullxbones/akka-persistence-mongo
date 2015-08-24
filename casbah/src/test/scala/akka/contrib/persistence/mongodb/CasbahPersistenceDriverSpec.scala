@@ -13,11 +13,11 @@ import ConfigLoanFixture._
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 
@@ -35,6 +35,7 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
     intercept[IllegalStateException] {
       underTest.db.stats()
     }
+    ()
   }
 
 
@@ -48,17 +49,18 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
     val underTest2 = new CasbahMongoDriver(newAs)
     underTest2.db.collectionNames()
     newAs.terminate()
+    ()
   }
 }
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     doBefore()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     doAfter()
   }
 
@@ -76,5 +78,6 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo wi
     val underTest = new CasbahMongoDriver(actorSystem)
     val collections = underTest.db.collectionNames()
     collections should contain ("system.users")
+    ()
   }
 }

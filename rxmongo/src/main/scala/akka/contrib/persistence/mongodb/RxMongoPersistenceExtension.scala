@@ -30,7 +30,7 @@ object RxMongoPersistenceDriver {
   }
 }
 
-class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(actorSystem) {
+class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) {
   import RxMongoPersistenceDriver._
   import concurrent.Await
   import concurrent.duration._
@@ -79,7 +79,7 @@ class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(act
 
     // Wait for previous record to be updated
     val wr = previous.flatMap(_ =>
-      collection.update(BSONDocument("_id" -> id), serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))
+      collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))
     )
 
     Cursor.Cont(wr)
@@ -114,7 +114,7 @@ class RxMongoDriver(actorSystem: ActorSystem) extends MongoPersistenceDriver(act
 
   private[mongodb] def closeConnections(): Unit = driver.close()
 
-  private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(actorSystem.dispatcher)
+  private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)

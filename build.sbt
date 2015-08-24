@@ -61,7 +61,7 @@ val commonSettings = Seq(
     "-language:existentials",
     "-language:higherKinds",
     "-language:implicitConversions",
-    "-Xfatal-warnings",
+    // "-Xfatal-warnings",      Deprecations keep from enabling this
     "-Xlint",
     "-Yno-adapted-args",
     "-Ywarn-dead-code",        // N.B. doesn't work well with the ??? hole

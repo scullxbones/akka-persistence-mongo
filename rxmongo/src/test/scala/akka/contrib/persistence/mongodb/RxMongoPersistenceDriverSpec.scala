@@ -37,6 +37,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
     intercept[IllegalStateException] {
       Await.result(underTest.showCollections,3.seconds).size
     }
+    ()
   }
 
 
@@ -51,7 +52,9 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
       Await.result(underTest2.showCollections, 3.seconds).size should be(0)
     } finally {
       test2.terminate()
+      ()
     }
+    ()
   }
 }
 
@@ -77,5 +80,6 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
     val underTest = new RxMongoDriver(actorSystem)
     val collections = Await.result(underTest.db.collectionNames,3.seconds)
     collections should contain ("system.users")
+    ()
   }
 }

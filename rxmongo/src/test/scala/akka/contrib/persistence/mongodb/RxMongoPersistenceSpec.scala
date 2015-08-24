@@ -26,12 +26,14 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
 
   val driver = new SpecDriver
 
-  def withCollection(name: String)(testCode: BSONCollection => Any) = {
+  def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
     val collection = specDb[BSONCollection](name)
     try {
       testCode(collection)
+      ()
     } finally {
       Await.ready(collection.drop(),3.seconds)
+      ()
     }
   }
 
