@@ -89,10 +89,11 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
   * The implementation of queries are purely up to the journal developer
   * The `ReadJournal` interface provides plenty of leeway for metadata being exposed as well via `Materialized Values of Queries`
   * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
-* Initially two queries are supported.  Both are non-live for the moment, and thus would complete when no more records are available:
+* Initially three queries are supported.  Both are non-live for the moment, and thus would complete when no more records are available:
 1. `AllPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
+1. `EventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
 1. `akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-* Eventually i'd like to support live versions of these queries, plus the `EventsByPersistenceId` query.
+* Eventually i'd like to support live versions of these queries, probably via a tailable cursor.
 * I'll look for community feedback about what driver-specific queries might be useful as well
 
 <a name="miscchanges"/>
