@@ -18,11 +18,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.0"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -179,6 +179,8 @@ These settings may need tuning depending on your particular environment.  If you
 
 [1](https://github.com/scullxbones/akka-persistence-mongo/issues/24)
 [2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
+
+Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`. 
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used
