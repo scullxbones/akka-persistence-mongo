@@ -3,6 +3,7 @@ language: scala
 scala:
    - 2.11.7
 env:
+  matrix:
    - MONGODB_VERSION=2.6
    - MONGODB_VERSION=3.0
   global:
