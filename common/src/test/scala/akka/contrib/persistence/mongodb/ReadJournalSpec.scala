@@ -45,7 +45,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     implicit val system = as
     implicit val mat = ActorMaterializer()
     val readJournal =
-      PersistenceQuery(as).readJournalFor("akka-contrib-mongodb-persistence-readjournal")
+      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
 
     eventually {
       readJournal.query(EventsByPersistenceId("foo"))
@@ -92,7 +92,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(promise.future, 10.seconds)
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor("akka-contrib-mongodb-persistence-readjournal")
+      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
 
     val fut = readJournal.query(AllEvents).runFold(events.toSet){ (received, ee) =>
       val asAppend = Append(ee.event.asInstanceOf[String])
@@ -119,10 +119,37 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(Future.sequence(futures), 10.seconds)
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor("akka-contrib-mongodb-persistence-readjournal")
+      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
 
     val fut = readJournal.query(AllPersistenceIds).runFold(Seq.empty[String])(_ :+ _)
 
     Await.result(fut,10.seconds) should contain allOf("1","2","3","4","5")
+  }
+
+  it should "support the events by id query" in withConfig(config(extensionClass)) { as =>
+    import concurrent.duration._
+    implicit val system = as
+    implicit val mat = ActorMaterializer()
+
+    val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
+
+    val promise = Promise[Unit]()
+    val ar = as.actorOf(props("foo",promise))
+
+    events foreach (ar ! _)
+
+    Await.result(promise.future, 10.seconds)
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
+
+    val fut = readJournal.query(EventsByPersistenceId("foo",0L,2L)).runFold(events.toSet){(received, ee) =>
+      println(s"Received so far $received, envelope = $ee")
+      val asAppend = Append(ee.event.asInstanceOf[String])
+      events should contain (asAppend)
+      received - asAppend
+    }
+
+    Await.result(fut,10.seconds).map(_.s) shouldBe Set("just","a","test","END")
   }
 }

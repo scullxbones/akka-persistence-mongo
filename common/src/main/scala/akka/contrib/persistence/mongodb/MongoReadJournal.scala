@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.{Props, Actor, ExtendedActorSystem}
 import akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents
-import akka.persistence.query.{EventEnvelope, AllPersistenceIds, Hint, Query}
+import akka.persistence.query._
 import akka.persistence.query.scaladsl.ReadJournal
 import akka.stream.actor.{ActorPublisherMessage, ActorPublisher}
 import akka.stream.scaladsl.Source
@@ -10,6 +10,8 @@ import akka.stream.scaladsl.Source
 import scala.concurrent.Future
 
 object MongoReadJournal {
+  val Identifier = "akka-contrib-mongodb-persistence-readjournal"
+
   case object AllEvents extends Query[EventEnvelope, Unit]
 }
 
@@ -22,6 +24,8 @@ class MongoReadJournal(system: ExtendedActorSystem) extends ReadJournal {
       Source.actorPublisher[EventEnvelope](impl.allPersistenceIds(hints:_*)).asInstanceOf[Source[T,M]]
     case AllEvents =>
       Source.actorPublisher[EventEnvelope](impl.allEvents(hints:_*)).asInstanceOf[Source[T,M]]
+    case EventsByPersistenceId(persistenceId, fromSeq, toSeq) =>
+      Source.actorPublisher[EventEnvelope](impl.eventsByPersistenceId(persistenceId, fromSeq, toSeq, hints:_*)).asInstanceOf[Source[T,M]]
     case unsupported =>
       failed(q).asInstanceOf[Source[T,M]]
   }
@@ -34,6 +38,7 @@ class MongoReadJournal(system: ExtendedActorSystem) extends ReadJournal {
 trait MongoPersistenceReadJournallingApi {
   def allPersistenceIds(hints: Hint*): Props
   def allEvents(hints: Hint*): Props
+  def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props
 }
 
 trait BufferingActorPublisher[A] extends ActorPublisher[A] {
@@ -72,6 +77,10 @@ trait BufferingActorPublisher[A] extends ActorPublisher[A] {
       }
     } else buf
   }
+
+  def driver: MongoPersistenceDriver
+
+  protected def fillLimit = math.min(driver.settings.ReadJournalPerFillLimit,totalDemand.toIntWithoutWrapping)
 
   protected def next(previousOffset: Long): (Vector[A], Long)
 }
@@ -126,6 +135,10 @@ trait NonBlockingBufferingActorPublisher[A] extends ActorPublisher[A] {
       }
     } else buf
   }
+
+  def driver: MongoPersistenceDriver
+
+  protected def fillLimit = math.min(driver.settings.ReadJournalPerFillLimit,totalDemand.toIntWithoutWrapping)
 
   protected def next(previousOffset: Long): Future[(Vector[A], Long)]
 }

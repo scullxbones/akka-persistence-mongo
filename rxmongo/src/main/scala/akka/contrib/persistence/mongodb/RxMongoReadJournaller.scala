@@ -12,45 +12,41 @@ object AllEvents {
   def props(driver: RxMongoDriver) = Props(new AllEvents(driver))
 }
 
-class AllEvents(driver: RxMongoDriver) extends NonBlockingBufferingActorPublisher[EventEnvelope] {
+class AllEvents(val driver: RxMongoDriver) extends NonBlockingBufferingActorPublisher[EventEnvelope] {
   import RxMongoSerializers._
   import JournallingFieldNames._
-
-  val perFillLimit = driver.settings.ReadJournalPerFillLimit
-
-  private def fillLimit = math.min(perFillLimit,totalDemand.toIntWithoutWrapping)
-
-  private def folder(accum: (Vector[EventEnvelope], Long), doc: BSONDocument): Cursor.State[(Vector[EventEnvelope], Long)] = {
-    val (vec,offset) = accum
-    val envs = doc.as[BSONArray](EVENTS).values.collect {
-      case d:BSONDocument => driver.deserializeJournal(d)
-    }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(offset + idx + 1)}
-    Cursor.Cont((vec ++ envs, offset + envs.size))
-  }
 
   override protected def next(previousOffset: Long): Future[(Vector[EventEnvelope], Long)] = {
     implicit val ec = context.dispatcher
     driver.journal
       .find(BSONDocument())
       .sort(BSONDocument(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
-      .options(QueryOpts(skipN = previousOffset.toIntWithoutWrapping))
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
-      .foldWhile(z = (Vector.empty[EventEnvelope],previousOffset), maxDocs = fillLimit)(folder, (_,t) => Cursor.Fail(t))
+      .foldWhile(z = (Vector.empty[EventEnvelope],0L), maxDocs = fillLimit)(folder(previousOffset), (_,t) => Cursor.Fail(t))
   }
 
+  private def folder(skip: Long)(accum: (Vector[EventEnvelope], Long), doc: BSONDocument): Cursor.State[(Vector[EventEnvelope], Long)] = {
+    val (vec,offset) = accum
+    val envs = doc.as[BSONArray](EVENTS).values.collect {
+      case d:BSONDocument => driver.deserializeJournal(d)
+    }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(offset + idx + 1)}
+
+    val newOffset = offset + envs.size
+    if ((envs.size.toLong + offset) > skip) {
+      val dropped = envs.drop( (skip - offset).toIntWithoutWrapping )
+      if (dropped.nonEmpty) Cursor.Cont((vec ++ dropped, newOffset))
+      else Cursor.Done(vec -> newOffset)
+    } else Cursor.Cont(vec -> newOffset)
+  }
 }
 
 object AllPersistenceIds {
   def props(driver: RxMongoDriver) = Props(new AllPersistenceIds(driver))
 }
 
-class AllPersistenceIds(driver: RxMongoDriver) extends NonBlockingBufferingActorPublisher[String] {
+class AllPersistenceIds(val driver: RxMongoDriver) extends NonBlockingBufferingActorPublisher[String] {
   import JournallingFieldNames._
-
-  val perFillLimit = driver.settings.ReadJournalPerFillLimit
-
-  private def fillLimit = math.min(perFillLimit,totalDemand.toIntWithoutWrapping)
 
   override protected def next(previousOffset: Long): Future[(Vector[String], Long)] = {
     implicit val ec = context.dispatcher
@@ -66,8 +62,49 @@ class AllPersistenceIds(driver: RxMongoDriver) extends NonBlockingBufferingActor
   }
 }
 
+object EventsByPersistenceId {
+  def props(driver:RxMongoDriver,persistenceId:String,fromSeq:Long,toSeq:Long):Props =
+    Props(new EventsByPersistenceId(driver,persistenceId,fromSeq,toSeq))
+}
+
+class EventsByPersistenceId(val driver:RxMongoDriver,persistenceId:String,fromSeq:Long,toSeq:Long) extends NonBlockingBufferingActorPublisher[EventEnvelope] {
+  import JournallingFieldNames._
+  import RxMongoSerializers._
+
+  override protected def next(previousOffset: Long): Future[(Vector[EventEnvelope], Long)] = {
+    implicit val ec = context.dispatcher
+    val q = BSONDocument(
+      PROCESSOR_ID -> persistenceId,
+      FROM -> BSONDocument("$gte" -> fromSeq),
+      FROM -> BSONDocument("$lte" -> toSeq)
+    )
+    driver.journal.find(q)
+      .projection(BSONDocument(EVENTS -> 1))
+      .cursor[BSONDocument]()
+      .foldWhile(z = (Vector.empty[EventEnvelope],0L), maxDocs = fillLimit)(folder(previousOffset), (_,t) => Cursor.Fail(t))
+  }
+
+  private def folder(skip: Long)(accum: (Vector[EventEnvelope], Long), doc: BSONDocument): Cursor.State[(Vector[EventEnvelope], Long)] = {
+    val (vec,offset) = accum
+    val envs = doc.as[BSONArray](EVENTS).values.collect {
+      case d:BSONDocument => driver.deserializeJournal(d)
+    }.filter(ev => ev.sn <= toSeq && ev.sn >= fromSeq).zipWithIndex.map{case (ev,idx) => ev.toEnvelope(offset + idx + 1)}
+
+    val newOffset = offset + envs.size
+    if ((envs.size.toLong + offset) > skip) {
+      val dropped = envs.drop( (skip - offset).toIntWithoutWrapping )
+      if (dropped.nonEmpty) Cursor.Cont((vec ++ dropped, newOffset))
+      else Cursor.Done(vec -> newOffset)
+    } else Cursor.Cont(vec -> newOffset)
+  }
+
+}
+
 class RxMongoReadJournaller(driver: RxMongoDriver) extends MongoPersistenceReadJournallingApi {
   override def allPersistenceIds(hints: Hint*): Props = AllPersistenceIds.props(driver)
 
   override def allEvents(hints: Hint*): Props = AllEvents.props(driver)
+
+  override def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props =
+    EventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 }

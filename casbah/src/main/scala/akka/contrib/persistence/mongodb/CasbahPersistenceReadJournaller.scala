@@ -9,12 +9,8 @@ object AllPersistenceIds {
   def props(driver: CasbahMongoDriver): Props = Props(new AllPersistenceIds(driver))
 }
 
-class AllPersistenceIds(driver: CasbahMongoDriver) extends BufferingActorPublisher[String] {
+class AllPersistenceIds(val driver: CasbahMongoDriver) extends BufferingActorPublisher[String] {
   import CasbahSerializers._
-
-  val perFillLimit = driver.settings.ReadJournalPerFillLimit
-
-  private def fillLimit = math.min(perFillLimit,totalDemand.toIntWithoutWrapping)
 
   override protected def next(offset: Long): (Vector[String],Long) = {
     val vec = driver.journal
@@ -31,12 +27,8 @@ object AllEvents {
   def props(driver: CasbahMongoDriver): Props = Props(new AllEvents(driver))
 }
 
-class AllEvents(driver: CasbahMongoDriver) extends BufferingActorPublisher[EventEnvelope] {
+class AllEvents(val driver: CasbahMongoDriver) extends BufferingActorPublisher[EventEnvelope] {
   import CasbahSerializers._
-
-  val perFillLimit = driver.settings.ReadJournalPerFillLimit
-
-  private def fillLimit = math.min(perFillLimit,totalDemand.toIntWithoutWrapping)
 
   override protected def next(offset: Long): (Vector[EventEnvelope],Long) = {
     val vec = driver.journal
@@ -53,8 +45,34 @@ class AllEvents(driver: CasbahMongoDriver) extends BufferingActorPublisher[Event
   }
 }
 
+object EventsByPersistenceId {
+  def props(driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long): Props =
+    Props(new EventsByPersistenceId(driver, persistenceId, fromSeq, toSeq))
+}
+
+class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends BufferingActorPublisher[EventEnvelope] {
+  import CasbahSerializers._
+
+  override protected def next(offset: Long): (Vector[EventEnvelope], Long) = {
+   val vec = driver.journal
+    .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq) ++ (FROM $lte toSeq))
+     .flatMap(_.getAs[MongoDBList](EVENTS))
+     .flatMap(lst => lst.collect { case x:DBObject => x })
+     .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
+     .map(driver.deserializeJournal)
+     .zipWithIndex
+     .map { case(e,i) => e.toEnvelope(i + offset) }
+     .slice(offset.toIntWithoutWrapping, offset.toIntWithoutWrapping + fillLimit)
+     .toVector
+    vec -> (offset + vec.size)
+  }
+}
+
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
   override def allPersistenceIds(hints: Hint*): Props = AllPersistenceIds.props(driver)
 
   override def allEvents(hints: Hint*): Props = AllEvents.props(driver)
+
+  override def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props =
+    EventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 }
