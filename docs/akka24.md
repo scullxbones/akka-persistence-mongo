@@ -18,11 +18,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.0"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -89,10 +89,11 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
   * The implementation of queries are purely up to the journal developer
   * The `ReadJournal` interface provides plenty of leeway for metadata being exposed as well via `Materialized Values of Queries`
   * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
-* Initially two queries are supported.  Both are non-live for the moment, and thus would complete when no more records are available:
+* Initially three queries are supported.  Both are non-live for the moment, and thus would complete when no more records are available:
 1. `AllPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
+1. `EventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
 1. `akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-* Eventually i'd like to support live versions of these queries, plus the `EventsByPersistenceId` query.
+* Eventually i'd like to support live versions of these queries, probably via a tailable cursor.
 * I'll look for community feedback about what driver-specific queries might be useful as well
 
 <a name="miscchanges"/>
@@ -179,6 +180,8 @@ These settings may need tuning depending on your particular environment.  If you
 
 [1](https://github.com/scullxbones/akka-persistence-mongo/issues/24)
 [2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
+
+Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`. 
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used
