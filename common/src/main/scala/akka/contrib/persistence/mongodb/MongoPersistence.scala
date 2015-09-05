@@ -6,6 +6,7 @@ import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
 import akka.serialization.{Serialization, SerializationExtension}
 import com.codahale.metrics.SharedMetricRegistries
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
@@ -50,6 +51,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem) {
 
   val DEFAULT_DB_NAME = "akka-persistence"
 
+  protected val logger = LoggerFactory.getLogger(getClass)
+
   implicit lazy val actorSystem: ActorSystem = as
 
   lazy val settings = new MongoSettings(as.settings)
@@ -73,7 +76,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem) {
     val journalCollection = collection(journalCollectionName)
     val indexed = ensureUniqueIndex(journalCollection, journalIndexName,
                       JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.Implicits.global)
-    if (settings.JournalAutomaticUpgrade) upgradeJournalIfNeeded()
+    if (settings.JournalAutomaticUpgrade) {
+      logger.info("Journal automatic upgrade is enabled, executing upgrade process")
+      upgradeJournalIfNeeded()
+      logger.info("Journal automatic upgrade process has completed")
+    }
     indexed
   }
 

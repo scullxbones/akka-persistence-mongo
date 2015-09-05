@@ -36,10 +36,24 @@ class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(syst
     val j = collection(journalCollectionName)
     val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))
     val cnt = j.count(q)
+    logger.info(s"Journal automatic upgrade found $cnt records needing upgrade")
     if(cnt > 0) {
-      j.find[DBObject](q)
+      val results = j.find[DBObject](q)
        .map(d => d.as[ObjectId]("_id") -> deserializeJournal(d))
-       .foreach{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
+       .map{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
+      results.foldLeft((0, 0)) { case ((successes, failures), result) =>
+        val n = result.getN
+        if (n > 0)
+          (successes + n) -> failures
+        else
+          successes -> (failures + 1)
+      } match {
+        case (s,f) if f > 0 =>
+          logger.warn(s"There were $s successful updates and $f failed updates")
+        case (s,_) =>
+          logger.info(s"$s records were successfully updated")
+      }
+
     }
   }
 
