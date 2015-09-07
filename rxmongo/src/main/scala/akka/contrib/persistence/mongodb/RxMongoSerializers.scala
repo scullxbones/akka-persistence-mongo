@@ -126,12 +126,12 @@ object RxMongoSerializers {
                 manifest = None)
         case Some(ser: BSONBinary) =>
           val repr = serialization.deserialize(ser.byteArray, classOf[PersistentRepr])
-            .getOrElse(throw new IllegalStateException("Unable to deserialize PersistentRepr"))
+            .getOrElse(throw new IllegalStateException(s"Unable to deserialize PersistentRepr for id $persistenceId and sequence number $sequenceNr"))
           Event[BSONDocument](repr).copy(pid = persistenceId, sn = sequenceNr)
         case Some(x) =>
-          throw new IllegalStateException(s"Unexpected value $x for $SERIALIZED field in document")
+          throw new IllegalStateException(s"Unexpected value $x for $SERIALIZED field in document for id $persistenceId and sequence number $sequenceNr")
         case None =>
-          throw new IllegalStateException(s"Cannot find required field $SERIALIZED in document")
+          throw new IllegalStateException(s"Cannot find required field $SERIALIZED in document for id $persistenceId and sequence number $sequenceNr")
       }
     }
   }

@@ -3,7 +3,8 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence.PersistentRepr
 import akka.serialization.{SerializationExtension, Serialization}
-import com.mongodb.{BasicDBList, BasicDBObjectBuilder, DBObject}
+import com.mongodb.util.JSON
+import com.mongodb._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import collection.JavaConverters._
@@ -75,7 +76,7 @@ akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     coll.insert(buildLegacyObject("foo",2,"bar"))
     coll.insert(buildLegacyDocument("foo",3))
 
-    println(s"before = ${coll.find().toArray().asScala.toList}")
+    println(s"before = ${coll.find().toArray.asScala.toList}")
 
     as.upgradeJournalIfNeeded()
 
@@ -99,5 +100,64 @@ akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
         bson.get("ghi") shouldBe true
       }
     }
+  }
+
+  it should "upgrade a more complicated journal" in configured { as =>
+    implicit val serialization = SerializationExtension.get(as.actorSystem)
+    val coll = mongoClient.getDB(embedDB).getCollection("akka_persistence_journal")
+    coll.remove(new BasicDBObject())
+
+    val doc =
+    """
+    |{
+    |   "_id" : { "$oid" : "55deeae33de20e69f33b748b" },
+    |   "pid" : "foo",
+    |   "sn" : { "$numberLong" : "1" },
+    |   "dl" : false,
+    |   "cs" : [ ],
+    |   "pr" : {
+    |       "p" : {
+    |           "order-created" : {
+    |               "id" : "alsonotarealguid",
+    |               "seqNr" : 232,
+    |               "userId" : "notarealguid",
+    |               "cartId" : "notarealcartid",
+    |               "phoneNumber" : "+15555005555",
+    |               "from" : {
+    |                   "country" : "US"
+    |               },
+    |               "to" : {
+    |                   "country" : "RU",
+    |                   "region" : "MOW",
+    |                   "city" : "Moscow"
+    |               },
+    |               "dateCreated" : { "$date": "2015-08-27T10:48:03.101Z" },
+    |               "timestamp" : { "$date": "2015-08-27T10:48:03.101Z" },
+    |               "addressId" : "not-a-real-addressid"
+    |           },
+    |           "_timestamp" : { "$date": "2015-08-27T10:48:03.102Z" }
+    |       }
+    |   }
+    }""".stripMargin
+    coll.insert(JSON.parse(doc).asInstanceOf[DBObject])
+
+    as.upgradeJournalIfNeeded()
+
+    val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
+    println(records)
+    records should have size 1
+    records.zipWithIndex.foreach { case (dbo,idx) =>
+      dbo.get(PROCESSOR_ID) should be ("foo")
+      dbo.get(TO) should be (idx + 1)
+      dbo.get(FROM) should be (dbo.get(TO))
+      val event = dbo.get(EVENTS).asInstanceOf[BasicDBList].get(0).asInstanceOf[DBObject]
+      event.get(SEQUENCE_NUMBER) should be (idx + 1)
+      event.get(TYPE) should be ("bson")
+      val bson = event.get(PayloadKey).asInstanceOf[DBObject]
+      val payload = bson.get("order-created").asInstanceOf[DBObject]
+      payload.get("cartId") should be ("notarealcartid")
+      payload.get("seqNr") should be (232)
+    }
+
   }
 }
