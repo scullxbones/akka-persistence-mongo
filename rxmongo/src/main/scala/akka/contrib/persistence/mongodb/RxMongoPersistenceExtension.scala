@@ -2,9 +2,10 @@ package akka.contrib.persistence.mongodb
 
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.commands.bson.{BSONDropIndexesImplicits, BSONListIndexesImplicits}
 import reactivemongo.core.nodeset.Authenticate
 
-import reactivemongo.api.commands.{DefaultWriteResult, WriteResult, WriteConcern}
+import reactivemongo.api.commands._
 import reactivemongo.api.indexes.{IndexType, Index}
 import reactivemongo.bson._
 
@@ -88,6 +89,8 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
   override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
     import concurrent.ExecutionContext.Implicits.global
     import JournallingFieldNames._
+    import BSONListIndexesImplicits._
+    import BSONDropIndexesImplicits._
 
     val j = collection(journalCollectionName)
     val walker = walk(j) _
@@ -106,6 +109,18 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
     }
 
     val eventuallyUpgrade = for {
+      indices <- j.runCommand(ListIndexes(dbName))
+      _ <- indices
+              .find(_.key.sortBy(_._1) == Seq(DELETED -> IndexType.Ascending, PROCESSOR_ID -> IndexType.Ascending, SEQUENCE_NUMBER -> IndexType.Ascending))
+              .map(_.eventualName)
+              .map(n => j.runCommand(DropIndexes(n)).transform(
+                _ => logger.info("Succesfully dropped legacy index"),
+                { t =>
+                  logger.error("Error received while dropping legacy index",t)
+                  t
+                }
+              ))
+              .getOrElse(Future.successful(()))
       count <- j.count(Option(q))
       wr <- traverse(count)
     } yield wr
@@ -131,7 +146,8 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
 
   private[mongodb] def closeConnections(): Unit = driver.close()
 
-  private[mongodb] def db = connection(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))(system.dispatcher)
+  private[mongodb] def dbName: String = parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME)
+  private[mongodb] def db = connection(dbName)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)

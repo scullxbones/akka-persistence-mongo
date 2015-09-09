@@ -3,10 +3,11 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.WriteConcern
+import com.mongodb.{MongoCommandException, CommandFailureException, WriteConcern}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.util.Try
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
@@ -35,6 +36,14 @@ class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(syst
 
     val j = collection(journalCollectionName)
     val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))
+    Try(j.dropIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))).map(
+      _ => logger.info("Successfully dropped legacy index")
+    ).recover {
+      case e:MongoCommandException if e.getErrorMessage.startsWith("index not found with name") =>
+        logger.info("Legacy index has already been dropped")
+      case t =>
+        logger.error("Received error while dropping legacy index",t)
+    }
     val cnt = j.count(q)
     logger.info(s"Journal automatic upgrade found $cnt records needing upgrade")
     if(cnt > 0) {

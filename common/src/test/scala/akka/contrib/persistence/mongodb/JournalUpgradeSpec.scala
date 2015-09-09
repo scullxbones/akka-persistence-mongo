@@ -8,6 +8,7 @@ import com.mongodb._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import collection.JavaConverters._
+import scala.util.Try
 
 abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], toDriver: ActorSystem => D) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
 
@@ -68,10 +69,22 @@ akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     new BasicDBObjectBuilder().add(PROCESSOR_ID,pid).get()
   }
 
+  def createLegacyIndex(coll: DBCollection): Unit = {
+    val idxSpec =
+      new BasicDBObjectBuilder()
+        .add(PROCESSOR_ID, 1)
+        .add(SEQUENCE_NUMBER, 1)
+        .add(DELETED, 1)
+        .get()
+
+    Try(coll.createIndex(idxSpec)).getOrElse(())
+  }
+
   it should "upgrade an existing journal" in configured { as =>
     implicit val serialization = SerializationExtension.get(as.actorSystem)
     val coll = mongoClient.getDB(embedDB).getCollection("akka_persistence_journal")
 
+    createLegacyIndex(coll)
     coll.insert(buildLegacyObject("foo",1,"bar"))
     coll.insert(buildLegacyObject("foo",2,"bar"))
     coll.insert(buildLegacyDocument("foo",3))
@@ -106,6 +119,7 @@ akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     implicit val serialization = SerializationExtension.get(as.actorSystem)
     val coll = mongoClient.getDB(embedDB).getCollection("akka_persistence_journal")
     coll.remove(new BasicDBObject())
+    createLegacyIndex(coll)
 
     val doc =
     """
