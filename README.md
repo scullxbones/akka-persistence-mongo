@@ -4,7 +4,7 @@
 
 ### Using Akka 2.4? Use 1.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
-![Maven Central](https://img.shields.io/maven-central/v/com.github.scullxbones/akka-persistence-mongo-common_2.11.svg)
+![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.github.scullxbones/akka-persistence-mongo-common_2.11/badge.svg)
 
 [Docs](docs/akka24.md)
 
