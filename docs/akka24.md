@@ -9,7 +9,7 @@
  * Supports MongoDB major versions 2.6 and 3.0
  * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up 
 
-### Change log is [here](changelog24.md)
+### Change log is [here](changelog24.md) ... not yet but soon
 
 ### Quick Start
 
@@ -85,7 +85,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
       1. Having trouble upgrading 
       1. Use cluster-sharding
       1. Have persistent records in your journal for the same from 2.3
-    * You may need to remove these records from the journal, as sharding records are not currently backward-compatible.
+    * You should remove these records from the journal, as the sharding coordinator's records are not backward-compatible
       * Refer to [issue 44](https://github.com/scullxbones/akka-persistence-mongo/issues/44) for more details
   
 <a name="readjournal"/>
