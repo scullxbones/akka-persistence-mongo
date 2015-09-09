@@ -109,11 +109,11 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
     }
 
     val eventuallyUpgrade = for {
-      indices <- j.runCommand(ListIndexes(dbName))
+      indices <- j.indexesManager.list()
       _ <- indices
               .find(_.key.sortBy(_._1) == Seq(DELETED -> IndexType.Ascending, PROCESSOR_ID -> IndexType.Ascending, SEQUENCE_NUMBER -> IndexType.Ascending))
               .map(_.eventualName)
-              .map(n => j.runCommand(DropIndexes(n)).transform(
+              .map(n => j.indexesManager.drop(n).transform(
                 _ => logger.info("Succesfully dropped legacy index"),
                 { t =>
                   logger.error("Error received while dropping legacy index",t)
