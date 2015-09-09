@@ -18,11 +18,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.3"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.3"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -80,6 +80,13 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
   1. Care about history? Take a mongodump of the collection *FIRST*
     * The driver will attempt to upgrade a 0.x journal to 1.x if the configuration option is set: `akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade=true`
     * By default this feature is disabled, as it's possible that it can corrupt the journal.  It should be used in a controlled manner
+    * Additional logging has been added to help diagnose issues
+    * Thanks to @alari's help, if you are:
+      1. Having trouble upgrading 
+      1. Use cluster-sharding
+      1. Have persistent records in your journal for the same from 2.3
+    * You may need to remove these records from the journal, as sharding records are not currently backward-compatible.
+      * Refer to [issue 44](https://github.com/scullxbones/akka-persistence-mongo/issues/44) for more details
   
 <a name="readjournal"/>
 #### Read Journal [akka docs](http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html)
