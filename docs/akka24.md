@@ -9,7 +9,7 @@
  * Supports MongoDB major versions 2.6 and 3.0
  * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up 
 
-### Change log is [here](changelog24.md) ... not yet but soon
+### Change log is [here](changelog24.md)
 
 ### Quick Start
 
