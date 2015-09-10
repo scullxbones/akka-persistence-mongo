@@ -85,7 +85,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
       1. Having trouble upgrading 
       1. Use cluster-sharding
       1. Have persistent records in your journal for the same from 2.3
-    * You should remove these records from the journal, as the sharding coordinator's records are not backward-compatible
+    * The automated upgrade process will remove these records including logging their status
       * Refer to [issue 44](https://github.com/scullxbones/akka-persistence-mongo/issues/44) for more details
   
 <a name="readjournal"/>
