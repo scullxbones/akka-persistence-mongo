@@ -89,8 +89,6 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
   override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
     import concurrent.ExecutionContext.Implicits.global
     import JournallingFieldNames._
-    import BSONListIndexesImplicits._
-    import BSONDropIndexesImplicits._
 
     val j = collection(journalCollectionName)
     val walker = walk(j) _
@@ -109,12 +107,15 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
     }
 
     val eventuallyUpgrade = for {
+      _ <- j.remove(BSONDocument(PROCESSOR_ID -> BSONRegex("^/user/sharding/[^/]+Coordinator/singleton/coordinator","")))
+            .map(wr => logger.info(s"Successfully removed ${wr.n} legacy cluster sharding records"))
+            .recover { case t => logger.error(s"Error while removing legacy cluster sharding records",t) }
       indices <- j.indexesManager.list()
       _ <- indices
               .find(_.key.sortBy(_._1) == Seq(DELETED -> IndexType.Ascending, PROCESSOR_ID -> IndexType.Ascending, SEQUENCE_NUMBER -> IndexType.Ascending))
               .map(_.eventualName)
               .map(n => j.indexesManager.drop(n).transform(
-                _ => logger.info("Succesfully dropped legacy index"),
+                _ => logger.info("Successfully dropped legacy index"),
                 { t =>
                   logger.error("Error received while dropping legacy index",t)
                   t
