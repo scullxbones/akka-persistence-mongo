@@ -95,6 +95,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
 
     val fut = readJournal.query(AllEvents).runFold(events.toSet){ (received, ee) =>
+      println(s"ee = $ee")
       val asAppend = Append(ee.event.asInstanceOf[String])
       events should contain (asAppend)
       received - asAppend

@@ -1,13 +1,11 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{Props, Actor, ExtendedActorSystem}
+import akka.actor.{Actor, ExtendedActorSystem, Props}
 import akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents
 import akka.persistence.query._
 import akka.persistence.query.scaladsl.ReadJournal
-import akka.stream.actor.{ActorPublisherMessage, ActorPublisher}
+import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.scaladsl.Source
-
-import scala.concurrent.Future
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
@@ -41,104 +39,36 @@ trait MongoPersistenceReadJournallingApi {
   def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props
 }
 
-trait BufferingActorPublisher[A] extends ActorPublisher[A] {
+trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {
   import ActorPublisherMessage._
 
   override def preStart() = {
-    context.become(streaming(Vector.empty, 0))
+    context.become(streaming(initialCursor, 0))
     super.preStart()
   }
 
-  def receive = Actor.emptyBehavior
+  protected def driver: MongoPersistenceDriver
 
-  def streaming(buf: Vector[A], offset: Long): Receive = {
-    case _: Cancel | SubscriptionTimeoutExceeded =>
-      context.stop(self)
-    case Request(_) =>
-      val (filled,newOffset) = next(offset)
-      val remaining = drainBuf(buf ++ filled)
-      checkDone(filled, newOffset, offset, remaining)
-      context.become(streaming(remaining, newOffset))
-  }
+  protected def initialCursor: Cursor
 
-  protected def checkDone(filled: Vector[A], newOffset: Long, oldOffset: Long, remaining: Vector[A]): Unit = {
-    if (filled.isEmpty && newOffset == oldOffset && remaining.isEmpty) onCompleteThenStop()
-  }
+  protected def next(c: Cursor, atMost: Long): (Vector[A], Cursor)
 
-  protected final def drainBuf(buf: Vector[A]): Vector[A] = {
-    if (totalDemand > 0 && buf.nonEmpty) {
-      if (totalDemand <= Int.MaxValue) {
-        val (use, keep) = buf.splitAt(totalDemand.toInt)
-        use foreach onNext
-        keep
-      } else {
-        buf foreach onNext
-        Vector.empty
-      }
-    } else buf
-  }
+  protected def isCompleted(c: Cursor): Boolean
 
-  def driver: MongoPersistenceDriver
-
-  protected def fillLimit = math.min(driver.settings.ReadJournalPerFillLimit,totalDemand.toIntWithoutWrapping)
-
-  protected def next(previousOffset: Long): (Vector[A], Long)
-}
-
-trait NonBlockingBufferingActorPublisher[A] extends ActorPublisher[A] {
-  import ActorPublisherMessage._
-  import akka.pattern.pipe
-
-  case class More(buf: Vector[A], newOffset: Long)
-
-  override def preStart() = {
-    context.become(streaming(Vector.empty, 0))
-    super.preStart()
-  }
+  protected def discard(c: Cursor): Unit
 
   def receive = Actor.emptyBehavior
 
-  def streaming(buf: Vector[A], offset: Long): Receive = {
+  def streaming(cursor: Cursor, offset: Long): Receive = {
     case _: Cancel | SubscriptionTimeoutExceeded =>
+      discard(cursor)
       context.stop(self)
     case Request(_) =>
-      val remaining = drainBuf(buf)
-      checkNeedMore(offset)
-      context.become(streaming(remaining, offset))
-    case More(newBuf,newOffset) =>
-      val remaining = drainBuf(buf ++ newBuf)
-      checkNeedMore(newOffset)
-      checkDone(buf ++ newBuf, newOffset, offset, remaining)
-      context.become(streaming(remaining, newOffset))
+      val (filled,remaining) = next(cursor, totalDemand)
+      filled foreach onNext
+      if (isCompleted(remaining))
+        onCompleteThenStop()
+      else
+        context.become(streaming(remaining, offset + filled.size))
   }
-
-  protected def checkDone(filled: Vector[A], newOffset: Long, oldOffset: Long, remaining: Vector[A]): Unit = {
-    if (filled.isEmpty && newOffset == oldOffset && remaining.isEmpty) onCompleteThenStop()
-  }
-
-  protected def checkNeedMore(offset: Long): Unit = {
-    implicit val ec = context.dispatcher
-
-    if (totalDemand > 0) next(offset).map{ case(v,o) => More(v,o) }.pipeTo(context.self)
-    ()
-  }
-
-  protected final def drainBuf(buf: Vector[A]): Vector[A] = {
-    if (totalDemand > 0 && buf.nonEmpty) {
-      if (totalDemand <= Int.MaxValue) {
-        val (use, keep) = buf.splitAt(totalDemand.toInt)
-        use foreach onNext
-        keep
-      } else {
-        buf foreach onNext
-        Vector.empty
-      }
-    } else buf
-  }
-
-  def driver: MongoPersistenceDriver
-
-  protected def fillLimit = math.min(driver.settings.ReadJournalPerFillLimit,totalDemand.toIntWithoutWrapping)
-
-  protected def next(previousOffset: Long): Future[(Vector[A], Long)]
 }

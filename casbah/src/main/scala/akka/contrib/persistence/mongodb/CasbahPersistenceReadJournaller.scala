@@ -9,40 +9,53 @@ object AllPersistenceIds {
   def props(driver: CasbahMongoDriver): Props = Props(new AllPersistenceIds(driver))
 }
 
-class AllPersistenceIds(val driver: CasbahMongoDriver) extends BufferingActorPublisher[String] {
+class AllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
   import CasbahSerializers._
 
-  override protected def next(offset: Long): (Vector[String],Long) = {
-    val vec = driver.journal
-      .distinct(PROCESSOR_ID, MongoDBObject())
-      .collect { case s:String => s }
-      .toVector
-      .slice(offset.toIntWithoutWrapping, offset.toIntWithoutWrapping + fillLimit)
+  override protected def initialCursor: Stream[String] =
+    driver.journal
+          .distinct(PROCESSOR_ID, MongoDBObject())
+          .toStream
+          .collect { case s:String => s }
 
-    vec -> (offset + vec.size)
+  override protected def next(c: Stream[String], atMost: Long): (Vector[String], Stream[String]) = {
+    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    (buf.toVector, remainder)
   }
+
+  override protected def isCompleted(c: Stream[String]): Boolean = {
+    c.isEmpty
+  }
+
+  override protected def discard(c: Stream[String]): Unit = ()
 }
 
 object AllEvents {
   def props(driver: CasbahMongoDriver): Props = Props(new AllEvents(driver))
 }
 
-class AllEvents(val driver: CasbahMongoDriver) extends BufferingActorPublisher[EventEnvelope] {
+class AllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[EventEnvelope, Stream[EventEnvelope]] {
   import CasbahSerializers._
 
-  override protected def next(offset: Long): (Vector[EventEnvelope],Long) = {
-    val vec = driver.journal
-      .find(MongoDBObject())
-      .sort(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
-      .flatMap(_.getAs[MongoDBList](EVENTS))
-      .flatMap(lst => lst.collect {case x:DBObject => x} )
-      .map(driver.deserializeJournal)
-      .zipWithIndex
-      .map { case(e,i) => e.toEnvelope(i + offset) }
-      .slice(offset.toIntWithoutWrapping, offset.toIntWithoutWrapping + fillLimit)
-      .toVector
-    vec -> (offset + vec.size)
+  override protected def initialCursor: Stream[EventEnvelope] =
+    driver.journal
+          .find(MongoDBObject())
+          .sort(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
+          .toStream
+          .flatMap(_.getAs[MongoDBList](EVENTS))
+          .flatMap(lst => lst.collect {case x:DBObject => x} )
+          .map(driver.deserializeJournal)
+          .zipWithIndex
+          .map { case(e,i) => e.toEnvelope(i) }
+
+  override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
+    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    (buf.toVector, remainder)
   }
+
+  override protected def isCompleted(c: Stream[EventEnvelope]): Boolean = c.isEmpty
+
+  override protected def discard(c: Stream[EventEnvelope]): Unit = ()
 }
 
 object EventsByPersistenceId {
@@ -50,22 +63,29 @@ object EventsByPersistenceId {
     Props(new EventsByPersistenceId(driver, persistenceId, fromSeq, toSeq))
 }
 
-class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends BufferingActorPublisher[EventEnvelope] {
+class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends SyncActorPublisher[EventEnvelope, Stream[EventEnvelope]] {
   import CasbahSerializers._
 
-  override protected def next(offset: Long): (Vector[EventEnvelope], Long) = {
-   val vec = driver.journal
-    .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq) ++ (FROM $lte toSeq))
-     .flatMap(_.getAs[MongoDBList](EVENTS))
-     .flatMap(lst => lst.collect { case x:DBObject => x })
-     .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
-     .map(driver.deserializeJournal)
-     .zipWithIndex
-     .map { case(e,i) => e.toEnvelope(i + offset) }
-     .slice(offset.toIntWithoutWrapping, offset.toIntWithoutWrapping + fillLimit)
-     .toVector
-    vec -> (offset + vec.size)
+  override protected def initialCursor: Stream[EventEnvelope] =
+    driver.journal
+      .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq) ++ (FROM $lte toSeq))
+      .sort(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1))
+      .toStream
+      .flatMap(_.getAs[MongoDBList](EVENTS))
+      .flatMap(lst => lst.collect {case x:DBObject => x} )
+      .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
+      .map(driver.deserializeJournal)
+      .zipWithIndex
+      .map { case(e,i) => e.toEnvelope(i) }
+
+  override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
+    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    (buf.toVector, remainder)
   }
+
+  override protected def isCompleted(c: Stream[EventEnvelope]): Boolean = c.isEmpty
+
+  override protected def discard(c: Stream[EventEnvelope]): Unit = ()
 }
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
