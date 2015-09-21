@@ -87,6 +87,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
       1. Have persistent records in your journal for the same from 2.3
     * The automated upgrade process will remove these records including logging their status
       * Refer to [issue 44](https://github.com/scullxbones/akka-persistence-mongo/issues/44) for more details
+    * An alternative to removing these records is supplied with akka as of `2.4.0-RC3` [see more details](http://doc.akka.io/docs/akka/2.4.0-RC3/scala/cluster-sharding.html#Removal_of_Internal_Cluster_Sharding_Data)
   
 <a name="readjournal"/>
 #### Read Journal [akka docs](http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html)
