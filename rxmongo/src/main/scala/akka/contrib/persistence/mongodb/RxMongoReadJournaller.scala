@@ -1,11 +1,11 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{Status, Stash, Actor, Props}
-import akka.persistence.query.{EventEnvelope, Hint}
+import akka.persistence.query.EventEnvelope
 import akka.stream.actor.ActorPublisher
 import play.api.libs.iteratee.{Concurrent, Enumeratee, Iteratee, Enumerator}
 import reactivemongo.api.commands.Command
-import reactivemongo.api.{BSONSerializationPack, Cursor, QueryOpts}
+import reactivemongo.api.{BSONSerializationPack, QueryOpts}
 import reactivemongo.bson._
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with Stash {
@@ -143,10 +143,10 @@ class EventsByPersistenceId(val driver:RxMongoDriver,persistenceId:String,fromSe
 }
 
 class RxMongoReadJournaller(driver: RxMongoDriver) extends MongoPersistenceReadJournallingApi {
-  override def allPersistenceIds(hints: Hint*): Props = AllPersistenceIds.props(driver)
+  override def allPersistenceIds: Props = AllPersistenceIds.props(driver)
 
-  override def allEvents(hints: Hint*): Props = AllEvents.props(driver)
+  override def allEvents: Props = AllEvents.props(driver)
 
-  override def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props =
+  override def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
     EventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 }

@@ -1,42 +1,54 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{Actor, ExtendedActorSystem, Props}
-import akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents
 import akka.persistence.query._
-import akka.persistence.query.scaladsl.ReadJournal
+import akka.persistence.query.scaladsl.{CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery}
+import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.scaladsl.Source
+import akka.stream.javadsl.{Source => JSource}
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
-
-  case object AllEvents extends Query[EventEnvelope, Unit]
 }
 
-class MongoReadJournal(system: ExtendedActorSystem) extends ReadJournal {
+class MongoReadJournal(system: ExtendedActorSystem) extends ReadJournalProvider {
 
   private[this] val impl = MongoPersistenceExtension(system).readJournal
 
-  override def query[T, M](q: Query[T, M], hints: Hint*): Source[T, M] = q match {
-    case AllPersistenceIds =>
-      Source.actorPublisher[EventEnvelope](impl.allPersistenceIds(hints:_*)).asInstanceOf[Source[T,M]]
-    case AllEvents =>
-      Source.actorPublisher[EventEnvelope](impl.allEvents(hints:_*)).asInstanceOf[Source[T,M]]
-    case EventsByPersistenceId(persistenceId, fromSeq, toSeq) =>
-      Source.actorPublisher[EventEnvelope](impl.eventsByPersistenceId(persistenceId, fromSeq, toSeq, hints:_*)).asInstanceOf[Source[T,M]]
-    case unsupported =>
-      failed(q).asInstanceOf[Source[T,M]]
-  }
+  override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl)
 
-  private def failed[T](q: Query[T,_]) =
-    Source.failed[T](new UnsupportedOperationException(s"Query $q not supported by ${getClass.getName}"))
+  override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl))
+}
 
+class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi) extends scaladsl.ReadJournal with CurrentPersistenceIdsQuery with CurrentEventsByPersistenceIdQuery {
+
+  def allEvents(): Source[EventEnvelope,Unit] =
+    Source.actorPublisher[EventEnvelope](impl.allEvents)
+      .mapMaterializedValue(_ => ())
+
+  override def currentPersistenceIds(): Source[String, Unit] =
+    Source.actorPublisher[String](impl.allPersistenceIds)
+      .mapMaterializedValue(_ => ())
+
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] =
+    Source.actorPublisher[EventEnvelope](impl.eventsByPersistenceId(persistenceId,fromSequenceNr,toSequenceNr))
+      .mapMaterializedValue(_ => ())
+}
+
+class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP {
+  def allEvents(): JSource[EventEnvelope, Unit] = rj.allEvents().asJava
+
+  override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
+
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): JSource[EventEnvelope, Unit] =
+    rj.currentEventsByPersistenceId(persistenceId,fromSequenceNr,toSequenceNr).asJava
 }
 
 trait MongoPersistenceReadJournallingApi {
-  def allPersistenceIds(hints: Hint*): Props
-  def allEvents(hints: Hint*): Props
-  def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long, hints: Hint*): Props
+  def allPersistenceIds: Props
+  def allEvents: Props
+  def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props
 }
 
 trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {

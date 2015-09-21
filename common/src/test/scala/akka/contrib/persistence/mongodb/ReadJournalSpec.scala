@@ -1,9 +1,8 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{PoisonPill, Props}
-import akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents
 import akka.persistence.PersistentActor
-import akka.persistence.query.{AllPersistenceIds, EventsByPersistenceId, PersistenceQuery}
+import akka.persistence.query.PersistenceQuery
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -41,19 +40,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     |}
     |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
-  "A read journal" should "return unsupported op exceptions on unsupported queries" in withConfig(config(extensionClass)) { as =>
-    implicit val system = as
-    implicit val mat = ActorMaterializer()
-    val readJournal =
-      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
-
-    eventually {
-      readJournal.query(EventsByPersistenceId("foo"))
-        .runForeach(_.getClass shouldBe classOf[UnsupportedOperationException])
-    }
-    ()
-  }
-
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
 
   case class Append(s: String)
@@ -77,7 +63,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   }
 
 
-  it should "support the journal dump query" in withConfig(config(extensionClass)) { as =>
+  "A read journal" should "support the journal dump query" in withConfig(config(extensionClass)) { as =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
@@ -92,9 +78,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(promise.future, 10.seconds)
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
-    val fut = readJournal.query(AllEvents).runFold(events.toSet){ (received, ee) =>
+    val fut = readJournal.allEvents().runFold(events.toSet){ (received, ee) =>
       println(s"ee = $ee")
       val asAppend = Append(ee.event.asInstanceOf[String])
       events should contain (asAppend)
@@ -120,9 +106,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(Future.sequence(futures), 10.seconds)
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
-    val fut = readJournal.query(AllPersistenceIds).runFold(Seq.empty[String])(_ :+ _)
+    val fut = readJournal.currentPersistenceIds().runFold(Seq.empty[String])(_ :+ _)
 
     Await.result(fut,10.seconds) should contain allOf("1","2","3","4","5")
   }
@@ -142,9 +128,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(promise.future, 10.seconds)
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor(MongoReadJournal.Identifier)
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
-    val fut = readJournal.query(EventsByPersistenceId("foo",0L,2L)).runFold(events.toSet){(received, ee) =>
+    val fut = readJournal.currentEventsByPersistenceId("foo",0L,2L).runFold(events.toSet){(received, ee) =>
       println(s"Received so far $received, envelope = $ee")
       val asAppend = Append(ee.event.asInstanceOf[String])
       events should contain (asAppend)
