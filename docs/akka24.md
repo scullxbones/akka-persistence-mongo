@@ -18,11 +18,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.5"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.5"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -91,16 +91,21 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 <a name="readjournal"/>
 #### Read Journal [akka docs](http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html)
 
+To obtain a handle to the read journal use the following:
+```scala
+val readJournal = PersistenceQuery(<actor system>).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+```
+Similarly there is a JavaDsl version.
+
 * There is a new experimental module in akka called `akka-persistence-query-experimental`.
   * This provides a way to create an `akka-streams Source` of data from a query posed to the journal plugin
   * The implementation of queries are purely up to the journal developer
-  * The `ReadJournal` interface provides plenty of leeway for metadata being exposed as well via `Materialized Values of Queries`
   * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
-* Initially three queries are supported.  Both are non-live for the moment, and thus would complete when no more records are available:
-1. `AllPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
-1. `EventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
-1. `akka.contrib.persistence.mongodb.MongoReadJournal.AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-* Eventually i'd like to support live versions of these queries, probably via a tailable cursor.
+* Initially three queries are supported.  All are `current` only for the moment, and thus would complete when no more records are available:
+1. `currentPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
+1. `currentEventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
+1. `AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
+* Eventually i'd like to support live versions of these queries, probably via a tailable cursor. (Tracked in issue #38)
 * I'll look for community feedback about what driver-specific queries might be useful as well
 
 <a name="miscchanges"/>
