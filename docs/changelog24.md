@@ -2,8 +2,8 @@
 
 ### 1.0.5
 
-* Fix #46 - not properly handling streaming of read journal queries; use cursors and/or `Enumerator` for rxm
-* Fix #47 - update to (and recompile against) 2.4.0-RC3 including changes to read journals
+* Fix [#46](https://github.com/scullxbones/akka-persistence-mongo/issues/46) - not properly handling streaming of read journal queries; use cursors and/or `Enumerator` for rxm
+* Fix [#47](https://github.com/scullxbones/akka-persistence-mongo/issues/47) - update to (and recompile against) 2.4.0-RC3 including changes to read journals
 
 ### 1.0.4
 
