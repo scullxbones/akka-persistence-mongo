@@ -2,6 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
+import com.typesafe.config.ConfigFactory
 import reactivemongo.api.MongoDriver
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson.BSONDocument
@@ -18,7 +19,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   }
   lazy val specDb = connection(embedDB)
 
-  class SpecDriver extends RxMongoDriver(system) {
+  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
     override def db = specDb
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
     override def collection(name: String) = specDb(name)

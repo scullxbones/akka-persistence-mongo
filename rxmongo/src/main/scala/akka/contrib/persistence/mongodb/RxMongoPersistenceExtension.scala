@@ -1,5 +1,6 @@
 package akka.contrib.persistence.mongodb
 
+import com.typesafe.config.Config
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.bson.{BSONDropIndexesImplicits, BSONListIndexesImplicits}
@@ -31,7 +32,7 @@ object RxMongoPersistenceDriver {
   }
 }
 
-class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) {
+class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
   import concurrent.Await
   import concurrent.duration._
@@ -167,17 +168,20 @@ class RxMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) 
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
 
-  private[this] lazy val driver = new RxMongoDriver(actorSystem)
-  private[this] lazy val _journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
-    override def driverName = "rxmongo"
-    override private[mongodb] val breaker = driver.breaker
-  }
-  private[this] lazy val _snapshotter = new RxMongoSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
-    override private[mongodb] val breaker = driver.breaker
-  }
-  private[this] lazy val _readJournaller = new RxMongoReadJournaller(driver)
+  override def configured(config: Config): Configured = Configured(config)
 
-  override def journaler = _journaler
-  override def snapshotter = _snapshotter
-  override def readJournal = _readJournaller
-} 
+  case class Configured(config: Config) extends ConfiguredExtension {
+    val driver = new RxMongoDriver(actorSystem, config)
+
+    override lazy val journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+      override def driverName = "rxmongo"
+      override private[mongodb] val breaker = driver.breaker
+    }
+
+    override lazy val snapshotter = new RxMongoSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
+      override private[mongodb] val breaker = driver.breaker
+    }
+    override lazy val readJournal = new RxMongoReadJournaller(driver)
+  }
+
+}

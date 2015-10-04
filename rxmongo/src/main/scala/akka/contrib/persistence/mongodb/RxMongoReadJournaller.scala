@@ -67,7 +67,7 @@ class AllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher[EventE
     Enumerator(
       doc.as[BSONArray](EVENTS).values.collect {
         case d:BSONDocument => driver.deserializeJournal(d)
-      }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(idx)} : _*
+      }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(idx.toLong)} : _*
     )
   }
 
@@ -119,7 +119,7 @@ class EventsByPersistenceId(val driver:RxMongoDriver,persistenceId:String,fromSe
     Enumerator(
       doc.as[BSONArray](EVENTS).values.collect {
         case d:BSONDocument => driver.deserializeJournal(d)
-      }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(idx)} : _*
+      }.zipWithIndex.map{case (ev,idx) => ev.toEnvelope(idx.toLong)} : _*
     )
   }
 

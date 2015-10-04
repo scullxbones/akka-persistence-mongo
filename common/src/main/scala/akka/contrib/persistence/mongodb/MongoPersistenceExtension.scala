@@ -1,8 +1,12 @@
 package akka.contrib.persistence.mongodb
 
+
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
-import com.typesafe.config.ConfigFactory
+import scala.collection.concurrent.{Map, TrieMap}
+import com.typesafe.config.{Config, ConfigFactory}
 import akka.actor.ActorSystem
 import akka.actor.ExtendedActorSystem
 import akka.actor.Extension
@@ -16,7 +20,7 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
   def lookup = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem) = {
-    val settings = new MongoSettings(actorSystem.settings)
+    val settings = MongoSettings(actorSystem.settings)
     val implementation = settings.Implementation
     val implType = Class.forName(implementation)
     val implCons = implType.getConstructor(classOf[ActorSystem])
@@ -27,22 +31,39 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
 }
 
 trait MongoPersistenceExtension extends Extension {
+
+  private val configuredExtensions = new ConcurrentHashMap[Config, ConfiguredExtension].asScala
+
+  def apply(config: Config): ConfiguredExtension = {
+    configuredExtensions.putIfAbsent(config, configured(config))
+    configuredExtensions.get(config).get
+  }
+
+  def configured(config: Config): ConfiguredExtension
+
+}
+
+trait ConfiguredExtension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
   def readJournal: MongoPersistenceReadJournallingApi
   def registry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
-class MongoSettings(val systemSettings: ActorSystem.Settings) {
-
-
-  lazy protected val config = {
+object MongoSettings {
+  def apply(systemSettings: ActorSystem.Settings) = {
     val fullName = s"${getClass.getPackage.getName}.mongo"
     val systemConfig = systemSettings.config
     systemConfig.checkValid(ConfigFactory.defaultReference(), fullName)
-    systemConfig.getConfig(fullName)
+    new MongoSettings(systemConfig.getConfig(fullName))
   }
+}
 
+class MongoSettings(val config: Config) {
+
+  def withOverride(by: Config): MongoSettings = {
+    new MongoSettings(by.withFallback(config))
+  }
 
   val Implementation = config.getString("driver")
 

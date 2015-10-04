@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 
 class MongoExtensionSpec extends BaseUnitTest {
 
@@ -25,10 +25,15 @@ class MongoExtensionSpec extends BaseUnitTest {
 }
 
 class StubbyMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
-  override def journaler: MongoPersistenceJournallingApi = null
 
-  override def snapshotter: MongoPersistenceSnapshottingApi = null
+  case class StubbyConfiguredExtension(config: Config) extends ConfiguredExtension {
+    override def journaler: MongoPersistenceJournallingApi = null
 
-  override def readJournal: MongoPersistenceReadJournallingApi = null
+    override def snapshotter: MongoPersistenceSnapshottingApi = null
+
+    override def readJournal: MongoPersistenceReadJournallingApi = null
+  }
+
+  override def configured(config: Config): ConfiguredExtension = StubbyConfiguredExtension(config)
 }
 

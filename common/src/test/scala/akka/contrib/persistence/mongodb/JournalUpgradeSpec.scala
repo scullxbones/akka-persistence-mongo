@@ -5,12 +5,12 @@ import akka.persistence.PersistentRepr
 import akka.serialization.{SerializationExtension, Serialization}
 import com.mongodb.util.JSON
 import com.mongodb._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.BeforeAndAfterAll
 import collection.JavaConverters._
 import scala.util.Try
 
-abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], toDriver: ActorSystem => D) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], toDriver: (ActorSystem,Config) => D) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
 
   import ConfigLoanFixture._
 
@@ -26,12 +26,14 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
-akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
+    |akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoJournal"
+    |  overrides {
+    |     mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |  }
     |}
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
     |akka-contrib-mongodb-persistence-snapshot {
@@ -40,7 +42,7 @@ akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade = true
     |}
     |""".stripMargin)
 
-  def configured[A](testCode: D => A) = withConfig(config(extensionClass), "upgrade-test")(toDriver andThen testCode)
+  def configured[A](testCode: D => A) = withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "upgrade-test")(toDriver.tupled andThen testCode)
 
   "A mongo persistence driver" should "do nothing on a new installation" in configured { as =>
     mongoClient.getDB(embedDB).getCollectionNames shouldNot contain ("akka_persistence_journal")

@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.Actor
 import akka.pattern.{CircuitBreakerOpenException, CircuitBreaker}
+import com.typesafe.config.Config
 
 import scala.collection.immutable
 import akka.persistence.journal.AsyncWriteJournal
@@ -16,9 +17,9 @@ import nl.grons.metrics.scala.Timer
 import scala.util.Try
 import scala.concurrent.duration._
 
-class MongoJournal extends AsyncWriteJournal {
+class MongoJournal(config: Config) extends AsyncWriteJournal {
   
-  private[this] val impl = MongoPersistenceExtension(context.system).journaler
+  private[this] val impl = MongoPersistenceExtension(context.system)(config).journaler
   private[this] implicit val ec = context.dispatcher
 
   /**

@@ -28,8 +28,8 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
         |}
       """.stripMargin)
 
-  "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig) { actorSystem =>
-    val underTest = new CasbahMongoDriver(actorSystem)
+  "A casbah driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig, "akka-contrib-mongodb-persistence-journal") { case (actorSystem,config) =>
+    val underTest = new CasbahMongoDriver(actorSystem, config)
     underTest.actorSystem.terminate()
     Await.result(underTest.actorSystem.whenTerminated,10.seconds)
     intercept[IllegalStateException] {
@@ -39,14 +39,14 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
   }
 
 
-  it should "reconnect if a new driver is created" in withConfig(shutdownConfig)  { actorSystem =>
-    val underTest = new CasbahMongoDriver(actorSystem)
+  it should "reconnect if a new driver is created" in withConfig(shutdownConfig, "akka-contrib-mongodb-persistence-journal")  { case (actorSystem,config) =>
+    val underTest = new CasbahMongoDriver(actorSystem, config)
     underTest.db.collectionNames()
     underTest.actorSystem.terminate()
     Await.result(underTest.actorSystem.whenTerminated,10.seconds)
 
     val newAs:ActorSystem = ActorSystem("test2",shutdownConfig)
-    val underTest2 = new CasbahMongoDriver(newAs)
+    val underTest2 = new CasbahMongoDriver(newAs, config)
     underTest2.db.collectionNames()
     newAs.terminate()
     ()
@@ -74,8 +74,8 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo wi
         |}
       """.stripMargin)
 
-  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig) { actorSystem =>
-    val underTest = new CasbahMongoDriver(actorSystem)
+  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig, "akka-contrib-mongodb-persistence-journal") { case (actorSystem,config) =>
+    val underTest = new CasbahMongoDriver(actorSystem, config)
     val collections = underTest.db.collectionNames()
     collections should contain ("system.users")
     ()

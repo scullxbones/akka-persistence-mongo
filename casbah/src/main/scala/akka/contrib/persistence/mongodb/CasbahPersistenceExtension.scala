@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
 import com.mongodb.{MongoCommandException, WriteConcern}
+import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
@@ -20,7 +21,7 @@ object CasbahPersistenceDriver {
   }
 }
 
-class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(system) {
+class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
   import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
   
   // Collection type
@@ -96,18 +97,21 @@ class CasbahMongoDriver(system: ActorSystem) extends MongoPersistenceDriver(syst
 }
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
-  private[this] lazy val driver = new CasbahMongoDriver(actorSystem)
-  private[this] lazy val _journaler =
-    new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+
+  override def configured(config: Config): Configured = Configured(config)
+
+  case class Configured(config: Config) extends ConfiguredExtension {
+
+    val driver = new CasbahMongoDriver(actorSystem, config)
+
+    override lazy val journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
       override def driverName = "casbah"
       override private[mongodb] val breaker = driver.breaker
     }
-  private[this] lazy val _snapshotter = new CasbahPersistenceSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
-    override private[mongodb] val breaker = driver.breaker
+    override lazy val snapshotter = new CasbahPersistenceSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
+      override private[mongodb] val breaker = driver.breaker
+    }
+    override lazy val readJournal = new CasbahPersistenceReadJournaller(driver)
   }
-  private[this] lazy val _readJournal = new CasbahPersistenceReadJournaller(driver)
-  
-  override def journaler = _journaler
-  override def snapshotter = _snapshotter
-  override def readJournal = _readJournal
+
 }

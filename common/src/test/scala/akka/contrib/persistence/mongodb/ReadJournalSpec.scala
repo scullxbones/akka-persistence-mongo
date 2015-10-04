@@ -38,6 +38,10 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     |    # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
+    |akka-contrib-mongodb-persistence-readjournal {
+    |  # Class name of the plugin.
+    |  class = "akka.contrib.persistence.mongodb.MongoReadJournal"
+    |}
     |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
@@ -63,7 +67,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   }
 
 
-  "A read journal" should "support the journal dump query" in withConfig(config(extensionClass)) { as =>
+  "A read journal" should "support the journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
@@ -90,7 +94,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(fut,10.seconds) shouldBe empty
   }
 
-  it should "support the all persistence ids query" in withConfig(config(extensionClass)) { as =>
+  it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
@@ -113,7 +117,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(fut,10.seconds) should contain allOf("1","2","3","4","5")
   }
 
-  it should "support the events by id query" in withConfig(config(extensionClass)) { as =>
+  it should "support the events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()

@@ -128,7 +128,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
   def startPersistentActors(as: ActorSystem, eventsPer: Int, maxDuration: FiniteDuration) =
     persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
-  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "load-test") { as =>
+  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     val thousand = 1 to commandsPerBatch
     val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds)
     val result = Promise[Long]()
@@ -145,7 +145,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     println(s"$total events: $time ms ... ${total.map(_/(time / 1000.0)).map(_.toString).getOrElse("N/A")}")
   }
 
-  it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "load-test") { as =>
+  it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     val start = System.currentTimeMillis
     val actors = startPersistentActors(as, 0, 100.milliseconds)
     val result = Promise[Long]()

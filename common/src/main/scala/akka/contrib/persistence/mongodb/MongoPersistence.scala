@@ -6,10 +6,12 @@ import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
 import akka.serialization.{Serialization, SerializationExtension}
 import com.codahale.metrics.SharedMetricRegistries
+import com.typesafe.config.Config
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
+import scala.util.{Success, Failure, Try}
 
 object MongoPersistenceDriver {
 
@@ -40,7 +42,7 @@ trait CanDeserializeJournal[D] {
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
-abstract class MongoPersistenceDriver(as: ActorSystem) {
+abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   import MongoPersistenceDriver._
 
   // Collection type
@@ -55,7 +57,17 @@ abstract class MongoPersistenceDriver(as: ActorSystem) {
 
   implicit lazy val actorSystem: ActorSystem = as
 
-  lazy val settings = new MongoSettings(as.settings)
+  lazy val settings = {
+    val defaults = MongoSettings(as.settings)
+    Try(config.getConfig("overrides")) match {
+      case Success(overrides) =>
+        logger.info("Applying configuration-specific overrides for driver")
+        defaults.withOverride(overrides)
+      case Failure(_) =>
+        logger.info("No configuration-specific overrides found to apply to driver")
+        defaults
+    }
+  }
 
   implicit lazy val serialization = SerializationExtension(actorSystem)
   lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
