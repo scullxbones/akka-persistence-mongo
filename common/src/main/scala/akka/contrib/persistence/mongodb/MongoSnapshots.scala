@@ -4,14 +4,15 @@ import akka.actor.Actor
 import akka.pattern.CircuitBreaker
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.SnapshotSelectionCriteria
+import com.typesafe.config.Config
 import scala.concurrent.Future
 import akka.persistence.SnapshotMetadata
 import akka.persistence.SelectedSnapshot
 import scala.concurrent.ExecutionContext
 
-class MongoSnapshots extends SnapshotStore {
+class MongoSnapshots(config: Config) extends SnapshotStore {
 
-  private[this] val impl = MongoPersistenceExtension(context.system).snapshotter
+  private[this] val impl = MongoPersistenceExtension(context.system)(config).snapshotter
   private[this] implicit val ec = context.dispatcher
   
   /**

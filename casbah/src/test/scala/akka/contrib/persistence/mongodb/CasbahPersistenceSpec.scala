@@ -2,6 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
+import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.mongodb.casbah.{MongoClient, MongoCollection}
@@ -10,7 +11,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver,Mongo
 
     lazy val mongoDB = MongoClient(embedConnectionURL,embedConnectionPort)(embedDB)
 
-    override val driver = new CasbahMongoDriver(system) {
+    override val driver = new CasbahMongoDriver(system, ConfigFactory.empty()) {
       override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
       override def collection(name: String) = mongoDB(name)
     }

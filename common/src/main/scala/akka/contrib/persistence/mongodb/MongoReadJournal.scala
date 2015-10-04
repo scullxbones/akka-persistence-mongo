@@ -7,14 +7,15 @@ import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEB
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.scaladsl.Source
 import akka.stream.javadsl.{Source => JSource}
+import com.typesafe.config.Config
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
 }
 
-class MongoReadJournal(system: ExtendedActorSystem) extends ReadJournalProvider {
+class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends ReadJournalProvider {
 
-  private[this] val impl = MongoPersistenceExtension(system).readJournal
+  private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
 
   override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl)
 

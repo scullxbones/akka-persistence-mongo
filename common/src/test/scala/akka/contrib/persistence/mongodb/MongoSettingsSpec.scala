@@ -40,7 +40,7 @@ class MongoSettingsSpec extends BaseUnitTest {
       """.stripMargin)
 
   def fixture[A](config: Config)(testCode: MongoSettings => A): A = {
-    testCode(new MongoSettings(new ActorSystem.Settings(getClass.getClassLoader,config,"settings name")))
+    testCode(MongoSettings(new ActorSystem.Settings(getClass.getClassLoader,config,"settings name")))
   }
 
   "A settings object" should "correctly load the defaults" in fixture(reference) { s =>
@@ -61,5 +61,14 @@ class MongoSettingsSpec extends BaseUnitTest {
 
   it should "correctly load legacy credentials" in fixture(withCredentialsLegacy) { s =>
     s.MongoUri shouldBe "mongodb://user:pass@mongo1.example.com:27017/spec_db"
+  }
+
+  it should "allow for override" in fixture(withUri) { s =>
+    val overridden = ConfigFactory.parseString("""
+        |mongouri = "mongodb://localhost:27017/override"
+      """.stripMargin)
+    s.withOverride(overridden).MongoUri shouldBe "mongodb://localhost:27017/override"
+    s.withOverride(overridden).Implementation shouldBe "foo"
+    s.withOverride(overridden).JournalAutomaticUpgrade shouldBe false
   }
 }

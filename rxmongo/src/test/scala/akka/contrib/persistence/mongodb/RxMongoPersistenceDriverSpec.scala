@@ -25,12 +25,12 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
         |}
       """.stripMargin)
 
-  class MockRxMongoPersistenceDriver(actorSystem:ActorSystem) extends RxMongoDriver(actorSystem) {
+  class MockRxMongoPersistenceDriver(actorSystem:ActorSystem) extends RxMongoDriver(actorSystem, ConfigFactory.empty()) {
     def showCollections = db.collectionNames
   }
 
 
-  "An rxmongo driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig,"shutdown-config") { actorSystem =>
+  "An rxmongo driver" should "close the mongodb connection pool on actor system shutdown" in withConfig(shutdownConfig,"akka-contrib-mongodb-persistence-journal","shutdown-config") { case (actorSystem,_) =>
     val underTest = new MockRxMongoPersistenceDriver(actorSystem)
     underTest.actorSystem.terminate()
     Await.result(underTest.actorSystem.whenTerminated, 10.seconds)
@@ -41,7 +41,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
   }
 
 
-  it should "reconnect if a new driver is created" in withConfig(shutdownConfig,"shutdown-config") { actorSystem =>
+  it should "reconnect if a new driver is created" in withConfig(shutdownConfig,"akka-contrib-mongodb-persistence-journal","shutdown-config") { case (actorSystem,_) =>
     val underTest = new MockRxMongoPersistenceDriver(actorSystem)
     underTest.actorSystem.terminate()
     Await.result(underTest.actorSystem.whenTerminated, 10.seconds)
@@ -76,8 +76,8 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
         |}
       """.stripMargin)
 
-  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"authentication-config") { actorSystem =>
-    val underTest = new RxMongoDriver(actorSystem)
+  "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"akka-contrib-mongodb-persistence-journal","authentication-config") { case (actorSystem, config) =>
+    val underTest = new RxMongoDriver(actorSystem, config)
     val collections = Await.result(underTest.db.collectionNames,3.seconds)
     collections should contain ("system.users")
     ()
