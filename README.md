@@ -1,5 +1,7 @@
 # Akka Persistence MongoDB driver (Journal + Read Journal, Snapshots)
 
+[![Join the chat at https://gitter.im/scullxbones/akka-persistence-mongo](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/scullxbones/akka-persistence-mongo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 * Supports MongoDB 2.6, 3.0
 
 ### Using Akka 2.4? Use 1.x Series.
