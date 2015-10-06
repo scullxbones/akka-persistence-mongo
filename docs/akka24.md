@@ -14,15 +14,16 @@
 ### Quick Start
 
 * Choose a driver - Casbah and ReactiveMongo are currently supported
+* Driver dependencies are `provided`, meaning they must be included in the application project's dependencies.
 * Add the following to sbt:
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.6"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.6"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -164,9 +165,9 @@ It is a bad idea&trade; to use anything less safe than `Acknowledged` on the jou
 
 As a single data point (complete with grain of salt!) on a MBP i5 w/ SSD with [Kodemaniak's testbed](https://github.com/kodemaniak/akka-persistence-throughput-test) and mongodb running on the same physical machine, the performance difference between:
  * `Journaled` and `Acknowledged` write concerns is two orders of magnitude
- * `Acknowledged` and both `Unacknowledged` and `ErrorsIgnored` write concerns is one order of magnitude
+ * `Acknowledged` and `Unacknowledged` write concerns is one order of magnitude
 
-`Journaled` is a significant trade off of straight line performance for safety, and should be benchmarked vs. `Acknowledged` for your specific use case and treated as an engineering cost-benefit decision.  The argument for the unsafe pair of `Unacknowledged` and `ErrorsIgnored` vs. `Acknowledged` seems to be much weaker, although the functionality is left for the user to apply supersonic lead projectiles to their phalanges as necessary :).
+`Journaled` is a significant trade off of straight line performance for safety, and should be benchmarked vs. `Acknowledged` for your specific use case and treated as an engineering cost-benefit decision.  The argument for the unsafe pair of `Unacknowledged` vs. `Acknowledged` seems to be much weaker, although the functionality is left for the user to apply supersonic lead projectiles to their phalanges as necessary :).
 
 In addition to the mode of write concern, the `wtimeout` and `fsync` parameters may be configured seperately for the journal and snapshot.  FSync cannot be used with Journaling, so it will be disabled in that case.
 
