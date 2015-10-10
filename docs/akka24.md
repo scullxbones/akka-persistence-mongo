@@ -45,6 +45,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Dispatcher](#dispatcher)
    * [Pass-Through BSON](#passthru)
    * [Metrics](#metrics)
+   * [Multiple plugins](#multiplugin)
 
 <a name="major"/>
 ### Major Changes in 1.x
@@ -272,3 +273,35 @@ Histograms:
 #### Future plans?
  - Adding metrics to snapshotter
  - Adding health checks to both
+
+<a name="multiplugin"/>
+##### Multiple plugin configurations
+
+With the introduction of the `journalPluginId` and `snapshotPluginId` parameters as documented [here](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#Multiple_persistence_plugin_configurations),
+individual `PersistentActor`s can select a particular plugin implementation.
+
+This plugin supports multiple instances with different configurations.  One use case may be pointing different actors at different databases.  To specify
+multiple instances of this plugin, something like the following can be added to the `application.conf`:
+
+```
+# Supply default uri
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://defaultHost:27017/db1"
+
+akka-contrib-mongodb-persistence-journal-other {
+  # Select this plugin as journal implementation
+  class = "akka.contrib.persistence.mongodb.MongoJournal"
+  # Use delivered dispatcher
+  plugin-dispatcher = "akka-contrib-persistence-dispatcher"
+  # Overrides to supply overridden parameters (can be anything) 
+  # - assumed config root is `akka.contrib.persistence.mongodb.mongo`
+  overrides = {
+    mongouri = "mongodb://host1:27017/special"
+  }
+}
+```
+
+Given the above configuration, all `PersistentActor`s will default to the "defaultHost db1" pair.  
+
+In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persistence-journal-other" and use the "host1 special" pair.
+
+Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
