@@ -1,5 +1,13 @@
 ## Changelog for 1.x major version
 
+### 1.0.7
+
+* Address [#54](https://github.com/scullxbones/akka-persistence-mongo/issues/54) - Remove bulk inserts from reactive mongo - appears to have an issue upstream
+
+### 1.0.6
+
+* Fix [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43) - Support multiple concurrently running plugins with different configurations
+
 ### 1.0.5
 
 * Fix [#46](https://github.com/scullxbones/akka-persistence-mongo/issues/46) - not properly handling streaming of read journal queries; use cursors and/or `Enumerator` for rxm
