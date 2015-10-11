@@ -9,7 +9,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.{Promise, Await}
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Success, Try}
 
 abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
 
@@ -129,7 +129,6 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
   "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
-    val thousand = 1 to commandsPerBatch
     val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
@@ -143,11 +142,12 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
     println(s"$total events: $time ms ... ${total.map(_/(time / 1000.0)).map(_.toString).getOrElse("N/A")}")
+    total shouldBe Success(commandsPerBatch * batches * maxActors)
   }
 
   it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     val start = System.currentTimeMillis
-    val actors = startPersistentActors(as, 0, 100.milliseconds)
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
@@ -156,6 +156,6 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
 
     val time = System.currentTimeMillis - start
     println(s"$total events: ${time/1000.0}s to recover")
-    // time should be <= 20000L
+    total shouldBe Success(commandsPerBatch * batches * maxActors)
   }
 }

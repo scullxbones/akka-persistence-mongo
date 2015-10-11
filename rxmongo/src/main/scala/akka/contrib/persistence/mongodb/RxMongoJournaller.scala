@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
-import reactivemongo.api.Cursor
+import play.api.libs.iteratee.{Iteratee, Enumeratee, Enumerator}
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
 import DefaultBSONHandlers._
@@ -26,18 +26,17 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     FROM -> BSONDocument("$lte" -> to)
   )
 
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) =
-    journal.find(journalRangeQuery(pid, from, to))
-           .projection(BSONDocument(EVENTS -> 1))
-           .cursor[BSONDocument]()
-           .foldWhile(ISeq.empty[Event])(unwind(to),{ case(_,thr) => Cursor.Fail(thr)})
-
-  private[this] def unwind(maxSeq: Long)(s: ISeq[Event], doc: BSONDocument) = {
-    val docs = doc.as[BSONArray](EVENTS).values.collect {
-      case d:BSONDocument => driver.deserializeJournal(d)
-    }.filter(_.sn <= maxSeq).sorted
-    if (docs.last.sn < maxSeq) Cursor.Cont(s ++ docs)
-    else Cursor.Done(s ++ docs)
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) = {
+    val enum = journal.find(journalRangeQuery(pid, from, to))
+                      .projection(BSONDocument(EVENTS -> 1))
+                      .cursor[BSONDocument]()
+                      .enumerate()
+                      .flatMap(d => Enumerator(
+                        d.as[BSONArray](EVENTS).values.collect {
+                          case d:BSONDocument => driver.deserializeJournal(d)
+                        }.toSeq : _*))
+                      .through(Enumeratee.filter[Event](ev => ev.sn >= from && ev.sn <= to))
+    enum.run(Iteratee.getChunks[Event])
   }
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
@@ -45,23 +44,12 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     else throw wr
   }
 
-//  private[this] def bulkResultToUnit(bulk: ISeq[Try[BSONDocument]])(wr: MultiBulkWriteResult): ISeq[Try[Unit]] = {
-//    if (wr.ok) bulk.map(t => t.map(_ => ()))
-//    else
-//      throw ReactiveMongoException( ("MongoException" :: wr.errmsg.toList ++ wr.writeErrors) mkString "\n" )
-//  }
-
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
     val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw))))
-//    if (batch.forall(_.isSuccess)) {
-//      val collected = batch.collect { case scala.util.Success(ser) => ser }
-//      journal.bulkInsert(collected, ordered = true).map(bulkResultToUnit(batch))
-//    } else {
-      Future.sequence(batch.map {
-        case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
-        case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
-      })
-//    }
+    Future.sequence(batch.map {
+      case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
+      case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+    })
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
