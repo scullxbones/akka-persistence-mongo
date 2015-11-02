@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.0.9
+
+* Fix [#52](https://github.com/scullxbones/akka-persistence-mongo/issues/52) - Also fixes #45, #48 (indirectly).  Default to using `Thread.getContextClassLoader` if it is set, otherwise fall back to `Class.getClassloader`.  Should allow the plugin to play nicer with `Playframework` apps (e.g. `activator run`)
+
 ### 1.0.8
 
 * Fix [#57](https://github.com/scullxbones/akka-persistence-mongo/issues/57) - Dump `foldWhile` for play `Iteratee`s, not sure if issue is upstream or local.  Thanks to @matheuslima for helping find a reproducing test case 
