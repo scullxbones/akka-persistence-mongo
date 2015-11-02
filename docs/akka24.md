@@ -19,11 +19,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.6"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.9"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.6"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.9"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
