@@ -76,7 +76,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     import scala.collection.immutable.{Seq => ISeq}
 
     val id = doc.getAs[BSONObjectID]("_id").get
-    val ev = deserializeJournal(doc)
+    val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
     val q = BSONDocument("_id" -> id)
 
     collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))).map(previous :+ _)

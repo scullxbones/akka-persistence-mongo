@@ -1,8 +1,7 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ExtendedActorSystem, Props}
+import akka.actor.Props
 import akka.persistence.PersistentActor
-import akka.serialization.{SerializerWithStringManifest, Serializer}
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -23,6 +22,7 @@ abstract class Journal1kSpec(extensionClass: Class[_]) extends BaseUnitTest with
   }
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s

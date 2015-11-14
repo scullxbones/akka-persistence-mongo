@@ -49,7 +49,7 @@ object CasbahSerializers extends JournallingFieldNames {
         case _ =>
           val content = d.as[Array[Byte]](SERIALIZED)
           val repr = Serialized(content, classOf[PersistentRepr], None)
-          Event[DBObject](repr.content).copy(pid = persistenceId, sn = sequenceNr)
+          Event[DBObject](useLegacySerialization = false)(repr.content).copy(pid = persistenceId, sn = sequenceNr)
       }
 
     }
@@ -90,6 +90,7 @@ object CasbahSerializers extends JournallingFieldNames {
       payload match {
         case Bson(doc: DBObject) => builder += PayloadKey -> doc
         case Bin(bytes) => builder += PayloadKey -> bytes
+        case Legacy(bytes) => builder += PayloadKey -> bytes
         case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.clazz.getName :: SER_MANIFEST -> s.serializedManifest :: Nil)
         case StringPayload(str) => builder += PayloadKey -> str
         case FloatingPointPayload(d) => builder += PayloadKey -> d

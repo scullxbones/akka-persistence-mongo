@@ -101,4 +101,6 @@ class MongoSettings(val config: Config) {
   val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
 
   val ReadJournalPerFillLimit = config.getInt("journal-read-fill-limit")
+
+  val UseLegacyJournalSerialization = config.getBoolean("use-legacy-serialization")
 }

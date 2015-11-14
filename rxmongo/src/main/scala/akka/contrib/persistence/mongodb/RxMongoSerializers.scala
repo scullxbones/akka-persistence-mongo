@@ -106,6 +106,7 @@ object RxMongoSerializers {
         Serialized(bfr.readArray(bfr.size), clazz, serializedManifest)
       case ("bson",d:BSONDocument) => Bson(d)
       case ("bin",BSONBinary(bfr, _)) => Bin(bfr.readArray(bfr.size))
+      case ("repr",BSONBinary(bfr, _)) => Legacy(bfr.readArray(bfr.size))
       case ("s",BSONString(s)) => StringPayload(s)
       case ("d",BSONDouble(d)) => FloatingPointPayload(d)
       case ("l",BSONLong(l)) => FixedPointPayload(l)
@@ -127,7 +128,7 @@ object RxMongoSerializers {
         case Some(ser: BSONBinary) =>
           val repr = serialization.deserialize(ser.byteArray, classOf[PersistentRepr])
             .getOrElse(throw new IllegalStateException(s"Unable to deserialize PersistentRepr for id $persistenceId and sequence number $sequenceNr"))
-          Event[BSONDocument](repr).copy(pid = persistenceId, sn = sequenceNr)
+          Event[BSONDocument](useLegacySerialization = false)(repr).copy(pid = persistenceId, sn = sequenceNr)
         case Some(x) =>
           throw new IllegalStateException(s"Unexpected value $x for $SERIALIZED field in document for id $persistenceId and sequence number $sequenceNr")
         case None =>
@@ -168,6 +169,7 @@ object RxMongoSerializers {
       val asDoc = payload match {
         case Bson(doc: BSONDocument) => BSONDocument(PayloadKey -> doc)
         case Bin(bytes) => BSONDocument(PayloadKey -> bytes)
+        case Legacy(bytes) => BSONDocument(PayloadKey -> bytes)
         case s: Serialized[_] =>
           BSONDocument(PayloadKey -> BSON.write(s.bytes),
                        HINT -> s.clazz.getName,

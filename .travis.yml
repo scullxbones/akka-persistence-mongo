@@ -7,6 +7,6 @@ env:
    - MONGODB_VERSION=2.6
    - MONGODB_VERSION=3.0
   global:
-    _JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=4"
+    _JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=5"
 jdk:
   - oraclejdk8
