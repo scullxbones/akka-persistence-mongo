@@ -1,19 +1,16 @@
 package akka.contrib.persistence.mongodb
 
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands.bson.{BSONDropIndexesImplicits, BSONListIndexesImplicits}
+import reactivemongo.api.commands._
+import reactivemongo.api.indexes.{Index, IndexType}
+import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
-import reactivemongo.api.commands._
-import reactivemongo.api.indexes.{IndexType, Index}
-import reactivemongo.bson._
-
-import akka.actor.ActorSystem
-
-import scala.concurrent.{Awaitable, Future, ExecutionContext}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
 
@@ -34,6 +31,7 @@ object RxMongoPersistenceDriver {
 
 class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
+
   import concurrent.Await
   import concurrent.duration._
 
@@ -70,13 +68,14 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     Await.result(awaitable, duration)
 
   def walk(collection: BSONCollection)(previous: Future[Seq[WriteResult]], doc: BSONDocument)(implicit ec: ExecutionContext): Cursor.State[Future[Seq[WriteResult]]] = {
-    import scala.collection.immutable.{Seq => ISeq}
-    import RxMongoSerializers._
     import DefaultBSONHandlers._
     import Producer._
+    import RxMongoSerializers._
+
+    import scala.collection.immutable.{Seq => ISeq}
 
     val id = doc.getAs[BSONObjectID]("_id").get
-    val ev = deserializeJournal(doc)
+    val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
     val q = BSONDocument("_id" -> id)
 
     // Wait for previous record to be updated
@@ -88,8 +87,9 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
   }
 
   override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
-    import concurrent.ExecutionContext.Implicits.global
     import JournallingFieldNames._
+
+    import concurrent.ExecutionContext.Implicits.global
 
     val j = collection(journalCollectionName)
     val walker = walk(j) _

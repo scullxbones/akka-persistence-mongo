@@ -115,6 +115,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync
   def mongoUri = settings.MongoUri
+  def useLegacySerialization = settings.UseLegacyJournalSerialization
 
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
   def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)

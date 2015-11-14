@@ -46,7 +46,7 @@ class AllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[EventE
           .flatMap(lst => lst.collect {case x:DBObject => x} )
           .map(driver.deserializeJournal)
           .zipWithIndex
-          .map { case(e,i) => e.toEnvelope(i) }
+          .map { case(e,i) => e.toEnvelope(i.toLong) }
 
   override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
     val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
@@ -76,7 +76,7 @@ class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String
       .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
       .map(driver.deserializeJournal)
       .zipWithIndex
-      .map { case(e,i) => e.toEnvelope(i) }
+      .map { case(e,i) => e.toEnvelope(i.toLong) }
 
   override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
     val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)

@@ -53,6 +53,21 @@ object Serialized {
   }
 }
 
+case class Legacy(bytes: Array[Byte])(implicit ser: Serialization) extends Payload {
+  type Content = PersistentRepr
+  val hint = "repr"
+
+  lazy val content = {
+    ser.serializerFor(classOf[PersistentRepr]).fromBinary(bytes).asInstanceOf[PersistentRepr]
+  }
+}
+
+object Legacy {
+  def apply(repr: PersistentRepr)(implicit ser: Serialization): Legacy = {
+    Legacy(ser.findSerializerFor(repr).toBinary(repr))
+  }
+}
+
 case class Bin(content: Array[Byte]) extends Payload {
   type Content = Array[Byte]
   val hint = "bin"
@@ -99,6 +114,7 @@ object Payload {
   implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf)
 
   def apply[D](payload: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Payload = payload match {
+    case pr: PersistentRepr => Legacy(pr)
     case d:D => Bson(d)
     case bytes: Array[Byte] => Bin(bytes)
     case str: String => StringPayload(str)
@@ -114,6 +130,7 @@ object Payload {
   }
 
   def apply[D](hint: String, any: Any, clazzName: Option[String], serManifest: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
+    case ("repr",repr:Array[Byte]) => Legacy(repr)
     case ("ser",ser:Array[Byte]) if clazzName.isDefined =>
       val clazz = loadClass(clazzName.get)
       Serialized(ser, clazz, serManifest)
@@ -129,32 +146,58 @@ object Payload {
 
 
 case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
-  def toRepr = PersistentRepr(
-    persistenceId = pid,
-    sequenceNr = sn,
-    payload = payload.content,
-    sender = sender.orNull,
-    manifest = manifest.getOrElse(PersistentRepr.Undefined),
-    writerUuid = writerUuid.getOrElse(PersistentRepr.Undefined)
-  )
+  def toRepr = payload match {
+    case l:Legacy =>
+      l.content.update(persistenceId = pid, sequenceNr = sn)
+    case x =>
+      PersistentRepr(
+        persistenceId = pid,
+        sequenceNr = sn,
+        payload = x.content,
+        sender = sender.orNull,
+        manifest = manifest.getOrElse(PersistentRepr.Undefined),
+        writerUuid = writerUuid.getOrElse(PersistentRepr.Undefined)
+      )
+  }
 
-  def toEnvelope(offset: Long) = EventEnvelope(
-    offset = offset,
-    persistenceId = pid,
-    sequenceNr = sn,
-    event = payload.content
-  )
+  def toEnvelope(offset: Long) = payload match {
+    case l:Legacy =>
+      EventEnvelope(
+        offset = offset,
+        persistenceId = pid,
+        sequenceNr = sn,
+        event = l.content.payload
+      )
+    case x =>
+      EventEnvelope(
+        offset = offset,
+        persistenceId = pid,
+        sequenceNr = sn,
+        event = x.content
+      )
+  }
 }
 
 object Event {
-  def apply[D](repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Event = Event(
-    pid = repr.persistenceId,
-    sn = repr.sequenceNr,
-    payload = Payload(repr.payload),
-    sender = Option(repr.sender),
-    manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
-    writerUuid = Option(repr.writerUuid).filterNot(_ == PersistentRepr.Undefined)
-  )
+  def apply[D](useLegacySerialization: Boolean)(repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Event =
+  if (useLegacySerialization)
+    Event(
+      pid = repr.persistenceId,
+      sn = repr.sequenceNr,
+      payload = Payload(repr),
+      sender = Option(repr.sender),
+      manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
+      writerUuid = Option(repr.writerUuid).filterNot(_ == PersistentRepr.Undefined)
+    )
+  else
+    Event(
+      pid = repr.persistenceId,
+      sn = repr.sequenceNr,
+      payload = Payload(repr.payload),
+      sender = Option(repr.sender),
+      manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
+      writerUuid = Option(repr.writerUuid).filterNot(_ == PersistentRepr.Undefined)
+    )
 
   implicit object EventOrdering extends Ordering[Event] {
     override def compare(x: Event, y: Event): Int = Ordering[Long].compare(x.sn,y.sn)
@@ -164,11 +207,11 @@ object Event {
 case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
 
 object Atom {
-  def apply[D](aw: AtomicWrite)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Atom = {
+  def apply[D](aw: AtomicWrite, useLegacySerialization: Boolean)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Atom = {
     Atom(pid = aw.persistenceId,
       from = aw.lowestSequenceNr,
       to = aw.highestSequenceNr,
-      events = aw.payload.map(Event.apply(_)(ser,ev,dt)))
+      events = aw.payload.map(Event.apply(useLegacySerialization)(_)(ser,ev,dt)))
   }
 }
 

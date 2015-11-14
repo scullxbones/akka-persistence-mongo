@@ -45,7 +45,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   }
 
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
-    val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw))))
+    val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
     Future.sequence(batch.map {
       case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
       case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
