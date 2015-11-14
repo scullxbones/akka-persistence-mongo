@@ -2,6 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
+import play.api.libs.iteratee.Iteratee
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands._
@@ -67,7 +68,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
-  def walk(collection: BSONCollection)(previous: Future[Seq[WriteResult]], doc: BSONDocument)(implicit ec: ExecutionContext): Cursor.State[Future[Seq[WriteResult]]] = {
+  def walk(collection: BSONCollection)(previous: Seq[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Future[Seq[WriteResult]] = {
     import DefaultBSONHandlers._
     import Producer._
     import RxMongoSerializers._
@@ -78,12 +79,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
     val q = BSONDocument("_id" -> id)
 
-    // Wait for previous record to be updated
-    val wr = previous.flatMap(wrs =>
-      collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))).map(wrs :+ _)
-    )
-
-    Cursor.Cont(wr)
+    collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))).map(previous :+ _)
   }
 
   override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
@@ -94,17 +90,20 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     val j = collection(journalCollectionName)
     val walker = walk(j) _
     val q = BSONDocument(VERSION -> BSONDocument("$exists" -> 0))
-    val empty: Future[Seq[WriteResult]] = Future.successful(DefaultWriteResult(
+    val empty: Seq[WriteResult] = DefaultWriteResult(
       ok = true, n = 0,
       writeErrors = Seq.empty, writeConcernError = None,
       code = None, errmsg = None
-    ) :: Nil)
+    ) :: Nil
 
-    def traverse(count: Int) = {
+    def traverse(count: Int): Future[Seq[WriteResult]] = {
       logger.info(s"Journal automatic upgrade found $count records needing upgrade")
       if (count > 0) {
-        j.find(q).cursor[BSONDocument]().foldWhile(empty)(walker, (_,t) => Cursor.Fail(t)).flatMap(identity)
-      } else empty
+        j.find(q)
+          .cursor[BSONDocument]()
+          .enumerate()
+          .run(Iteratee.foldM(empty)(walker))
+      } else Future.successful(empty)
     }
 
     val eventuallyUpgrade = for {
