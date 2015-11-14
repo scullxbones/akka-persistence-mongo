@@ -1,5 +1,12 @@
 ## Changelog for 1.x major version
 
+### 1.0.10
+
+* Fix [#60](https://github.com/scullxbones/akka-persistence-mongo/issues/60):
+  * Adds configuration option to force legacy serialization, fully delegating to `akka-serialization` for payloads
+  * Stores entire `PersistentRepr` as a unit in payload with _type = "repr"
+* Fix [#62](https://github.com/scullxbones/akka-persistence-mongo/issues/62).  Was still using `foldWhile` for ReactiveMongo journal upgrade - this method seems to stop iteration at record #100.  Iteratees have no such issue - switch to Iteratees
+
 ### 1.0.9
 
 * Fix [#52](https://github.com/scullxbones/akka-persistence-mongo/issues/52) - Also fixes #45, #48 (indirectly).  Default to using `Thread.getContextClassLoader` if it is set, otherwise fall back to `Class.getClassloader`.  Should allow the plugin to play nicer with `Playframework` apps (e.g. `activator run`)
