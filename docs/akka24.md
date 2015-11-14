@@ -45,6 +45,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Circuit Breaker / Fail Fast](#circuitbreaker)
    * [Dispatcher](#dispatcher)
    * [Pass-Through BSON](#passthru)
+   * [Legacy Serialization](#legacyser)
    * [Metrics](#metrics)
    * [Multiple plugins](#multiplugin)
 
@@ -240,6 +241,17 @@ class SampleActor extends PersistentActor {
 During replay, events will be sent to your actor as-is. It is the application's duty to handle BSON (de)serialization in this case.
 
 This functionality is also exposed for snapshots.
+
+<a name="legacyser"/>
+##### Legacy Serialization
+
+Legacy serialization (0.x) can be forced via the configuration parameter:
+
+```
+akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
+```
+
+This will fully delegate serialization to `akka-serialization` by directly persisting the `PersistentRepr` as binary.  It can be used to carry over functionality that is dependent on the way that the `0.x` series used to treat storage of events.
 
 <a name="metrics"/>
 ##### Metrics (optional functionality)
