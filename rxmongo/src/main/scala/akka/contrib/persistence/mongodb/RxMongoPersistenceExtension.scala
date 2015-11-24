@@ -147,7 +147,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
 
   private[mongodb] def closeConnections(): Unit = driver.close()
 
-  private[mongodb] def dbName: String = parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME)
+  private[mongodb] def dbName: String = databaseName.getOrElse(DEFAULT_DB_NAME)
   private[mongodb] def db = connection(dbName)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)

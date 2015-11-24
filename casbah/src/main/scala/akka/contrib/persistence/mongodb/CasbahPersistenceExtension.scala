@@ -80,7 +80,7 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   private[mongodb] lazy val client = MongoClient(url)
 
-  private[mongodb] lazy val db = client(url.database.getOrElse(DEFAULT_DB_NAME))
+  private[mongodb] lazy val db = client(databaseName.getOrElse(DEFAULT_DB_NAME))
 
   private[mongodb] def collection(name: String) = db(name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)

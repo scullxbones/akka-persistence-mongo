@@ -82,6 +82,8 @@ class MongoSettings(val config: Config) {
       }) getOrElse s"mongodb://$Urls/$DbName"
   }
 
+  val Database = Try(config.getString("database")).toOption
+
   val JournalCollection = config.getString("journal-collection")
   val JournalIndex = config.getString("journal-index")
   val JournalWriteConcern = config.getString("journal-write-concern")
