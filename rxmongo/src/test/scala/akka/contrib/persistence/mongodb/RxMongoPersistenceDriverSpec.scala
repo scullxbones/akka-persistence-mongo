@@ -73,6 +73,7 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
     s"""
         |akka.contrib.persistence.mongodb.mongo {
         | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin$authMode"
+        | database = "admin"
         |}
       """.stripMargin)
 

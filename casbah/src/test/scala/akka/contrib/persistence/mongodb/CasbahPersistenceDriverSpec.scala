@@ -71,6 +71,7 @@ class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo wi
     s"""
         |akka.contrib.persistence.mongodb.mongo {
         | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin"
+        | database = "admin"
         |}
       """.stripMargin)
 

@@ -33,6 +33,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     |  class = "akka.contrib.persistence.mongodb.MongoJournal"
     |  overrides {
     |     mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |     database = $embedDB
     |  }
     |}
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
