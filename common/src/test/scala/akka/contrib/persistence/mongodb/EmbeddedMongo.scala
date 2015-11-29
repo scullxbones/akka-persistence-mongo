@@ -103,6 +103,7 @@ trait EmbeddedMongo {
   }
 
   def doAfter(): Unit = {
-    mongod.stop(); mongodExe.stop()
+    mongodExe.stop()
+    mongod.stop()
   }
 }

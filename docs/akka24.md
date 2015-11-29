@@ -19,11 +19,11 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.9"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.0.11"
 ```
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.9"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.0.11"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -135,6 +135,16 @@ For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the
 ```
 akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2:27017/replicated-database"
 ```
+
+If a user, password, and database are specified, the database will be used both as a credentials source as well as journal and/or snapshot storage.  
+In order to use a separate database for data storage, one can provide this with the following configuration item:
+   
+```
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@localhost/credential-database"
+akka.contrib.persistence.mongodb.mongo.database = "storage-db"
+```
+
+Proper MongoDB user permissions must be in place of course for the user to be able to access `storage-db` in this case 
 
 <a name="mongocollection"/>
 ##### Mongo Collection, Index settings

@@ -32,9 +32,11 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi) extends
     Source.actorPublisher[String](impl.allPersistenceIds)
       .mapMaterializedValue(_ => ())
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] =
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
+    require(persistenceId != null, "PersistenceId must not be null")
     Source.actorPublisher[EventEnvelope](impl.eventsByPersistenceId(persistenceId,fromSequenceNr,toSequenceNr))
       .mapMaterializedValue(_ => ())
+  }
 }
 
 class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP {
@@ -42,8 +44,10 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
 
   override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): JSource[EventEnvelope, Unit] =
-    rj.currentEventsByPersistenceId(persistenceId,fromSequenceNr,toSequenceNr).asJava
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): JSource[EventEnvelope, Unit] = {
+    require(persistenceId != null, "PersistenceId must not be null")
+    rj.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
+  }
 }
 
 trait MongoPersistenceReadJournallingApi {
