@@ -104,6 +104,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
                       TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
   }
 
+  def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
