@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.0.11
+* PR [#67](https://github.com/scullxbones/akka-persistence-mongo/pull/67) merged:
+  * Adds support for separate credential-storing and data-storing databases
+  * Thanks to @LeightonWong for the contribution!
+* Add some `require` assertions so as to fail quickly when null `persistenceId` is passed to `EventsByPersistenceId` query
+
 ### 1.0.10
 
 * Fix [#60](https://github.com/scullxbones/akka-persistence-mongo/issues/60):
