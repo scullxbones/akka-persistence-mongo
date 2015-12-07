@@ -97,6 +97,8 @@ class MongoSettings(val config: Config) {
   val SnapsWTimeout = config.getDuration("snaps-wtimeout",MILLISECONDS).millis
   val SnapsFSync = config.getBoolean("snaps-fsync")
 
+  val realtimeCollectionName = config.getString("realtime-collection")
+  val realtimeCollectionSize = config.getInt("realtime-collection-size")
 
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
