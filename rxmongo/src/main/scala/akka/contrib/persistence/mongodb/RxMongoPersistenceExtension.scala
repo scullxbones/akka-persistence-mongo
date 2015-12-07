@@ -163,6 +163,16 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
       name = Some(indexName)))
     collection
   }
+
+  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
+    val collection = db[BSONCollection](name)
+    collection.stats().flatMap{ case stats if ! stats.capped =>
+      collection.convertToCapped(realtimeCollectionSize, None)
+    }.recover{ case _ =>
+      collection.createCapped(realtimeCollectionSize, None)
+    }
+    collection
+  }
 }
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {

@@ -78,6 +78,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def collection(name: String): C
 
+  private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
+
   private[mongodb] def ensureUniqueIndex(collection: C, indexName: String, fields: (String,Int)*)(implicit ec: ExecutionContext): C
 
   private[mongodb] def closeConnections(): Unit
@@ -103,7 +105,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
                       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
                       TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
   }
-
+  private[mongodb] lazy val realtime: C = {
+    cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.Implicits.global)
+  }
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
@@ -115,6 +119,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync
+  def realtimeCollectionName = settings.realtimeCollectionName
+  def realtimeCollectionSize = settings.realtimeCollectionSize
   def mongoUri = settings.MongoUri
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
