@@ -21,6 +21,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     (PROCESSOR_ID $eq pid) ++ (FROM $gte from) ++ (FROM $lte to)
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
+  private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Iterator[Event] =
     journal.find(journalRangeQuery(pid, from, to))
@@ -34,11 +35,17 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
     if (batch.forall(_.isSuccess)) {
       val bulk = journal.initializeOrderedBulkOperation
+      val bulk2 = realtime.initializeOrderedBulkOperation
       batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
+      batch.collect { case scala.util.Success(ser) => ser } foreach bulk2.insert
       bulk.execute(writeConcern)
+      bulk2.execute(writeConcern)
       batch.map(t => t.map(_ => ()))
     } else { // degraded performance, cant batch
-      batch.map(_.map(serialized => journal.insert(serialized)(identity, writeConcern)).map(_ => ()))
+      batch.map(_.map{serialized =>
+        journal.insert(serialized)(identity, writeConcern)
+        realtime.insert(serialized)(identity, writeConcern)
+      }.map(_ => ()))
     }
   }
 
