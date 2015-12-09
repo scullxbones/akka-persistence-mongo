@@ -111,6 +111,7 @@ Similarly there is a JavaDsl version.
 1. `eventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query. The Source not completes when reaches end of events and continues emit as new events are persist into journal
 1. `AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
 * I'll look for community feedback about what driver-specific queries might be useful as well
+* The live queries use capped collection to stream events. If you not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
 
 <a name="miscchanges"/>
 #### Miscellaneous Other Changes

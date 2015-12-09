@@ -119,6 +119,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync
+  def realtimeEnablePersistence = settings.realtimeEnablePersistence
   def realtimeCollectionName = settings.realtimeCollectionName
   def realtimeCollectionSize = settings.realtimeCollectionSize
   def mongoUri = settings.MongoUri

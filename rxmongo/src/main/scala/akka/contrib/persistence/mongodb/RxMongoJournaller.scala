@@ -50,8 +50,9 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
     Future.sequence(batch.map {
       case Success(document:BSONDocument) =>
-        journal.insert(document, writeConcern).map(writeResultToUnit)
-        realtime.insert(document, writeConcern).map(writeResultToUnit)
+        val result =journal.insert(document, writeConcern).map(writeResultToUnit)
+        if(driver.realtimeEnablePersistence) realtime.insert(document, writeConcern).map(writeResultToUnit)
+        result
       case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
     })
   }
