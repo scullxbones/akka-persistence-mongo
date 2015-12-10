@@ -2,8 +2,9 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.{PoisonPill, Props}
 import akka.persistence.PersistentActor
-import akka.persistence.query.PersistenceQuery
+import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.ActorMaterializer
+import akka.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -66,7 +67,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     }
   }
 
-
   "A read journal" should "support the journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
     import concurrent.duration._
     implicit val system = as
@@ -84,7 +84,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val readJournal =
       PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
-    val fut = readJournal.allEvents().runFold(events.toSet){ (received, ee) =>
+    val fut = readJournal.currentAllEvents().runFold(events.toSet){ (received, ee) =>
       println(s"ee = $ee")
       val asAppend = Append(ee.event.asInstanceOf[String])
       events should contain (asAppend)
@@ -117,7 +117,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(fut,10.seconds) should contain allOf("1","2","3","4","5")
   }
 
-  it should "support the events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
+  it should "support the current events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
@@ -142,5 +142,59 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     }
 
     Await.result(fut,10.seconds).map(_.s) shouldBe Set("just","a","test","END")
+  }
+
+  it should "support the events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
+    import concurrent.duration._
+    implicit  val system = as
+    implicit val mat = ActorMaterializer()
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val promise = Promise[Unit]()
+    val ar = as.actorOf(props("foo-live", promise))
+
+    val events = ("foo" :: "bar" :: "bar2" :: Nil) map Append.apply
+
+    val probe = TestProbe()
+
+    events slice(0, 2) foreach ( ar ! _ )
+    readJournal.eventsByPersistenceId("foo-live", 0L, Long.MaxValue).runForeach{ ee =>
+      println(s"Received envelope = $ee")
+      probe.ref ! ee
+    }
+
+    ar ! events(2)
+    probe.receiveN(events.size, 10 seconds).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events.map(_.s))
+  }
+
+  it should "support the events by id query with multiple persistent actors" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal"){ case (as, _) =>
+    import concurrent.duration._
+    implicit  val system = as
+    implicit val mat = ActorMaterializer()
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val promise = Promise[Unit]()
+    val promise2 = Promise[Unit]()
+    val ar = as.actorOf(props("foo-live-2a", promise))
+    val ar2 = as.actorOf(props("foo-live-2b", promise2))
+
+    val events = ("foo" :: "bar" :: "bar2" :: Nil) map Append.apply
+    val events2 = ("just" :: "a" :: "test" :: Nil) map Append.apply
+
+    val probe = TestProbe()
+
+    readJournal.eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue).runForeach{ ee =>
+      println(s"Received envelope = $ee")
+      probe.ref ! ee
+    }
+
+    events foreach ( ar ! _ )
+    events2 foreach ( ar2 ! _ )
+
+    probe.receiveN(events2.size, 10 seconds).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events2.map(_.s))
   }
 }

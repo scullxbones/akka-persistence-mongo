@@ -1,15 +1,17 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.Props
+import akka.actor.{ActorRef, Props}
 import akka.persistence.query.EventEnvelope
-import com.mongodb.DBObject
+import com.mongodb.{DBCursor, Bytes, DBObject}
 import com.mongodb.casbah.Imports._
 
-object AllPersistenceIds {
-  def props(driver: CasbahMongoDriver): Props = Props(new AllPersistenceIds(driver))
+import scala.concurrent.Future
+
+object CurrentAllPersistenceIds {
+  def props(driver: CasbahMongoDriver): Props = Props(new CurrentAllPersistenceIds(driver))
 }
 
-class AllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
+class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
   import CasbahSerializers._
 
   override protected def initialCursor: Stream[String] =
@@ -30,14 +32,14 @@ class AllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublishe
   override protected def discard(c: Stream[String]): Unit = ()
 }
 
-object AllEvents {
-  def props(driver: CasbahMongoDriver): Props = Props(new AllEvents(driver))
+object CurrentAllEvents {
+  def props(driver: CasbahMongoDriver): Props = Props(new CurrentAllEvents(driver))
 }
 
-class AllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[EventEnvelope, Stream[EventEnvelope]] {
+class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, Stream[Event]] {
   import CasbahSerializers._
 
-  override protected def initialCursor: Stream[EventEnvelope] =
+  override protected def initialCursor: Stream[Event] =
     driver.journal
           .find(MongoDBObject())
           .sort(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
@@ -45,28 +47,26 @@ class AllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[EventE
           .flatMap(_.getAs[MongoDBList](EVENTS))
           .flatMap(lst => lst.collect {case x:DBObject => x} )
           .map(driver.deserializeJournal)
-          .zipWithIndex
-          .map { case(e,i) => e.toEnvelope(i.toLong) }
 
-  override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
+  override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
     val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
     (buf.toVector, remainder)
   }
 
-  override protected def isCompleted(c: Stream[EventEnvelope]): Boolean = c.isEmpty
+  override protected def isCompleted(c: Stream[Event]): Boolean = c.isEmpty
 
-  override protected def discard(c: Stream[EventEnvelope]): Unit = ()
+  override protected def discard(c: Stream[Event]): Unit = ()
 }
 
-object EventsByPersistenceId {
+object CurrentEventsByPersistenceId {
   def props(driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    Props(new EventsByPersistenceId(driver, persistenceId, fromSeq, toSeq))
+    Props(new CurrentEventsByPersistenceId(driver, persistenceId, fromSeq, toSeq))
 }
 
-class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends SyncActorPublisher[EventEnvelope, Stream[EventEnvelope]] {
+class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends SyncActorPublisher[Event, Stream[Event]] {
   import CasbahSerializers._
 
-  override protected def initialCursor: Stream[EventEnvelope] =
+  override protected def initialCursor: Stream[Event] =
     driver.journal
       .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq) ++ (FROM $lte toSeq))
       .sort(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1))
@@ -75,24 +75,58 @@ class EventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String
       .flatMap(lst => lst.collect {case x:DBObject => x} )
       .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
       .map(driver.deserializeJournal)
-      .zipWithIndex
-      .map { case(e,i) => e.toEnvelope(i.toLong) }
 
-  override protected def next(c: Stream[EventEnvelope], atMost: Long): (Vector[EventEnvelope], Stream[EventEnvelope]) = {
+  override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
     val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
     (buf.toVector, remainder)
   }
 
-  override protected def isCompleted(c: Stream[EventEnvelope]): Boolean = c.isEmpty
+  override protected def isCompleted(c: Stream[Event]): Boolean = c.isEmpty
 
-  override protected def discard(c: Stream[EventEnvelope]): Unit = ()
+  override protected def discard(c: Stream[Event]): Unit = ()
+}
+
+class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[Event, MongoCollection] with JournalEventBus{
+  import CasbahSerializers._
+
+  override def cursor = {
+    val c = driver.realtime
+    c.addOption(Bytes.QUERYOPTION_TAILABLE)
+    c.addOption(Bytes.QUERYOPTION_AWAITDATA)
+    c
+  }
+
+  override def publishEvent(handler: (Event) => Unit) = {
+
+    cursor.foreach{ next =>
+      if (next.keySet().contains(EVENTS)) {
+        val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
+        events foreach handler
+      }
+    }
+  }
+
+  override def streaming = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    Future {
+      publishEvent(publish)
+    }
+  }
 }
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
-  override def allPersistenceIds: Props = AllPersistenceIds.props(driver)
 
-  override def allEvents: Props = AllEvents.props(driver)
+  private val journalStreaming = new CasbahMongoJournalStream(driver)
 
-  override def eventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    EventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
+  override def currentAllEvents: Props = CurrentAllEvents.props(driver)
+
+  override def currentPersistenceIds: Props = CurrentAllPersistenceIds.props(driver)
+
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
+    CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
+
+  override def publishJournalEvents(persistenceId: String, subscriber: ActorRef) = {
+    journalStreaming.subscribe(subscriber, persistenceId)
+    journalStreaming.streaming
+  }
 }

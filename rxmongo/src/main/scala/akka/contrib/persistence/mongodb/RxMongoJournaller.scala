@@ -20,6 +20,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
+  private[this] def realtime = driver.realtime
+
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) = BSONDocument(
     PROCESSOR_ID -> pid,
     FROM -> BSONDocument("$gte" -> from),
@@ -47,7 +49,10 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
     val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
     Future.sequence(batch.map {
-      case Success(document:BSONDocument) => journal.insert(document, writeConcern).map(writeResultToUnit)
+      case Success(document:BSONDocument) =>
+        val result =journal.insert(document, writeConcern).map(writeResultToUnit)
+        if(driver.realtimeEnablePersistence) realtime.insert(document, writeConcern).map(writeResultToUnit)
+        result
       case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
     })
   }

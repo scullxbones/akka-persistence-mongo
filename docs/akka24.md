@@ -105,12 +105,13 @@ Similarly there is a JavaDsl version.
   * This provides a way to create an `akka-streams Source` of data from a query posed to the journal plugin
   * The implementation of queries are purely up to the journal developer
   * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
-* Initially three queries are supported.  All are `current` only for the moment, and thus would complete when no more records are available:
+* All `current` queries are supported, and thus would complete when no more records are available. Also the eventsByPersistenceId is supported:
 1. `currentPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
 1. `currentEventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
+1. `eventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query. The Source not completes when reaches end of events and continues emit as new events are persist into journal
 1. `AllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-* Eventually i'd like to support live versions of these queries, probably via a tailable cursor. (Tracked in issue #38)
 * I'll look for community feedback about what driver-specific queries might be useful as well
+* The live queries use capped collection to stream events. If you not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
 
 <a name="miscchanges"/>
 #### Miscellaneous Other Changes

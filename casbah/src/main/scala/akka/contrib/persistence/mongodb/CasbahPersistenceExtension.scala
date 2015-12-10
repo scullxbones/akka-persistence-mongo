@@ -3,7 +3,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{MongoCommandException, WriteConcern}
+import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
@@ -86,7 +86,6 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
-
   private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext): MongoCollection = {
     collection.createIndex(
       MongoDBObject(keys :_*),
@@ -94,6 +93,24 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     collection
   }
 
+  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
+    if (db.collectionExists(name)) {
+      val collection = db(name)
+      if ( !collection.isCapped){
+        collection.drop()
+        val options = BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get()
+        db.createCollection(name, options).asScala
+      } else {
+        collection
+      }
+    }else {
+      import com.mongodb.casbah.Imports._
+      val options = BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get()
+      val c = db.createCollection(name, options).asScala
+      c.insert(MongoDBObject("x" -> "x")) // casbah cannot tail empty collections
+      c
+    }
+  }
 }
 
 class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
