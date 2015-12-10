@@ -14,6 +14,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver,Mongo
     override val driver = new CasbahMongoDriver(system, ConfigFactory.empty()) {
       override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
       override def collection(name: String) = mongoDB(name)
+      override lazy val db = mongoDB
     }
 
     override def withCollection(name: String)(testCode: MongoCollection => Any) = {

@@ -35,11 +35,15 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
     if (batch.forall(_.isSuccess)) {
       val bulk = journal.initializeOrderedBulkOperation
-      val bulk2 = realtime.initializeOrderedBulkOperation
       batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
-      if(driver.realtimeEnablePersistence) batch.collect { case scala.util.Success(ser) => ser } foreach bulk2.insert
       bulk.execute(writeConcern)
-      if(driver.realtimeEnablePersistence) bulk2.execute(writeConcern)
+
+      if(driver.realtimeEnablePersistence) {
+        val bulk2 = realtime.initializeOrderedBulkOperation
+        batch.collect { case scala.util.Success(ser) => ser } foreach bulk2.insert
+        bulk2.execute(writeConcern)
+      }
+
       batch.map(t => t.map(_ => ()))
     } else { // degraded performance, cant batch
       batch.map(_.map{serialized =>
