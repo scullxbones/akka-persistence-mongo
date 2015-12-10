@@ -3,7 +3,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence._
 import akka.serialization.SerializationExtension
-import akka.testkit.TestKit
+import akka.testkit._
 import com.mongodb.casbah.Imports._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
@@ -159,7 +159,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val withSerializedObjects = records.map(_.withPayload(msg))
     val result =  underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
 
-    val writeResult = Await.result(result,5.seconds)
+    val writeResult = Await.result(result,5.seconds.dilated)
     writeResult.foreach(wr => wr shouldBe 'success)
 
     val buf = mutable.Buffer[PersistentRepr]()
@@ -175,7 +175,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val withSerializedObjects = records.map(_.withPayload(msg))
     val result =  underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
 
-    val writeResult = Await.result(result,5.seconds)
+    val writeResult = Await.result(result,5.seconds.dilated)
     writeResult.foreach(wr => wr shouldBe 'success)
 
     val buf = mutable.Buffer[PersistentRepr]()
