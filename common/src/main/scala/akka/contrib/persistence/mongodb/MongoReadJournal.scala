@@ -1,15 +1,14 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorRef, Actor, ExtendedActorSystem, Props}
-import akka.event.{LookupClassification, ActorEventBus}
+import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
-import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, EventsByPersistenceIdQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery}
-import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP, AllPersistenceIdsQuery => JAPIQ}
-import akka.stream.{SourceShape, OverflowStrategy}
+import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
+import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
-import akka.stream.scaladsl.{Flow, MergePreferred, FlowGraph, Source}
 import akka.stream.javadsl.{Source => JSource}
-import akka.stream.stage.{SyncDirective, Context, PushStage}
+import akka.stream.scaladsl.{Flow, FlowGraph, MergePreferred, Source}
+import akka.stream.stage.{Context, PushStage, SyncDirective}
+import akka.stream.{OverflowStrategy, SourceShape}
 import com.typesafe.config.Config
 
 import scala.collection.mutable
@@ -46,6 +45,23 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     require(persistenceId != null, "PersistenceId must not be null")
     Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
       .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
+  }
+
+  def allEvents(): Source[EventEnvelope, Unit] = {
+    val graph = FlowGraph.partial(){ implicit builder =>
+      import FlowGraph.Implicits._
+      val pastSource = builder.add(Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ()))
+      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
+        .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor)))
+      val merge = builder.add(MergePreferred[Event](1))
+      val removeDuplicatedEventsByPersistenceId = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId))
+      val eventEnvelopeConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
+      pastSource     ~> merge.preferred
+      realtimeSource ~> merge.in(0)
+                        merge.out ~> removeDuplicatedEventsByPersistenceId ~> eventEnvelopeConverter
+      SourceShape(eventEnvelopeConverter.outlet)
+    }
+    Source.wrap(graph)
   }
 
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
@@ -90,6 +106,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
 
 class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ{
   def currentAllEvents(): JSource[EventEnvelope, Unit] = rj.currentAllEvents().asJava
+  def allEvents(): JSource[EventEnvelope, Unit] = rj.allEvents().asJava
 
   override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
 
@@ -124,6 +141,25 @@ class RemoveDuplicatedEvents extends PushStage[Event, Event]{
         }
       case None =>
         lastSequenceNr = Some(elem.sn)
+        ctx.push(elem)
+    }
+  }
+}
+
+class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event]{
+  val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+  override def onPush(elem: Event, ctx: Context[Event]) = {
+    lastSequenceNrByPersistenceId get elem.pid match {
+      case Some(sequenceNr) =>
+        if (elem.sn > sequenceNr) {
+          lastSequenceNrByPersistenceId remove elem.pid
+          lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
+          ctx.push(elem)
+        }else{
+          ctx.pull()
+        }
+      case None =>
+        lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
         ctx.push(elem)
     }
   }

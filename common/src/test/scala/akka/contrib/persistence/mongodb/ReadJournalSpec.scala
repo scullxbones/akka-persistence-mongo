@@ -94,6 +94,35 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(fut,10.seconds.dilated) shouldBe empty
   }
 
+  "A read journal" should "support the realtime journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
+    import concurrent.duration._
+    implicit val system = as
+    implicit val mat = ActorMaterializer()
+
+    val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
+
+    val promise1 = Promise[Unit]()
+    val promise2 = Promise[Unit]()
+    val ar1 = as.actorOf(props("foo",promise1))
+    val ar2 = as.actorOf(props("bar", promise2))
+
+    events slice(0,3) foreach (ar1 ! _)
+
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val probe = TestProbe()
+
+    val fut = readJournal.allEvents().runForeach{ ee =>
+      println(s"Received EventEnvelope $ee")
+      probe.ref ! ee
+    }
+    events slice(3,6) foreach (ar2 ! _)
+
+    probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events.map(_.s))
+  }
+
   it should "support the current persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
     import concurrent.duration._
     implicit val system = as
