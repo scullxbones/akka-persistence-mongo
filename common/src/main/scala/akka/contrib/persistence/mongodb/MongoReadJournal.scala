@@ -54,13 +54,14 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
       val pastSource = builder.add(Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
         .mapMaterializedValue(_ => ()))
       val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .mapMaterializedValue(actor => impl.publishJournalEvents(persistenceId, actor)))
+        .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor)))
+      val filterByPersistenceId = builder.add(Flow[Event].filter(_.pid equals persistenceId))
       val removeDuplicatedEvents = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEvents))
       val eventConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
 
       pastSource     ~>       merge.preferred
       realtimeSource ~>       merge.in(0)
-                              merge.out  ~> removeDuplicatedEvents ~> eventConverter
+                              merge.out  ~> filterByPersistenceId ~> removeDuplicatedEvents ~> eventConverter
       SourceShape(eventConverter.outlet)
     }
     Source.wrap(graph)
@@ -82,21 +83,11 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
   }
 }
 
-trait JournalEventBus extends ActorEventBus with LookupClassification{
-  override protected def mapSize() = 65536
 
-  override protected def publish(event: Event, subscriber: Subscriber) = subscriber ! event
+trait JournalStream[Cursor] {
+    def cursor(): Cursor
+    def publishEvents(): Unit
 
-  override protected def classify(event: Event) = event.pid
-
-  override type Classifier = String
-  override type Event = akka.contrib.persistence.mongodb.Event
-}
-
-trait JournalStream[A, Cursor] {
-    def cursor: Cursor
-    def publishEvent(handler: A => Unit): Unit
-    def streaming: Unit
 }
 
 class RemoveDuplicatedEvents extends PushStage[Event, Event]{
@@ -129,7 +120,7 @@ trait MongoPersistenceReadJournallingApi {
   def currentAllEvents: Props
   def currentPersistenceIds: Props
   def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props
-  def publishJournalEvents(persistenceId: String, subscriber: ActorRef): Unit
+  def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
 trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {

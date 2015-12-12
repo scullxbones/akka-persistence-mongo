@@ -144,7 +144,7 @@ class CurrentEventsByPersistenceId(val driver:RxMongoDriver,persistenceId:String
   }
 }
 
-class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Event, Enumerator[BSONDocument]] with JournalEventBus{
+class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerator[BSONDocument]]{
   import concurrent.ExecutionContext.Implicits.global
   import RxMongoSerializers._
   override def cursor = driver.realtime.find(BSONDocument.empty).options(QueryOpts().tailable.awaitData).cursor[BSONDocument]().enumerate()
@@ -157,12 +157,9 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Event, E
     )
   }
 
-  override def streaming = {
-    publishEvent(publish)
-  }
 
-  override def publishEvent(handler: (Event) => Unit) = {
-    val iteratee = Iteratee.foreach[Event](handler)
+  override def publishEvents = {
+    val iteratee = Iteratee.foreach[Event](driver.actorSystem.eventStream.publish)
     cursor.through(flatten).run(iteratee)
   }
 }
@@ -170,6 +167,7 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Event, E
 class RxMongoReadJournaller(driver: RxMongoDriver) extends MongoPersistenceReadJournallingApi {
 
   val journalStream = new RxMongoJournalStream(driver)
+  journalStream.publishEvents
 
   override def currentAllEvents: Props = CurrentAllEvents.props(driver)
 
@@ -178,9 +176,6 @@ class RxMongoReadJournaller(driver: RxMongoDriver) extends MongoPersistenceReadJ
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
     CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 
-  override def publishJournalEvents(persistenceId: String, subscriber: ActorRef) = {
-
-    journalStream.subscribe(subscriber, persistenceId)
-    journalStream.streaming
-  }
+  override def subscribeJournalEvents(subscriber: ActorRef): Unit =
+    driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
 }
