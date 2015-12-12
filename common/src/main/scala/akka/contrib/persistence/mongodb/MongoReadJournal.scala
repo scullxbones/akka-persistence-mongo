@@ -3,14 +3,16 @@ package akka.contrib.persistence.mongodb
 import akka.actor.{ActorRef, Actor, ExtendedActorSystem, Props}
 import akka.event.{LookupClassification, ActorEventBus}
 import akka.persistence.query._
-import akka.persistence.query.scaladsl.{EventsByPersistenceIdQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery}
-import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
+import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, EventsByPersistenceIdQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery}
+import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP, AllPersistenceIdsQuery => JAPIQ}
 import akka.stream.{SourceShape, OverflowStrategy}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.scaladsl.{Flow, MergePreferred, FlowGraph, Source}
 import akka.stream.javadsl.{Source => JSource}
-import akka.stream.stage.{Context, PushStage}
+import akka.stream.stage.{SyncDirective, Context, PushStage}
 import com.typesafe.config.Config
+
+import scala.collection.mutable
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
@@ -29,6 +31,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
+    with AllPersistenceIdsQuery
     with EventsByPersistenceIdQuery{
 
   def currentAllEvents(): Source[EventEnvelope,Unit] =
@@ -66,9 +69,26 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     }
     Source.wrap(graph)
   }
+
+  override def allPersistenceIds(): Source[String, Unit] = {
+    val graph = FlowGraph.partial(){ implicit builder =>
+      import FlowGraph.Implicits._
+      val merge = builder.add(MergePreferred[String](1))
+
+      val pastSource = builder.add(Source.actorPublisher[String](impl.currentPersistenceIds))
+      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
+        .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor)))
+      val removeDuplicatedpersistenceIds = builder.add(Flow[String].transform(() => new RemoveDuplicatedPersistenceId))
+      pastSource     ~> merge.preferred
+      realtimeSource ~> merge.in(0)
+                        merge.out ~> removeDuplicatedpersistenceIds
+      SourceShape(removeDuplicatedpersistenceIds.outlet)
+    }
+    Source.wrap(graph)
+  }
 }
 
-class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP{
+class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ{
   def currentAllEvents(): JSource[EventEnvelope, Unit] = rj.currentAllEvents().asJava
 
   override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
@@ -81,13 +101,14 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
     require(persistenceId != null, "PersistenceId must not be null")
     rj.eventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
+
+  override def allPersistenceIds(): JSource[String, Unit] = rj.allPersistenceIds().asJava
 }
 
 
 trait JournalStream[Cursor] {
     def cursor(): Cursor
     def publishEvents(): Unit
-
 }
 
 class RemoveDuplicatedEvents extends PushStage[Event, Event]{
@@ -104,6 +125,17 @@ class RemoveDuplicatedEvents extends PushStage[Event, Event]{
       case None =>
         lastSequenceNr = Some(elem.sn)
         ctx.push(elem)
+    }
+  }
+}
+
+class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
+  val persistenceIds = mutable.HashSet.empty[String]
+  override def onPush(elem: String, ctx: Context[String]): SyncDirective = {
+    if (persistenceIds(elem)) ctx.pull()
+    else {
+      persistenceIds += elem
+      ctx push elem
     }
   }
 }
