@@ -152,20 +152,25 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
     val ars = promises.map{ case (id,p) => as.actorOf(props(id,p)) }
+    val events = ("this" :: "is" :: "a" :: "test" :: Nil) map Append.apply
 
     implicit val ec = as.dispatcher
 
     val readJournal =
-      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+    PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
 
     val probe = TestProbe()
-    val fut = readJournal.allPersistenceIds().runForeach{ pid =>
+
+    ars slice(0,3) foreach { ar =>
+      events foreach ( ar ! _)
+    }
+
+    readJournal.allPersistenceIds().runForeach{ pid =>
       probe.ref ! pid
     }
 
-    val events = ("this" :: "is" :: "a" :: "test" :: Nil) map Append.apply
-    ars foreach { ar =>
+    ars slice(3,5) foreach { ar =>
       events foreach ( ar ! _)
     }
 

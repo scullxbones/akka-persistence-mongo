@@ -78,9 +78,9 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
       val removeDuplicatedEvents = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEvents))
       val eventConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
 
-      pastSource     ~>       merge.preferred
-      realtimeSource ~>       merge.in(0)
-                              merge.out  ~> filterByPersistenceId ~> removeDuplicatedEvents ~> eventConverter
+      pastSource     ~>                            merge.preferred
+      realtimeSource ~>   filterByPersistenceId ~> merge.in(0)
+                                                   merge.out  ~> removeDuplicatedEvents ~> eventConverter
       SourceShape(eventConverter.outlet)
     }
     Source.wrap(graph)

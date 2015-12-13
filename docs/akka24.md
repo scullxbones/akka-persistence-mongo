@@ -107,11 +107,11 @@ Similarly there is a JavaDsl version.
   * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
 * All `current` and `realtime` queries are supported, except eventsByTag.
 1. `currentPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
-1. `àllPersistenceIds` (akka standard) - Provides a `Source[String, Unit]` of all persistence ids in the journal. The Source not completes when reaches end of events and continues emit as new persistence ids are persist into journal
+1. `allPersistenceIds` (akka standard) - Provides a `Source[String, Unit]` of all persistence ids in the journal. The Source not completes when reaches end of events and continues emit as new persistence ids are persist into journal
 1. `currentEventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
 1. `eventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query. The Source not completes when reaches end of events and continues emit as new events are persist into journal
 1. `currentAllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-1. `àllEvents` (driver specifi) - Provides a live version of currentAllEvents
+1. `allEvents` (driver specific) - Provides a live version of currentAllEvents
 * I'll look for community feedback about what driver-specific queries might be useful as well
 * The live queries use capped collection to stream events. If you not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
 
