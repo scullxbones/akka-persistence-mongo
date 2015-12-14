@@ -4,6 +4,7 @@ import de.flapdoodle.embed.mongo.{MongodStarter, Command}
 import de.flapdoodle.embed.mongo.config._
 import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
+import de.flapdoodle.embed.process.config.io.ProcessOutput
 import de.flapdoodle.embed.process.extract.UUIDTempNaming
 import de.flapdoodle.embed.process.io.directories.PlatformTempDir
 import de.flapdoodle.embed.process.runtime.Network
@@ -69,13 +70,16 @@ trait EmbeddedMongo {
   val command = Command.MongoD
   val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
     .defaults(command)
-    .artifactStore(new ArtifactStoreBuilder()
+    .artifactStore(new ExtractedArtifactStoreBuilder()
                       .defaults(command)
                       .download(new DownloadConfigBuilder()
                                     .defaultsForCommand(command)
                                     .artifactStorePath(artifactStorePath)
+                                    .build()
                       ).executableNaming(executableNaming)
-    ).build()
+    )
+    .processOutput(ProcessOutput.getDefaultInstanceSilent)
+    .build()
 
   val mongodConfig = new MongodConfigBuilder()
     .version(determineVersion)
@@ -104,5 +108,6 @@ trait EmbeddedMongo {
 
   def doAfter(): Unit = {
     mongod.stop()
+    if (mongodExe.isProcessRunning) mongodExe.stop()
   }
 }
