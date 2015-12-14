@@ -1,15 +1,15 @@
 package akka.contrib.persistence.mongodb
 
-import de.flapdoodle.embed.mongo.{MongodStarter, Command}
+import com.mongodb._
 import de.flapdoodle.embed.mongo.config._
 import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
+import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
 import de.flapdoodle.embed.process.config.io.ProcessOutput
-import de.flapdoodle.embed.process.extract.UUIDTempNaming
-import de.flapdoodle.embed.process.io.directories.PlatformTempDir
+import de.flapdoodle.embed.process.io.directories.UserHome
 import de.flapdoodle.embed.process.runtime.Network
+
 import scala.collection.JavaConverters._
-import com.mongodb._
 
 trait Authentication {
   implicit class MongoFiedMap(map: Map[String,Any]) {
@@ -65,8 +65,6 @@ trait EmbeddedMongo {
       case "3.0" => Version.Main.V3_0
     }.getOrElse(Version.Main.PRODUCTION)
 
-  val artifactStorePath = new PlatformTempDir()
-  val executableNaming = new UUIDTempNaming()
   val command = Command.MongoD
   val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
     .defaults(command)
@@ -74,9 +72,10 @@ trait EmbeddedMongo {
                       .defaults(command)
                       .download(new DownloadConfigBuilder()
                                     .defaultsForCommand(command)
-                                    .artifactStorePath(artifactStorePath)
+                                    .artifactStorePath(new UserHome(".embedmongo"))
                                     .build()
-                      ).executableNaming(executableNaming)
+                      )
+                      .build()
     )
     .processOutput(ProcessOutput.getDefaultInstanceSilent)
     .build()
