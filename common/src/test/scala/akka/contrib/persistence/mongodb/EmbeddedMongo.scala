@@ -6,8 +6,8 @@ import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
 import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
 import de.flapdoodle.embed.process.config.io.ProcessOutput
-import de.flapdoodle.embed.process.extract.{UUIDTempNaming, UserTempNaming}
-import de.flapdoodle.embed.process.io.directories.UserHome
+import de.flapdoodle.embed.process.extract.{NoopTempNaming, UUIDTempNaming, UserTempNaming}
+import de.flapdoodle.embed.process.io.directories.{TempDirInPlatformTempDir, UserHome}
 import de.flapdoodle.embed.process.runtime.Network
 
 import scala.collection.JavaConverters._
@@ -55,14 +55,17 @@ object EmbeddedMongo {
       .defaults(command)
       .download(new DownloadConfigBuilder()
         .defaultsForCommand(command)
-        .artifactStorePath(new UserHome(".embedmongo"))
+        .artifactStorePath(new UserHome(".embedmongo/artifacts"))
         .build()
       )
-      .executableNaming(new UUIDTempNaming)
+      .tempDir(new TempDirInPlatformTempDir)
+      .extractExecutableNaming(new NoopTempNaming)
+      .executableNaming(new NoopTempNaming)
       .build()
     )
     .processOutput(ProcessOutput.getDefaultInstanceSilent)
     .build()
+  val starter = MongodStarter.getInstance(runtimeConfig)
 }
 
 trait EmbeddedMongo {
@@ -84,7 +87,7 @@ trait EmbeddedMongo {
       case "3.0" => Version.Main.V3_0
     }.getOrElse(Version.Main.PRODUCTION)
 
-  val mongodConfig = new MongodConfigBuilder()
+  def mongodConfig = new MongodConfigBuilder()
     .version(determineVersion)
     .cmdOptions(
       overrideOptions(new MongoCmdOptionsBuilder()
@@ -98,11 +101,10 @@ trait EmbeddedMongo {
     .net(new Net("127.0.0.1",embedConnectionPort, Network.localhostIsIPv6()))
     .build()
 
-  lazy val runtime = MongodStarter.getInstance(EmbeddedMongo.runtimeConfig)
-  lazy val mongod = runtime.prepare(mongodConfig)
+  lazy val mongod = EmbeddedMongo.starter.prepare(mongodConfig)
   lazy val mongodExe = mongod.start()
 
-  lazy val mongoClient = new MongoClient(embedConnectionURL,embedConnectionPort)
+  def mongoClient = new MongoClient(embedConnectionURL,embedConnectionPort)
 
   def doBefore(): Unit = {
     mongodExe
