@@ -6,6 +6,7 @@ import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
 import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
 import de.flapdoodle.embed.process.config.io.ProcessOutput
+import de.flapdoodle.embed.process.extract.{UUIDTempNaming, UserTempNaming}
 import de.flapdoodle.embed.process.io.directories.UserHome
 import de.flapdoodle.embed.process.runtime.Network
 
@@ -57,6 +58,7 @@ object EmbeddedMongo {
         .artifactStorePath(new UserHome(".embedmongo"))
         .build()
       )
+      .executableNaming(new UUIDTempNaming)
       .build()
     )
     .processOutput(ProcessOutput.getDefaultInstanceSilent)
