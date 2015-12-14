@@ -46,6 +46,23 @@ class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") e
   override def apply(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder = builder.enableAuth(true)
 }
 
+object EmbeddedMongo {
+  val command = Command.MongoD
+  val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
+    .defaults(command)
+    .artifactStore(new ExtractedArtifactStoreBuilder()
+      .defaults(command)
+      .download(new DownloadConfigBuilder()
+        .defaultsForCommand(command)
+        .artifactStorePath(new UserHome(".embedmongo"))
+        .build()
+      )
+      .build()
+    )
+    .processOutput(ProcessOutput.getDefaultInstanceSilent)
+    .build()
+}
+
 trait EmbeddedMongo {
   def embedConnectionURL: String = { "localhost" }
   lazy val embedConnectionPort: Int = { Network.getFreeServerPort }
@@ -65,21 +82,6 @@ trait EmbeddedMongo {
       case "3.0" => Version.Main.V3_0
     }.getOrElse(Version.Main.PRODUCTION)
 
-  val command = Command.MongoD
-  val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
-    .defaults(command)
-    .artifactStore(new ExtractedArtifactStoreBuilder()
-                      .defaults(command)
-                      .download(new DownloadConfigBuilder()
-                                    .defaultsForCommand(command)
-                                    .artifactStorePath(new UserHome(".embedmongo"))
-                                    .build()
-                      )
-                      .build()
-    )
-    .processOutput(ProcessOutput.getDefaultInstanceSilent)
-    .build()
-
   val mongodConfig = new MongodConfigBuilder()
     .version(determineVersion)
     .cmdOptions(
@@ -94,7 +96,7 @@ trait EmbeddedMongo {
     .net(new Net("127.0.0.1",embedConnectionPort, Network.localhostIsIPv6()))
     .build()
 
-  lazy val runtime = MongodStarter.getInstance(runtimeConfig)
+  lazy val runtime = MongodStarter.getInstance(EmbeddedMongo.runtimeConfig)
   lazy val mongod = runtime.prepare(mongodConfig)
   lazy val mongodExe = mongod.start()
 
