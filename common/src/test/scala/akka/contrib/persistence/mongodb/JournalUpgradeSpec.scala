@@ -93,7 +93,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
 
     println(s"before = ${coll.find().toArray.asScala.toList}")
 
-    as.upgradeJournalIfNeeded()
+    as.journal // executes upgrade
 
     val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
     println(records)
@@ -157,7 +157,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     }""".stripMargin
     coll.insert(JSON.parse(doc).asInstanceOf[DBObject])
 
-    as.upgradeJournalIfNeeded()
+    as.journal // executes upgrade
 
     val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
     println(records)

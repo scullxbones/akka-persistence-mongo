@@ -79,7 +79,15 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
     val q = BSONDocument("_id" -> id)
 
-    collection.update(q, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))).map(previous :+ _)
+    val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))
+    val results = collection.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
+      previous :+ wr
+    }
+    results.onComplete {
+      case Success(s) => logger.debug(s"update completed ... ${s.size - 1} so far")
+      case Failure(t) => logger.error(s"update failure",t)
+    }
+    results
   }
 
   override private[mongodb] def upgradeJournalIfNeeded(): Unit = {
@@ -139,6 +147,8 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
       case Failure(t) =>
         logger.error(s"Upgrade did not complete successfully",t)
     }
+
+    logger.debug("Waiting on upgrade to complete...")
 
     Await.result(eventuallyUpgrade, 2.minutes) // ouch
 

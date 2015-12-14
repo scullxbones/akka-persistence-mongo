@@ -1,4 +1,4 @@
-val releaseV = "1.1.0"
+val releaseV = "1.1.1"
 
 val scalaV = "2.11.7"
 
@@ -41,7 +41,7 @@ val commonDeps = Seq(
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.48.2" % "test",
+  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.50.1" % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-cluster-sharding" % AkkaV % "test"

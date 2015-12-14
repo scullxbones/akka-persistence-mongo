@@ -64,12 +64,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
         logger.info("Applying configuration-specific overrides for driver")
         defaults.withOverride(overrides)
       case Failure(_) =>
-        logger.info("No configuration-specific overrides found to apply to driver")
+        logger.debug("No configuration-specific overrides found to apply to driver")
         defaults
     }
   }
 
-  implicit lazy val serialization = SerializationExtension(actorSystem)
   lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 
   as.registerOnTermination {
@@ -87,15 +86,14 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
   private[mongodb] lazy val journal: C = {
-    val journalCollection = collection(journalCollectionName)
-    val indexed = ensureUniqueIndex(journalCollection, journalIndexName,
-                      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.Implicits.global)
     if (settings.JournalAutomaticUpgrade) {
-      logger.info("Journal automatic upgrade is enabled, executing upgrade process")
+      logger.debug("Journal automatic upgrade is enabled, executing upgrade process")
       upgradeJournalIfNeeded()
-      logger.info("Journal automatic upgrade process has completed")
+      logger.debug("Journal automatic upgrade process has completed")
     }
-    indexed
+    val journalCollection = collection(journalCollectionName)
+    ensureUniqueIndex(journalCollection, journalIndexName,
+      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.global)
   }
 
   private[mongodb] lazy val snaps: C = {
@@ -125,6 +123,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def mongoUri = settings.MongoUri
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
-  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
-  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
+  implicit def serialization = SerializationExtension(actorSystem)
+  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)(serialization, actorSystem)
+  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)(serialization, actorSystem)
 }
