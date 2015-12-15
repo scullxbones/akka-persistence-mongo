@@ -7,7 +7,7 @@ import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
 import de.flapdoodle.embed.process.config.io.ProcessOutput
 import de.flapdoodle.embed.process.extract.{NoopTempNaming, UUIDTempNaming, UserTempNaming}
-import de.flapdoodle.embed.process.io.directories.{TempDirInPlatformTempDir, UserHome}
+import de.flapdoodle.embed.process.io.directories.{PlatformTempDir, TempDirInPlatformTempDir, UserHome}
 import de.flapdoodle.embed.process.runtime.Network
 
 import scala.collection.JavaConverters._
@@ -55,7 +55,7 @@ object EmbeddedMongo {
       .defaults(command)
       .download(new DownloadConfigBuilder()
         .defaultsForCommand(command)
-        .artifactStorePath(new TempDirInPlatformTempDir)
+        .artifactStorePath(new PlatformTempDir)
         .build()
       )
       .executableNaming(new UUIDTempNaming)
