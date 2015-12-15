@@ -8,7 +8,8 @@ import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
+import scala.language.reflectiveCalls
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
@@ -45,7 +46,9 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
       case x => logger.error("Exception occurred while removing legacy cluster sharding records",x)
     }
 
-    Try(j.dropIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))).map(
+    Try(j.dropIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))).orElse(
+      Try(j.dropIndex(settings.JournalIndex))
+    ).map(
       _ => logger.info("Successfully dropped legacy index")
     ).recover {
       case e:MongoCommandException if e.getErrorMessage.startsWith("index not found with name") =>
@@ -56,7 +59,7 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
     val cnt = j.count(q)
     logger.info(s"Journal automatic upgrade found $cnt records needing upgrade")
-    if(cnt > 0) {
+    if(cnt > 0) Try {
       val results = j.find[DBObject](q)
        .map(d => d.as[ObjectId]("_id") -> Event[DBObject](useLegacySerialization)(deserializeJournal(d).toRepr))
        .map{case (id,ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev))))}
@@ -73,6 +76,10 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
           logger.info(s"$s records were successfully updated")
       }
 
+    } match {
+      case Success(_) => ()
+      case Failure(t) =>
+        logger.error("Failed to upgrade journal due to exception",t)
     }
   }
 
