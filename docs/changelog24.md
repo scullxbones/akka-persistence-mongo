@@ -1,5 +1,7 @@
 ## Changelog for 1.x major version
 
+### 1.1.1
+* Correctly ordered upgrade (drop old index, upgrade, add new index) fixes issue [#70](https://github.com/scullxbones/akka-persistence-mongo/issues/70)
 
 ### 1.1.0
 * PR [#69](https://github.com/scullxbones/akka-persistence-mongo/pull/69) merged:

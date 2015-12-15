@@ -1,4 +1,4 @@
-sudo: false
+sudo: true
 language: scala
 scala:
    - 2.11.7
@@ -10,3 +10,10 @@ env:
     _JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=5"
 jdk:
   - oraclejdk8
+script:
+  - sbt ++$TRAVIS_SCALA_VERSION test
+  - find $HOME/.sbt -name "*.lock" | xargs rm
+  - find $HOME/.ivy2 -name "ivydata-*.properties" | xargs rm
+directories:
+  - $HOME/.ivy2/cache
+  - $HOME/.sbt/boot/
