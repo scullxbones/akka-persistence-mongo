@@ -6,8 +6,8 @@ import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
 import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
 import de.flapdoodle.embed.process.config.io.ProcessOutput
-import de.flapdoodle.embed.process.extract.{NoopTempNaming, UUIDTempNaming, UserTempNaming}
-import de.flapdoodle.embed.process.io.directories.{PlatformTempDir, TempDirInPlatformTempDir, UserHome}
+import de.flapdoodle.embed.process.extract.UUIDTempNaming
+import de.flapdoodle.embed.process.io.directories.PlatformTempDir
 import de.flapdoodle.embed.process.runtime.Network
 
 import scala.collection.JavaConverters._
@@ -47,25 +47,6 @@ class AuthenticatingCommandLinePostProcessor(mechanism: String = "MONGODB-CR") e
   override def apply(builder: MongoCmdOptionsBuilder): MongoCmdOptionsBuilder = builder.enableAuth(true)
 }
 
-object EmbeddedMongo {
-  val command = Command.MongoD
-  val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
-    .defaults(command)
-    .artifactStore(new ExtractedArtifactStoreBuilder()
-      .defaults(command)
-//      .download(new DownloadConfigBuilder()
-//        .defaultsForCommand(command)
-//        .artifactStorePath(new PlatformTempDir)
-//        .build()
-//      )
-//      .executableNaming(new UUIDTempNaming)
-      .build()
-    )
-    .processOutput(ProcessOutput.getDefaultInstanceSilent)
-    .build()
-  val starter = MongodStarter.getInstance(runtimeConfig)
-}
-
 trait EmbeddedMongo {
   def embedConnectionURL: String = { "localhost" }
   lazy val embedConnectionPort: Int = { Network.getFreeServerPort }
@@ -85,7 +66,21 @@ trait EmbeddedMongo {
       case "3.0" => Version.Main.V3_0
     }.getOrElse(Version.Main.PRODUCTION)
 
-  def mongodConfig = new MongodConfigBuilder()
+  val artifactStorePath = new PlatformTempDir()
+  val executableNaming = new UUIDTempNaming()
+  val command = Command.MongoD
+  val runtimeConfig: IRuntimeConfig  = new RuntimeConfigBuilder()
+    .defaults(command)
+    .artifactStore(new ArtifactStoreBuilder()
+                      .defaults(command)
+                      .download(new DownloadConfigBuilder()
+                                    .defaultsForCommand(command)
+                                    .artifactStorePath(artifactStorePath)
+                      ).executableNaming(executableNaming)
+    ).processOutput(ProcessOutput.getDefaultInstanceSilent)
+    .build()
+
+  val mongodConfig = new MongodConfigBuilder()
     .version(determineVersion)
     .cmdOptions(
       overrideOptions(new MongoCmdOptionsBuilder()
@@ -99,10 +94,11 @@ trait EmbeddedMongo {
     .net(new Net("127.0.0.1",embedConnectionPort, Network.localhostIsIPv6()))
     .build()
 
-  lazy val mongod = EmbeddedMongo.starter.prepare(mongodConfig)
+  lazy val runtime = MongodStarter.getInstance(runtimeConfig)
+  lazy val mongod = runtime.prepare(mongodConfig)
   lazy val mongodExe = mongod.start()
 
-  def mongoClient = new MongoClient(embedConnectionURL,embedConnectionPort)
+  lazy val mongoClient = new MongoClient(embedConnectionURL,embedConnectionPort)
 
   def doBefore(): Unit = {
     mongodExe
