@@ -1,14 +1,16 @@
 package akka.contrib.persistence.mongodb
 
-import de.flapdoodle.embed.mongo.{MongodStarter, Command}
+import com.mongodb._
 import de.flapdoodle.embed.mongo.config._
 import de.flapdoodle.embed.mongo.distribution.{IFeatureAwareVersion, Version}
+import de.flapdoodle.embed.mongo.{Command, MongodStarter}
 import de.flapdoodle.embed.process.config.IRuntimeConfig
+import de.flapdoodle.embed.process.config.io.ProcessOutput
 import de.flapdoodle.embed.process.extract.UUIDTempNaming
 import de.flapdoodle.embed.process.io.directories.PlatformTempDir
 import de.flapdoodle.embed.process.runtime.Network
+
 import scala.collection.JavaConverters._
-import com.mongodb._
 
 trait Authentication {
   implicit class MongoFiedMap(map: Map[String,Any]) {
@@ -75,7 +77,8 @@ trait EmbeddedMongo {
                                     .defaultsForCommand(command)
                                     .artifactStorePath(artifactStorePath)
                       ).executableNaming(executableNaming)
-    ).build()
+    ).processOutput(ProcessOutput.getDefaultInstanceSilent)
+    .build()
 
   val mongodConfig = new MongodConfigBuilder()
     .version(determineVersion)
@@ -104,5 +107,6 @@ trait EmbeddedMongo {
 
   def doAfter(): Unit = {
     mongod.stop()
+    if (mongodExe.isProcessRunning) mongodExe.stop()
   }
 }
