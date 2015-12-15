@@ -29,6 +29,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
+    |akka.contrib.persistence.mongodb.mongo.breaker.maxTries = 0
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |	  # Class name of the plugin.
@@ -73,8 +74,10 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     }
 
     private def eventHandler(int: Int): Unit = {
-      state.event(IncEvent)
-      checkShutdown()
+      (1 to int) foreach { _ =>
+        state.event(IncEvent)
+        checkShutdown()
+      }
     }
 
     private def checkShutdown(): Unit = if (inflight.decrementAndGet() < 1) {
@@ -122,7 +125,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
 
   val maxActors = 100
   val batches = 10
-  val commandsPerBatch = 10
+  val commandsPerBatch = 100
   val persistenceIds = (1 to maxActors).map(x => s"$x")
 
   def startPersistentActors(as: ActorSystem, eventsPer: Int, maxDuration: FiniteDuration) =
