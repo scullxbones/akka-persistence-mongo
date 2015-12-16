@@ -42,6 +42,8 @@ trait CanDeserializeJournal[D] {
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
+private case class IndexSettings(name: String, unique: Boolean, fields: (String, Int)*)
+
 abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   import MongoPersistenceDriver._
 
@@ -79,11 +81,16 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def ensureUniqueIndex(collection: C, indexName: String, fields: (String,Int)*)(implicit ec: ExecutionContext): C
+  private[mongodb] def ensureIndex(collection: C, indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C
 
   private[mongodb] def closeConnections(): Unit
 
   private[mongodb] def upgradeJournalIfNeeded(): Unit
+
+  private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
+    IndexSettings(journalIndexName, unique = true, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
+    IndexSettings(journalSeqNrIndexName, unique = false, TO -> -1)
+  )
 
   private[mongodb] lazy val journal: C = {
     if (settings.JournalAutomaticUpgrade) {
@@ -92,13 +99,16 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       logger.debug("Journal automatic upgrade process has completed")
     }
     val journalCollection = collection(journalCollectionName)
-    ensureUniqueIndex(journalCollection, journalIndexName,
-      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.global)
+
+    indexes.foldLeft(journalCollection) { (acc, index) =>
+      import index._
+      ensureIndex(acc, name, unique, fields:_*)(concurrent.ExecutionContext.global)
+    }
   }
 
   private[mongodb] lazy val snaps: C = {
     val snapsCollection = collection(snapsCollectionName)
-    ensureUniqueIndex(snapsCollection, snapsIndexName,
+    ensureIndex(snapsCollection, snapsIndexName, unique = true,
                       SnapshottingFieldNames.PROCESSOR_ID -> 1,
                       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
                       TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
@@ -114,6 +124,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def snapsFsync = settings.SnapsFSync
   def journalCollectionName = settings.JournalCollection
   def journalIndexName = settings.JournalIndex
+  def journalSeqNrIndexName = settings.JournalSeqNrIndex
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync

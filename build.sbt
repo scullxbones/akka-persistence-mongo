@@ -1,4 +1,7 @@
-val releaseV = "1.1.2"
+import sbt.Credentials
+import sbt.Keys._
+
+val releaseV = "1.1.2-di2"
 
 val scalaV = "2.11.7"
 
@@ -81,7 +84,13 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  parallelExecution in Test := false
+  parallelExecution in Test := false,
+  publishTo := {
+    val releaseType = if (isSnapshot.value) "snapshots" else "releases"
+    Some(releaseType at s"https://nexus.2rioffice.com/nexus/content/repositories/$releaseType")
+  },
+  credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+
 )
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
@@ -111,5 +120,5 @@ lazy val root = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`)
   .settings(commonSettings:_*)
   .settings(
-    packagedArtifacts in file(".") := Map.empty,
-    publishTo := Some(Resolver.file("file", new File("target/unusedrepo"))))
+    packagedArtifacts in file(".") := Map.empty
+  )
