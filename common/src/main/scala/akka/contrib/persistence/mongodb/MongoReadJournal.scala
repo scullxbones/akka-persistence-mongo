@@ -48,59 +48,35 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
   }
 
   def allEvents(): Source[EventEnvelope, Unit] = {
-    val graph = FlowGraph.partial(){ implicit builder =>
-      import FlowGraph.Implicits._
-      val pastSource = builder.add(Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ()))
-      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor)))
-      val merge = builder.add(MergePreferred[Event](1))
-      val removeDuplicatedEventsByPersistenceId = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId))
-      val eventEnvelopeConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
-      pastSource     ~> merge.preferred
-      realtimeSource ~> merge.in(0)
-                        merge.out ~> removeDuplicatedEventsByPersistenceId ~> eventEnvelopeConverter
-      SourceShape(eventEnvelopeConverter.outlet)
-    }
-    Source.wrap(graph)
+
+    val pastSource = Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ())
+    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+      .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
+    val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
+    val eventEnvelopeConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedEventsByPersistenceId).via(eventEnvelopeConverter)
   }
 
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
     require(persistenceId != null, "PersistenceId must not be null")
-    val graph = FlowGraph.partial() { implicit builder =>
-      import FlowGraph.Implicits._
-      val merge = builder.add(MergePreferred[Event](1))
-
-      val pastSource = builder.add(Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
-        .mapMaterializedValue(_ => ()))
-      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor)))
-      val filterByPersistenceId = builder.add(Flow[Event].filter(_.pid equals persistenceId))
-      val removeDuplicatedEvents = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEvents))
-      val eventConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
-
-      pastSource     ~>                            merge.preferred
-      realtimeSource ~>   filterByPersistenceId ~> merge.in(0)
-                                                   merge.out  ~> removeDuplicatedEvents ~> eventConverter
-      SourceShape(eventConverter.outlet)
-    }
-    Source.wrap(graph)
+    val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
+      .mapMaterializedValue(_ => ())
+    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+      .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
+    val filterByPersistenceId = Flow[Event].filter(_.pid equals persistenceId)
+    val removeDuplicatedEvents = Flow[Event].transform(() => new RemoveDuplicatedEvents)
+    val eventConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(filterByPersistenceId).via(removeDuplicatedEvents).via(eventConverter)
   }
 
   override def allPersistenceIds(): Source[String, Unit] = {
-    val graph = FlowGraph.partial(){ implicit builder =>
-      import FlowGraph.Implicits._
-      val merge = builder.add(MergePreferred[String](1))
 
-      val pastSource = builder.add(Source.actorPublisher[String](impl.currentPersistenceIds))
-      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor)))
-      val removeDuplicatedpersistenceIds = builder.add(Flow[String].transform(() => new RemoveDuplicatedPersistenceId))
-      pastSource     ~> merge.preferred
-      realtimeSource ~> merge.in(0)
-                        merge.out ~> removeDuplicatedpersistenceIds
-      SourceShape(removeDuplicatedpersistenceIds.outlet)
-    }
-    Source.wrap(graph)
+      val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
+      val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+        .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor))
+      val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
+
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedpersistenceIds)
   }
 }
 
