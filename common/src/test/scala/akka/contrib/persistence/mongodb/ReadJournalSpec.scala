@@ -94,7 +94,36 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     Await.result(fut,10.seconds.dilated) shouldBe empty
   }
 
-  it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
+  "A read journal" should "support the realtime journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
+    import concurrent.duration._
+    implicit val system = as
+    implicit val mat = ActorMaterializer()
+
+    val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
+
+    val promise1 = Promise[Unit]()
+    val promise2 = Promise[Unit]()
+    val ar1 = as.actorOf(props("foo",promise1))
+    val ar2 = as.actorOf(props("bar", promise2))
+
+    events slice(0,3) foreach (ar1 ! _)
+
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val probe = TestProbe()
+
+    val fut = readJournal.allEvents().runForeach{ ee =>
+      println(s"Received EventEnvelope $ee")
+      probe.ref ! ee
+    }
+    events slice(3,6) foreach (ar2 ! _)
+
+    probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events.map(_.s))
+  }
+
+  it should "support the current persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
@@ -115,6 +144,37 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val fut = readJournal.currentPersistenceIds().runFold(Seq.empty[String])(_ :+ _)
 
     Await.result(fut,10.seconds.dilated) should contain allOf("1","2","3","4","5")
+  }
+
+  it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
+    implicit val system = as
+    implicit val mat = ActorMaterializer()
+
+    val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
+    val ars = promises.map{ case (id,p) => as.actorOf(props(id,p)) }
+    val events = ("this" :: "is" :: "a" :: "test" :: Nil) map Append.apply
+
+    implicit val ec = as.dispatcher
+
+    val readJournal =
+    PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+
+    val probe = TestProbe()
+
+    ars slice(0,3) foreach { ar =>
+      events foreach ( ar ! _)
+    }
+
+    readJournal.allPersistenceIds().runForeach{ pid =>
+      probe.ref ! pid
+    }
+
+    ars slice(3,5) foreach { ar =>
+      events foreach ( ar ! _)
+    }
+
+    probe.receiveN(ars.size).collect{case x:String => x}.toList should contain allOf("1","2","3","4","5")
   }
 
   it should "support the current events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
@@ -196,5 +256,30 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     events2 foreach ( ar2 ! _ )
 
     probe.receiveN(events2.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events2.map(_.s))
+  }
+
+  it should "support read 1k events from jouurnal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal"){ case (as, _) =>
+    import concurrent.duration._
+    implicit val system = as
+    implicit val mat = ActorMaterializer()
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val nrOfActors = 10
+    val nrOfEvents = 100
+    val ars = (1 to nrOfActors) map (nr => system.actorOf(props(s"pid-$nr", Promise[Unit]())))
+    val events = (1 to nrOfEvents) map (eventId => Append.apply(s"eventd-$eventId"))
+
+    val probe = TestProbe()
+
+
+    (1 to nrOfActors) foreach ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).runForeach(probe.ref ! _))
+
+    ars foreach { ar =>
+      events foreach ( ar ! _)
+    }
+
+    probe.receiveN(nrOfActors * nrOfEvents, 60.seconds.dilated)
   }
 }

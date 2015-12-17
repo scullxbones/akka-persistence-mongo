@@ -1,16 +1,17 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorRef, Actor, ExtendedActorSystem, Props}
-import akka.event.{LookupClassification, ActorEventBus}
+import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
-import akka.persistence.query.scaladsl.{EventsByPersistenceIdQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery}
-import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
-import akka.stream.{SourceShape, OverflowStrategy}
+import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
+import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
-import akka.stream.scaladsl.{Flow, MergePreferred, FlowGraph, Source}
 import akka.stream.javadsl.{Source => JSource}
-import akka.stream.stage.{Context, PushStage}
+import akka.stream.scaladsl.{Flow, FlowGraph, MergePreferred, Source}
+import akka.stream.stage.{Context, PushStage, SyncDirective}
+import akka.stream.{OverflowStrategy, SourceShape}
 import com.typesafe.config.Config
+
+import scala.collection.mutable
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
@@ -29,6 +30,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
+    with AllPersistenceIdsQuery
     with EventsByPersistenceIdQuery{
 
   def currentAllEvents(): Source[EventEnvelope,Unit] =
@@ -45,30 +47,42 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
       .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
   }
 
+  def allEvents(): Source[EventEnvelope, Unit] = {
+
+    val pastSource = Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ())
+    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+      .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
+    val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
+    val eventEnvelopeConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedEventsByPersistenceId).via(eventEnvelopeConverter)
+  }
+
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
     require(persistenceId != null, "PersistenceId must not be null")
-    val graph = FlowGraph.partial() { implicit builder =>
-      import FlowGraph.Implicits._
-      val merge = builder.add(MergePreferred[Event](1))
+    val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
+      .mapMaterializedValue(_ => ())
+    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+      .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
+    val filterByPersistenceId = Flow[Event].filter(_.pid equals persistenceId)
+    val removeDuplicatedEvents = Flow[Event].transform(() => new RemoveDuplicatedEvents)
+    val eventConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(filterByPersistenceId).via(removeDuplicatedEvents).via(eventConverter)
+  }
 
-      val pastSource = builder.add(Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
-        .mapMaterializedValue(_ => ()))
-      val realtimeSource = builder.add(Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .mapMaterializedValue(actor => impl.publishJournalEvents(persistenceId, actor)))
-      val removeDuplicatedEvents = builder.add(Flow[Event].transform(() => new RemoveDuplicatedEvents))
-      val eventConverter = builder.add(Flow[Event].transform(() => new EventEnvelopeConverter))
+  override def allPersistenceIds(): Source[String, Unit] = {
 
-      pastSource     ~>       merge.preferred
-      realtimeSource ~>       merge.in(0)
-                              merge.out  ~> removeDuplicatedEvents ~> eventConverter
-      SourceShape(eventConverter.outlet)
-    }
-    Source.wrap(graph)
+      val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
+      val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+        .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor))
+      val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
+
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedpersistenceIds)
   }
 }
 
-class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP{
+class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ{
   def currentAllEvents(): JSource[EventEnvelope, Unit] = rj.currentAllEvents().asJava
+  def allEvents(): JSource[EventEnvelope, Unit] = rj.allEvents().asJava
 
   override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
 
@@ -80,23 +94,14 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
     require(persistenceId != null, "PersistenceId must not be null")
     rj.eventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
+
+  override def allPersistenceIds(): JSource[String, Unit] = rj.allPersistenceIds().asJava
 }
 
-trait JournalEventBus extends ActorEventBus with LookupClassification{
-  override protected def mapSize() = 65536
 
-  override protected def publish(event: Event, subscriber: Subscriber) = subscriber ! event
-
-  override protected def classify(event: Event) = event.pid
-
-  override type Classifier = String
-  override type Event = akka.contrib.persistence.mongodb.Event
-}
-
-trait JournalStream[A, Cursor] {
-    def cursor: Cursor
-    def publishEvent(handler: A => Unit): Unit
-    def streaming: Unit
+trait JournalStream[Cursor] {
+    def cursor(): Cursor
+    def publishEvents(): Unit
 }
 
 class RemoveDuplicatedEvents extends PushStage[Event, Event]{
@@ -117,6 +122,36 @@ class RemoveDuplicatedEvents extends PushStage[Event, Event]{
   }
 }
 
+class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event]{
+  val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+  override def onPush(elem: Event, ctx: Context[Event]) = {
+    lastSequenceNrByPersistenceId get elem.pid match {
+      case Some(sequenceNr) =>
+        if (elem.sn > sequenceNr) {
+          lastSequenceNrByPersistenceId remove elem.pid
+          lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
+          ctx.push(elem)
+        }else{
+          ctx.pull()
+        }
+      case None =>
+        lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
+        ctx.push(elem)
+    }
+  }
+}
+
+class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
+  val persistenceIds = mutable.HashSet.empty[String]
+  override def onPush(elem: String, ctx: Context[String]): SyncDirective = {
+    if (persistenceIds(elem)) ctx.pull()
+    else {
+      persistenceIds += elem
+      ctx push elem
+    }
+  }
+}
+
 class EventEnvelopeConverter extends PushStage[Event, EventEnvelope] {
   var offset = -1
   override def onPush(elem: Event, ctx: Context[EventEnvelope]) = {
@@ -129,7 +164,7 @@ trait MongoPersistenceReadJournallingApi {
   def currentAllEvents: Props
   def currentPersistenceIds: Props
   def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props
-  def publishJournalEvents(persistenceId: String, subscriber: ActorRef): Unit
+  def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
 trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {
