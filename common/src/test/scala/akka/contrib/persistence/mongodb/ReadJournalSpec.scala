@@ -27,7 +27,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.journal-read-fill-limit = 10
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
@@ -61,7 +60,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         events = events :+ str
         if (str == "END") {
           completed.success(())
-          self ! PoisonPill
+          context.stop(self)
         }
       }
     }
@@ -85,7 +84,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
     val fut = readJournal.currentAllEvents().runFold(events.toSet){ (received, ee) =>
-      println(s"ee = $ee")
       val asAppend = Append(ee.event.asInstanceOf[String])
       events should contain (asAppend)
       received - asAppend
@@ -114,10 +112,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val probe = TestProbe()
 
-    val fut = readJournal.allEvents().runForeach{ ee =>
-      println(s"Received EventEnvelope $ee")
-      probe.ref ! ee
-    }
+    val fut = readJournal.allEvents().runForeach(probe.ref ! _)
     events slice(3,6) foreach (ar2 ! _)
 
     probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events.map(_.s))
@@ -129,7 +124,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     implicit val mat = ActorMaterializer()
 
     val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
-    val ars = promises.map{ case (id,p) => as.actorOf(props(id,p)) }
+    val ars = promises.map{ case (id,p) => as.actorOf(props(id,p),s"current-persistenceId-$id") }
 
     val end = Append("END")
     ars foreach (_ ! end)
@@ -174,7 +169,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       events foreach ( ar ! _)
     }
 
-    probe.receiveN(ars.size).collect{case x:String => x}.toList should contain allOf("1","2","3","4","5")
+    probe.receiveN(ars.size).collect{case x:String => x}.toList shouldBe List("1","2","3","4","5")
   }
 
   it should "support the current events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
@@ -220,10 +215,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val probe = TestProbe()
 
     events slice(0, 2) foreach ( ar ! _ )
-    readJournal.eventsByPersistenceId("foo-live", 0L, Long.MaxValue).runForeach{ ee =>
-      println(s"Received envelope = $ee")
-      probe.ref ! ee
-    }
+    readJournal.eventsByPersistenceId("foo-live", 0L, Long.MaxValue).take(events.size).runForeach(probe.ref ! _)
 
     ar ! events(2)
     probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events.map(_.s))
@@ -247,10 +239,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val probe = TestProbe()
 
-    readJournal.eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue).runForeach{ ee =>
-      println(s"Received envelope = $ee")
-      probe.ref ! ee
-    }
+    readJournal.eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue).take(events2.size).runForeach(probe.ref ! _)
 
     events foreach ( ar ! _ )
     events2 foreach ( ar2 ! _ )
@@ -274,12 +263,12 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val probe = TestProbe()
 
 
-    (1 to nrOfActors) foreach ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).runForeach(probe.ref ! _))
+    (1 to nrOfActors) foreach ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size).runForeach(probe.ref ! _))
 
     ars foreach { ar =>
       events foreach ( ar ! _)
     }
 
-    probe.receiveN(nrOfActors * nrOfEvents, 60.seconds.dilated)
+    probe.receiveN(nrOfActors * nrOfEvents, 2.seconds.dilated)
   }
 }

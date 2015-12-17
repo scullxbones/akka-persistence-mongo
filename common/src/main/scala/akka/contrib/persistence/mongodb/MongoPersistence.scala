@@ -106,6 +106,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] lazy val realtime: C = {
     cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.Implicits.global)
   }
+  private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
+
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex

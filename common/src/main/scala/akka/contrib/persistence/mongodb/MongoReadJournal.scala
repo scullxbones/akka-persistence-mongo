@@ -4,11 +4,11 @@ import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
 import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
 import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
+import akka.stream.{Attributes, OverflowStrategy}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.javadsl.{Source => JSource}
-import akka.stream.scaladsl.{Flow, FlowGraph, MergePreferred, Source}
+import akka.stream.scaladsl.{Flow, Source}
 import akka.stream.stage.{Context, PushStage, SyncDirective}
-import akka.stream.{OverflowStrategy, SourceShape}
 import com.typesafe.config.Config
 
 import scala.collection.mutable
@@ -100,8 +100,8 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
 
 
 trait JournalStream[Cursor] {
-    def cursor(): Cursor
-    def publishEvents(): Unit
+  def cursor(): Cursor
+  def publishEvents(): Unit
 }
 
 class RemoveDuplicatedEvents extends PushStage[Event, Event]{

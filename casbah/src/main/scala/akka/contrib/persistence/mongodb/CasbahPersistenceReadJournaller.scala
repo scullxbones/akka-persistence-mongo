@@ -1,9 +1,8 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{ActorRef, Props}
-import akka.persistence.query.EventEnvelope
-import com.mongodb.{DBCursor, Bytes, DBObject}
 import com.mongodb.casbah.Imports._
+import com.mongodb.{Bytes, DBObject}
 
 import scala.concurrent.Future
 
@@ -89,17 +88,17 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
 class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection]{
   import CasbahSerializers._
 
-  override def cursor = {
+  override def cursor() = {
     val c = driver.realtime
     c.addOption(Bytes.QUERYOPTION_TAILABLE)
     c.addOption(Bytes.QUERYOPTION_AWAITDATA)
     c
   }
 
-  override def publishEvents = {
-    import scala.concurrent.ExecutionContext.Implicits.global
+  override def publishEvents() = {
+    implicit val ec = driver.querySideDispatcher
     Future {
-      cursor.foreach { next =>
+      cursor().foreach { next =>
         if (next.keySet().contains(EVENTS)) {
           val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
           events.foreach(driver.actorSystem.eventStream.publish)
@@ -111,8 +110,11 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
 
-  private val journalStreaming = new CasbahMongoJournalStream(driver)
-  journalStreaming.publishEvents
+  private val journalStreaming = {
+    val stream = new CasbahMongoJournalStream(driver)
+    stream.publishEvents()
+    stream
+  }
 
   override def currentAllEvents: Props = CurrentAllEvents.props(driver)
 
