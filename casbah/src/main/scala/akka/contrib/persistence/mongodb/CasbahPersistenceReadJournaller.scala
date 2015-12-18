@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{ActorRef, Props}
+import akka.stream.scaladsl.Source
 import com.mongodb.casbah.Imports._
 import com.mongodb.{Bytes, DBObject}
 
@@ -116,12 +117,12 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
     stream
   }
 
-  override def currentAllEvents: Props = CurrentAllEvents.props(driver)
+  override def currentAllEvents: Source[Event, Unit] = Source.actorPublisher(CurrentAllEvents.props(driver)).mapMaterializedValue(_ => ())
 
-  override def currentPersistenceIds: Props = CurrentAllPersistenceIds.props(driver)
+  override def currentPersistenceIds: Source[String, Unit] = Source.actorPublisher(CurrentAllPersistenceIds.props(driver)).mapMaterializedValue(_ => ())
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Source[Event, Unit] =
+    Source.actorPublisher(CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)).mapMaterializedValue(_ => ())
 
   override def subscribeJournalEvents(subscriber: ActorRef): Unit =
     driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])

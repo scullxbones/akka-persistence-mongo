@@ -4,6 +4,7 @@ import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.ActorMaterializer
+import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.Eventually

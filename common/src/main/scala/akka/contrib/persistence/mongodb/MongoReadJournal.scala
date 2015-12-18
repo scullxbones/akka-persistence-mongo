@@ -34,22 +34,22 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     with EventsByPersistenceIdQuery{
 
   def currentAllEvents(): Source[EventEnvelope,Unit] =
-    Source.actorPublisher[Event](impl.currentAllEvents)
+    impl.currentAllEvents
       .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
 
   override def currentPersistenceIds(): Source[String, Unit] =
-    Source.actorPublisher[String](impl.currentPersistenceIds)
+    impl.currentPersistenceIds
       .mapMaterializedValue(_ => ())
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
     require(persistenceId != null, "PersistenceId must not be null")
-    Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
+    impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr)
       .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
   }
 
   def allEvents(): Source[EventEnvelope, Unit] = {
 
-    val pastSource = Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ())
+    val pastSource = impl.currentAllEvents.mapMaterializedValue(_ => ())
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
     val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
@@ -59,7 +59,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
 
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
     require(persistenceId != null, "PersistenceId must not be null")
-    val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
+    val pastSource = impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr)
       .mapMaterializedValue(_ => ())
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
@@ -71,7 +71,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
 
   override def allPersistenceIds(): Source[String, Unit] = {
 
-      val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
+      val pastSource = impl.currentPersistenceIds
       val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
         .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor))
       val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
@@ -161,9 +161,9 @@ class EventEnvelopeConverter extends PushStage[Event, EventEnvelope] {
 }
 
 trait MongoPersistenceReadJournallingApi {
-  def currentAllEvents: Props
-  def currentPersistenceIds: Props
-  def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props
+  def currentAllEvents: Source[Event, Unit]
+  def currentPersistenceIds: Source[String, Unit]
+  def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Source[Event, Unit]
   def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
