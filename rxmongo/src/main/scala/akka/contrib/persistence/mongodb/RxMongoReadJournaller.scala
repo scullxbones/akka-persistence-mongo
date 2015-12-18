@@ -3,12 +3,12 @@ package akka.contrib.persistence.mongodb
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.stream.actor.ActorPublisher
-import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator, Iteratee}
+import play.api.libs.iteratee._
 import reactivemongo.api.commands.Command
 import reactivemongo.api.{BSONSerializationPack, QueryOpts}
 import reactivemongo.bson._
 
-trait IterateeActorPublisher[T] extends ActorPublisher[T] {
+trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
   import akka.pattern.pipe
   import akka.stream.actor.ActorPublisherMessage._
@@ -17,32 +17,67 @@ trait IterateeActorPublisher[T] extends ActorPublisher[T] {
   def initial: Enumerator[T]
 
   override def preStart() = {
-    context.become(streaming(initial andThen Enumerator.eof[T]))
+    context.become(awaiting(initial andThen Enumerator.eof[T]))
   }
 
   override def receive: Receive = Actor.emptyBehavior
 
-  case class Continue(enm: Enumerator[T])
-  case class Failure(t: Throwable)
+  private case class Next(enumerator: Enumerator[T], iteratee: Iteratee[T,Unit])
 
-  def streaming(enumerator: Enumerator[T]): Receive = {
+  private var completed: Boolean = false
+
+  private def respondToDemand(enumerator: Enumerator[T], iter: Iteratee[T,Unit]) = {
+    enumerator(iter).map(Next(enumerator,_)).pipeTo(self)
+  }
+
+  val nextElem: Iteratee[T,Unit] = {
+    Cont {
+      case Input.EOF =>
+        onComplete()
+        completed = true
+        Done(())
+      case Input.Empty =>
+        nextElem
+      case Input.El(elem) =>
+        onNext(elem)
+        nextElem
+    }
+  }
+
+  def defaults: Receive = {
     case _:Cancel|SubscriptionTimeoutExceeded =>
+      log.debug(s"Cancelling stream")
       onCompleteThenStop()
-    case Request(_) =>
-      Concurrent.runPartial(enumerator,next).map {
-        case (_,enm) => Continue(enm)
-      }.pipeTo(self)
-      ()
-    case Continue(enm) =>
-      enm.run(Iteratee.eofOrElse[T].apply[Unit,Unit](())(context.stop(self)))
-      context.become(streaming(enm))
     case Status.Failure(t) =>
+      log.error(t,"Failure occurred while streaming")
       onErrorThenStop(t)
   }
 
-  private val onNextIteratee: Iteratee[T,Unit] = Iteratee.foreach[T](onNext)
-  private def next = {
-    Enumeratee.onEOF[T](onComplete).compose[T](Enumeratee take totalDemand.toIntWithoutWrapping).transform(onNextIteratee)
+  def awaiting(enumerator: Enumerator[T]): Receive = defaults orElse handleNext("Awaiting") orElse {
+    case Request(_) =>
+      log.debug(s"Awaiting: Request received, demand = $totalDemand")
+      respondToDemand(enumerator, nextElem)
+      context.become(streaming(enumerator))
+  }
+
+  def streaming(enumerator: Enumerator[T]): Receive = defaults orElse handleNext("Streaming")
+
+  private def handleNext(header: String): Receive = {
+    case Next(enm, it) =>
+      log.debug("Next received")
+      if (completed) {
+        log.debug(s"$header: completed - now stopping")
+        context.stop(self)
+      }
+      else if (totalDemand > 0) {
+        log.debug(s"$header: requesting more, demand = $totalDemand")
+        respondToDemand(enm, it)
+        context.become(streaming(enm))
+      }
+      else {
+        log.debug(s"$header: nothing to do, no demand")
+        context.become(awaiting(enm))
+      }
   }
 
 }
@@ -85,9 +120,15 @@ object CurrentAllPersistenceIds {
 class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorPublisher[String] {
   import JournallingFieldNames._
   import context.dispatcher
+  import reactivemongo.bson._
 
-  private val flatten: Enumeratee[BSONDocument,String] = Enumeratee.mapFlatten[BSONDocument] { doc =>
-    Enumerator(doc.getAs[Vector[String]]("values").get : _*)
+  private def flatten(doc: BSONDocument): Enumerator[String] = {
+    val result = for {
+      arr <- doc.getAs[BSONArray]("values").toStream
+      elem <- arr.values
+      bson <- elem.seeAsOpt[BSONString].toStream
+    } yield bson.value
+    Enumerator.enumerate[String](result)
   }
 
   override def initial = {
@@ -96,7 +137,7 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
     cmd(driver.db,cmd.rawCommand(q))
       .cursor[BSONDocument]
       .enumerate()
-      .through(flatten)
+      .flatMap(flatten)
   }
 }
 
