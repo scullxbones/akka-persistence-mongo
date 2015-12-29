@@ -164,12 +164,12 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
-  private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext) = {
+  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, keys: (String,Int)*)(implicit ec: ExecutionContext) = { collection =>
     val ky = keys.toSeq.map{ case (f,o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending)}
     collection.indexesManager.ensure(new Index(
       key = ky,
       background = true,
-      unique = true,
+      unique = unique,
       name = Some(indexName)))
     collection
   }

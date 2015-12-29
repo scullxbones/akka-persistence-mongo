@@ -93,10 +93,10 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
 
-  private[mongodb] override def ensureUniqueIndex(collection: C, indexName: String, keys: (String,Int)*)(implicit ec: ExecutionContext): MongoCollection = {
-    collection.createIndex(
-      MongoDBObject(keys :_*),
-      MongoDBObject("unique" -> true, "name" -> indexName))
+  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C => C = { collection =>
+   collection.createIndex(
+      MongoDBObject(fields :_*),
+      MongoDBObject("unique" -> unique, "name" -> indexName))
     collection
   }
 

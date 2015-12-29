@@ -30,6 +30,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) = {
     val enum = journal.find(journalRangeQuery(pid, from, to))
+                      .sort(BSONDocument(FROM -> 1))
                       .projection(BSONDocument(EVENTS -> 1))
                       .cursor[BSONDocument]()
                       .enumerate()

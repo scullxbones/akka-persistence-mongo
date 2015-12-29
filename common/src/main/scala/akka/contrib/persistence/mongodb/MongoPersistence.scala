@@ -79,7 +79,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def ensureUniqueIndex(collection: C, indexName: String, fields: (String,Int)*)(implicit ec: ExecutionContext): C
+  private[mongodb] def ensureIndex(indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C => C
 
   private[mongodb] def closeConnections(): Unit
 
@@ -92,16 +92,22 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       logger.debug("Journal automatic upgrade process has completed")
     }
     val journalCollection = collection(journalCollectionName)
-    ensureUniqueIndex(journalCollection, journalIndexName,
-      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1)(concurrent.ExecutionContext.global)
+
+    implicit val ctx = concurrent.ExecutionContext.global
+    ensureIndex(journalIndexName, unique = true,
+      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1
+    ) andThen
+    ensureIndex("max_sequence_sort", unique = false,
+      JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1
+    ) apply journalCollection
   }
 
   private[mongodb] lazy val snaps: C = {
     val snapsCollection = collection(snapsCollectionName)
-    ensureUniqueIndex(snapsCollection, snapsIndexName,
-                      SnapshottingFieldNames.PROCESSOR_ID -> 1,
-                      SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-                      TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
+    ensureIndex(snapsIndexName, unique = true,
+                SnapshottingFieldNames.PROCESSOR_ID -> 1,
+                SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
+                TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)(snapsCollection)
   }
   private[mongodb] lazy val realtime: C = {
     cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.Implicits.global)
