@@ -1,5 +1,17 @@
 ## Changelog for 1.x major version
 
+### 1.1.4
+* Issue [#79](https://github.com/scullxbones/akka-persistence-mongo/issues/79) fixed 
+  * Fix unindexed query causing issues on large journals by adding additional index
+ 
+### 1.1.3
+* PR [#71](https://github.com/scullxbones/akka-persistence-mongo/pull/71) merged ~ thanks @matheuslima:
+  * Add support for allEvents/currentEvents and allPersistenceIds/currentPersistenceIds queries
+* Also some refactoring and changes to try and address instability in RxMongo read journal - still a WIP
+
+### 1.1.2
+* For casbah, must drop old index by name during journal upgrade process
+
 ### 1.1.1
 * Correctly ordered upgrade (drop old index, upgrade, add new index) fixes issue [#70](https://github.com/scullxbones/akka-persistence-mongo/issues/70)
 
