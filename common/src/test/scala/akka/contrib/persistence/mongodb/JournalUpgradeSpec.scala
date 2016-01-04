@@ -91,12 +91,9 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     coll.insert(buildLegacyObject("foo",2,"bar"))
     coll.insert(buildLegacyDocument("foo",3))
 
-    println(s"before = ${coll.find().toArray.asScala.toList}")
-
     as.journal // executes upgrade
 
     val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
-    println(records)
     records should have size 3
     records.zipWithIndex.foreach { case (dbo,idx) =>
       dbo.get(PROCESSOR_ID) should be ("foo")
@@ -160,7 +157,6 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     as.journal // executes upgrade
 
     val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
-    println(records)
     records should have size 1
     records.zipWithIndex.foreach { case (dbo,idx) =>
       dbo.get(PROCESSOR_ID) should be ("foo")

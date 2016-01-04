@@ -1,9 +1,8 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{ActorRef, Props}
-import akka.persistence.query.EventEnvelope
-import com.mongodb.{DBCursor, Bytes, DBObject}
 import com.mongodb.casbah.Imports._
+import com.mongodb.{Bytes, DBObject}
 
 import scala.concurrent.Future
 
@@ -86,37 +85,36 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   override protected def discard(c: Stream[Event]): Unit = ()
 }
 
-class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[Event, MongoCollection] with JournalEventBus{
+class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection]{
   import CasbahSerializers._
 
-  override def cursor = {
+  override def cursor() = {
     val c = driver.realtime
     c.addOption(Bytes.QUERYOPTION_TAILABLE)
     c.addOption(Bytes.QUERYOPTION_AWAITDATA)
     c
   }
 
-  override def publishEvent(handler: (Event) => Unit) = {
-
-    cursor.foreach{ next =>
-      if (next.keySet().contains(EVENTS)) {
-        val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
-        events foreach handler
-      }
-    }
-  }
-
-  override def streaming = {
-    import scala.concurrent.ExecutionContext.Implicits.global
+  override def publishEvents() = {
+    implicit val ec = driver.querySideDispatcher
     Future {
-      publishEvent(publish)
+      cursor().foreach { next =>
+        if (next.keySet().contains(EVENTS)) {
+          val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
+          events.foreach(driver.actorSystem.eventStream.publish)
+        }
+      }
     }
   }
 }
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
 
-  private val journalStreaming = new CasbahMongoJournalStream(driver)
+  private val journalStreaming = {
+    val stream = new CasbahMongoJournalStream(driver)
+    stream.publishEvents()
+    stream
+  }
 
   override def currentAllEvents: Props = CurrentAllEvents.props(driver)
 
@@ -125,8 +123,6 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
     CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 
-  override def publishJournalEvents(persistenceId: String, subscriber: ActorRef) = {
-    journalStreaming.subscribe(subscriber, persistenceId)
-    journalStreaming.streaming
-  }
+  override def subscribeJournalEvents(subscriber: ActorRef): Unit =
+    driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
 }

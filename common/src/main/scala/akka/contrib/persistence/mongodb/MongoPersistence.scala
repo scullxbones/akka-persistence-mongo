@@ -81,7 +81,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def ensureIndex(collection: C, indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C
+  private[mongodb] def ensureIndex(indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C => C
 
   private[mongodb] def closeConnections(): Unit
 
@@ -89,7 +89,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
-    IndexSettings(journalSeqNrIndexName, unique = false, TO -> -1)
+    IndexSettings(journalSeqNrIndexName, unique = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
   )
 
   private[mongodb] lazy val journal: C = {
@@ -102,20 +102,22 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
     indexes.foldLeft(journalCollection) { (acc, index) =>
       import index._
-      ensureIndex(acc, name, unique, fields:_*)(concurrent.ExecutionContext.global)
+      ensureIndex(name, unique, fields:_*)(concurrent.ExecutionContext.global)(acc)
     }
   }
 
   private[mongodb] lazy val snaps: C = {
     val snapsCollection = collection(snapsCollectionName)
-    ensureIndex(snapsCollection, snapsIndexName, unique = true,
-                      SnapshottingFieldNames.PROCESSOR_ID -> 1,
-                      SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-                      TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)
+    ensureIndex(snapsIndexName, unique = true,
+                SnapshottingFieldNames.PROCESSOR_ID -> 1,
+                SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
+                TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)(snapsCollection)
   }
   private[mongodb] lazy val realtime: C = {
     cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.Implicits.global)
   }
+  private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
+
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex

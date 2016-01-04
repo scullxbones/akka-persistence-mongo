@@ -67,7 +67,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
     val seqNumIdx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalSeqNrIndexName)).head
     seqNumIdx.getAs[Boolean]("unique") shouldBe None
-    seqNumIdx("key") should be(MongoDBObject(TO -> -1))
+    seqNumIdx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, TO -> -1))
   }}
   () }
 
