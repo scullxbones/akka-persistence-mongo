@@ -261,8 +261,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val nrOfActors = 10
     val nrOfEvents = 100
-    val ars = (1 to nrOfActors) map (nr => system.actorOf(props(s"pid-$nr", Promise[Unit]()),s"actor-$nr"))
-    val events = (1 to nrOfEvents) map (eventId => Append.apply(s"eventd-$eventId"))
+    val promises = (1 to nrOfActors).map(_ => Promise[Unit]()).zipWithIndex
+    val ars = promises map { case (p,idx) => system.actorOf(props(s"pid-${idx + 1}", p),s"actor-${idx + 1}")}
+    val events = (1 to nrOfEvents).map(eventId => Append.apply(s"eventd-$eventId")) :+ Append("END")
 
     val probe = TestProbe()
 
@@ -272,6 +273,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     ars foreach { ar =>
       events foreach ( ar ! _)
     }
+
+    implicit val ec = as.dispatcher
+    val done = Future.sequence(promises.toSeq.map(_._1.future))
+    Await.result(done, 15.seconds.dilated)
+
 
     probe.receiveN(nrOfActors * nrOfEvents, 1.seconds.dilated)
     ()
