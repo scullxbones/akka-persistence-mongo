@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.1.5
+* PR [#82](https://github.com/scullxbones/akka-persistence-mongo/pull/82) merged:
+  * Allows naming index used for finding the maximum sequence # for a given `persistenceId` - thanks @bilyush!
+
 ### 1.1.4
 * Issue [#79](https://github.com/scullxbones/akka-persistence-mongo/issues/79) fixed 
   * Fix unindexed query causing issues on large journals by adding additional index
