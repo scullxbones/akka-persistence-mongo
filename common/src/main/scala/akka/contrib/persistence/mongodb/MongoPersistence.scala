@@ -42,6 +42,8 @@ trait CanDeserializeJournal[D] {
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
+private case class IndexSettings(name: String, unique: Boolean, fields: (String, Int)*)
+
 abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   import MongoPersistenceDriver._
 
@@ -85,6 +87,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
+  private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
+    IndexSettings(journalIndexName, unique = true, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
+    IndexSettings(journalSeqNrIndexName, unique = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
+  )
+
   private[mongodb] lazy val journal: C = {
     if (settings.JournalAutomaticUpgrade) {
       logger.debug("Journal automatic upgrade is enabled, executing upgrade process")
@@ -93,13 +100,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     }
     val journalCollection = collection(journalCollectionName)
 
-    implicit val ctx = concurrent.ExecutionContext.global
-    ensureIndex(journalIndexName, unique = true,
-      JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1
-    ) andThen
-    ensureIndex("max_sequence_sort", unique = false,
-      JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1
-    ) apply journalCollection
+    indexes.foldLeft(journalCollection) { (acc, index) =>
+      import index._
+      ensureIndex(name, unique, fields:_*)(concurrent.ExecutionContext.global)(acc)
+    }
   }
 
   private[mongodb] lazy val snaps: C = {
@@ -122,6 +126,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def snapsFsync = settings.SnapsFSync
   def journalCollectionName = settings.JournalCollection
   def journalIndexName = settings.JournalIndex
+  def journalSeqNrIndexName = settings.JournalSeqNrIndex
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync
