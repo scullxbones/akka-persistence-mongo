@@ -22,6 +22,7 @@
 libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.1.5"
 ```
 (Reactive Mongo)
+##### Please note: Supported versions of reactive mongo require the `0.11` series, with a maximum version number of `0.11.7` due to backward incompatibility issues with higher versions
 ```scala
 libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.1.5"
 ```
