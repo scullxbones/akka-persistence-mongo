@@ -1,18 +1,14 @@
 package akka.contrib.persistence.mongodb
 
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.ConcurrentHashMap
 
-import scala.concurrent.duration._
-import scala.collection.JavaConverters._
-import scala.collection.concurrent.{Map, TrieMap}
-import com.typesafe.config.{Config, ConfigFactory}
-import akka.actor.ActorSystem
-import akka.actor.ExtendedActorSystem
-import akka.actor.Extension
-import akka.actor.ExtensionId
+import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId}
 import com.codahale.metrics.MetricRegistry
+import com.typesafe.config.{Config, ConfigFactory}
 
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 import scala.util.Try
 
 object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] {
@@ -100,7 +96,7 @@ class MongoSettings(val config: Config) {
 
   val realtimeEnablePersistence = config.getBoolean("realtime-enable-persistence")
   val realtimeCollectionName = config.getString("realtime-collection")
-  val realtimeCollectionSize = config.getInt("realtime-collection-size")
+  val realtimeCollectionSize = config.getLong("realtime-collection-size")
 
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
