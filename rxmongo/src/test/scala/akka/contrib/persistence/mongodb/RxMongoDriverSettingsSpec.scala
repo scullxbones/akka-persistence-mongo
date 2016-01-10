@@ -33,7 +33,7 @@ class RxMongoDriverSettingsSpec extends BaseUnitTest {
     s.ExponentialGrowth shouldBe false
     s.LinearGrowth shouldBe false
     s.ConstantGrowth shouldBe true
-    s.InitialDelay shouldBe 1.second
+    s.InitialDelay shouldBe 750.millis
     s.Factor shouldBe 1.5
     s.Retries shouldBe 10
   }

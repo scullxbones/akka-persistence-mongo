@@ -242,7 +242,7 @@ class RxMongoDriverSettings(val config: Config) {
   def Factor = failover.getDouble("factor")
 
   def GrowthFunction: Int => Double = Growth match {
-    case "con" => (i:Int) => 1.0
+    case "con" => (i:Int) => Factor
     case "lin" => (i:Int) => i.toDouble
     case "exp" => (i:Int) => math.pow(i.toDouble, Factor)
   }
