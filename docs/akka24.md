@@ -44,6 +44,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Collection and Index](#mongocollection)
    * [Write Concerns](#writeconcern)
    * [Circuit Breaker / Fail Fast](#circuitbreaker)
+   * [ReactiveMongo Failover](#rxmfailover)
    * [Dispatcher](#dispatcher)
    * [Pass-Through BSON](#passthru)
    * [Legacy Serialization](#legacyser)
@@ -212,6 +213,30 @@ These settings may need tuning depending on your particular environment.  If you
 [2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
 
 Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`. 
+
+<a name="rxmfailover"/>
+##### Reactive Mongo Driver - failover settings
+
+The reactive mongo driver supports specific failover settings which govern behavior when sending requests results in failures.
+
+* `initialDelay` - this duration is the delay used between the first error and the first retry
+* `retries` - this is the number of retries attempted before giving up
+* `growth` - this describes the growth function, 3 choices are available:
+  * `con` - constant delay equal to `factor`
+  * `lin` - linear increasing delay equal to the current retry number.  Equivalent to `exp` with `factor` = 1
+  * `exp` - exponentially increasing delay to the power of `factor`
+* `factor` - used in conjunction with `growth` as described above
+
+```
+akka.contrib.persistence.mongodb.rxmongo.failover {
+    initialDelay = 50ms
+    retries = 3
+    growth = exp
+    factor = 1.5
+}
+```
+
+See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.11/documentation/advanced-topics/failoverstrategy.html) for more information.
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used

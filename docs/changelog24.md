@@ -1,5 +1,10 @@
 ## Changelog for 1.x major version
 
+### 1.1.6
+* Issue [#84](https://github.com/scullxbones/akka-persistence-mongo/issues/84) addressed:
+  * Adds ability to override/set failover settings for rxmongo driver
+  * Updates to clean up metrics names
+
 ### 1.1.5
 * PR [#82](https://github.com/scullxbones/akka-persistence-mongo/pull/82) merged:
   * Allows naming index used for finding the maximum sequence # for a given `persistenceId` - thanks @bilyush!

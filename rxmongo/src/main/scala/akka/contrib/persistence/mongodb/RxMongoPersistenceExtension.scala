@@ -1,7 +1,9 @@
 package akka.contrib.persistence.mongodb
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee.Iteratee
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
@@ -10,7 +12,7 @@ import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.language.implicitConversions
 import scala.util.{Failure, Success}
@@ -41,6 +43,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
 
   type D = BSONDocument
 
+  private def rxSettings = RxMongoDriverSettings(system.settings)
   private[mongodb] lazy val driver = MongoDriver()
   private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
     case Success(parsed) => parsed
@@ -158,7 +161,15 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
   private[mongodb] def closeConnections(): Unit = driver.close()
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
-  private[mongodb] def db = connection(dbName)(system.dispatcher)
+  private[mongodb] def failoverStrategy: FailoverStrategy = {
+    val rxMSettings = rxSettings
+    FailoverStrategy(
+      initialDelay = rxMSettings.InitialDelay,
+      retries = rxMSettings.Retries,
+      delayFactor = rxMSettings.GrowthFunction
+    )
+  }
+  private[mongodb] def db = connection(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
@@ -178,7 +189,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
     val collection = db[BSONCollection](name)
     collection.stats().flatMap{ case stats if ! stats.capped =>
       collection.convertToCapped(realtimeCollectionSize, None)
-    }.recover{ case _ =>
+    }.recoverWith{ case _ =>
       collection.createCapped(realtimeCollectionSize, None)
     }
     collection
@@ -203,4 +214,36 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
     override lazy val readJournal = new RxMongoReadJournaller(driver)
   }
 
+}
+
+object RxMongoDriverSettings {
+  def apply(systemSettings: ActorSystem.Settings) = {
+    val fullName = s"${getClass.getPackage.getName}.rxmongo"
+    val systemConfig = systemSettings.config
+    systemConfig.checkValid(ConfigFactory.defaultReference(), fullName)
+    new RxMongoDriverSettings(systemConfig.getConfig(fullName))
+  }
+}
+
+class RxMongoDriverSettings(val config: Config) {
+
+  config.checkValid(config, "failover")
+
+  private val failover = config.getConfig("failover")
+  def InitialDelay = {
+    val configured = failover.getDuration("initialDelay")
+    FiniteDuration(configured.toMillis, TimeUnit.MILLISECONDS)
+  }
+  def Retries = failover.getInt("retries")
+  def Growth = failover.getString("growth")
+  def ConstantGrowth = Growth == "con"
+  def LinearGrowth = Growth == "lin"
+  def ExponentialGrowth = Growth == "exp"
+  def Factor = failover.getDouble("factor")
+
+  def GrowthFunction: Int => Double = Growth match {
+    case "con" => (i:Int) => Factor
+    case "lin" => (i:Int) => i.toDouble
+    case "exp" => (i:Int) => math.pow(i.toDouble, Factor)
+  }
 }

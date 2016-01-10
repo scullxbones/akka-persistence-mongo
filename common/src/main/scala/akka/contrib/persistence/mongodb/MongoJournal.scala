@@ -11,8 +11,7 @@ import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
-import nl.grons.metrics.scala.InstrumentedBuilder
-import nl.grons.metrics.scala.Timer
+import nl.grons.metrics.scala.{MetricName, InstrumentedBuilder, Timer}
 
 import scala.util.Try
 import scala.concurrent.duration._
@@ -188,13 +187,12 @@ trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
 
 trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with InstrumentedBuilder {
   val metricRegistry = MongoPersistenceDriver.registry
-  
+  override lazy val metricBaseName = MetricName(s"akka-persistence-mongo.journal.$driverName")
+
   def driverName: String
   
-  private def fullyQualifiedName(metric: String, metricType: String) = s"akka-persistence-mongo.journal.$driverName.$metric-$metricType"
-
-  private def timerName(metric: String) = fullyQualifiedName(metric,"timer")
-  private def histName(metric: String) = fullyQualifiedName(metric, "histo")
+  private def timerName(metric: String) = MetricName(metric,"timer").name
+  private def histName(metric: String) = MetricName(metric, "histo").name
   
   // Timers
   private lazy val appendTimer = metrics.timer(timerName("write.append"))

@@ -251,7 +251,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     probe.receiveN(events2.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should be(events2.map(_.s))
   }
 
-  it should "support read 1k events from jouurnal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal"){ case (as, _) =>
+  it should "support read 1k events from journal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal"){ case (as, _) =>
     import concurrent.duration._
     implicit val system = as
     implicit val mat = ActorMaterializer()
