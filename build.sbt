@@ -5,6 +5,7 @@ val scalaV = "2.11.7"
 scalaVersion := scalaV
 
 val AkkaV = "2.4.0"
+val AkkaStreamV = "1.0"
 
 val pomXtra = {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
@@ -42,6 +43,7 @@ val commonDeps = Seq(
   "junit" % "junit" % "4.11" % "test",
   "org.mockito" % "mockito-all" % "1.9.5" % "test",
   "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.50.1" % "test",
+  "com.typesafe.akka" %% "akka-stream-testkit-experimental" % AkkaStreamV % "test",
   "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test",
   "com.typesafe.akka" %% "akka-cluster-sharding" % AkkaV % "test"
@@ -103,7 +105,9 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
     libraryDependencies ++= Seq(
       ("org.reactivemongo" %% "reactivemongo" % "0.11.6" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.10")
-        .exclude("com.typesafe.akka","akka-actor_2.11")
+        .exclude("com.typesafe.akka","akka-actor_2.11"),
+      "com.typesafe.play" %% "play-streams-experimental" % "2.4.0"
+
     )
   )
 
