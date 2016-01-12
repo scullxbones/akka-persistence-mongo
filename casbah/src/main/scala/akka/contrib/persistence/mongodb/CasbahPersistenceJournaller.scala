@@ -18,7 +18,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long): DBObject =
-    (PROCESSOR_ID $eq pid) ++ (FROM $lte to) ++ (TO $gte fromSeq)
+    (PROCESSOR_ID $eq pid) ++ (FROM $lte to) ++ (TO $gte from)
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
   private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
