@@ -67,7 +67,7 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
 
   override protected def initialCursor: Stream[Event] =
     driver.journal
-      .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq) ++ (FROM $lte toSeq))
+      .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $gte fromSeq $lte toSeq))
       .sort(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1))
       .toStream
       .flatMap(_.getAs[MongoDBList](EVENTS))
