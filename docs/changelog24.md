@@ -1,5 +1,13 @@
 ## Changelog for 1.x major version
 
+### 1.1.7
+* Fixes issue [#88](https://github.com/scullxbones/akka-persistence-mongo/issues/88):
+  * For Casbah, journal entry query not correctly specifying sequence number bounds
+  * Some more internal metric refactoring
+  * Merges in - thanks @HannesSchr!:
+    * PR[#86](https://github.com/scullxbones/akka-persistence-mongo/pull/86)
+    * PR[#87](https://github.com/scullxbones/akka-persistence-mongo/pull/87)
+
 ### 1.1.6
 * Issue [#84](https://github.com/scullxbones/akka-persistence-mongo/issues/84) addressed:
   * Adds ability to override/set failover settings for rxmongo driver
