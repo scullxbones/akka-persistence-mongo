@@ -7,6 +7,7 @@ import akka.pattern.CircuitBreaker
 import akka.serialization.{Serialization, SerializationExtension}
 import com.codahale.metrics.SharedMetricRegistries
 import com.typesafe.config.Config
+import nl.grons.metrics.scala.InstrumentedBuilder
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext
@@ -29,7 +30,11 @@ object MongoPersistenceDriver {
     case "replicaacknowledged" => ReplicaAcknowledged
   }
   
-  private[mongodb] lazy val registry = SharedMetricRegistries.getOrCreate("mongodb")
+  private[mongodb] val registry = SharedMetricRegistries.getOrCreate("mongodb")
+}
+
+trait Instrumented extends InstrumentedBuilder {
+  override val metricRegistry = MongoPersistenceDriver.registry
 }
 
 trait CanSerializeJournal[D] {

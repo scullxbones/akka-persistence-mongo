@@ -105,6 +105,7 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
         }
       }
     }
+    ()
   }
 }
 
@@ -123,6 +124,8 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
     CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
 
-  override def subscribeJournalEvents(subscriber: ActorRef): Unit =
+  override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
     driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
+    ()
+  }
 }

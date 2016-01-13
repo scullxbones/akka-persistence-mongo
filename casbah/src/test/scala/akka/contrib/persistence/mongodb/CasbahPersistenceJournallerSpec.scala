@@ -32,8 +32,14 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }
 
   trait Fixture {
-    val underTest = new CasbahPersistenceJournaller(driver)
+    val underTest = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
+      override def driverName = "casbah"
+    }
     val records:List[PersistentRepr] = List(1L, 2L, 3L).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test", manifest = "M") }
+
+    val threeAtoms: List[AtomicWrite] = ((1L to 9L) grouped 3 toList).map( block =>
+      AtomicWrite(ISeq(block.map(sn => PersistentRepr(persistenceId = "three-atoms", sequenceNr = sn, payload = "payload")) :_*))
+    )
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in { new Fixture {
@@ -125,6 +131,39 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   }}
   () }
 
+  it should "replay correctly against multiple atoms - 1 atom case" in { new Fixture { withJournal { journal =>
+    underTest.batchAppend(ISeq(threeAtoms:_*))
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("three-atoms", 2, 3, 10)(replay(buf)).value.get.get
+    val expect = (2L to 3L) map(sn => PersistentRepr(payload = "payload", sequenceNr = sn, persistenceId = "three-atoms"))
+    buf should have size 2
+    buf should contain only (expect:_*)
+  }}
+  () }
+
+  it should "replay correctly against multiple atoms - 2 atom case" in { new Fixture { withJournal { journal =>
+    underTest.batchAppend(ISeq(threeAtoms:_*))
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("three-atoms", 5, 8, 10)(replay(buf)).value.get.get
+    val expect = (5L to 8L) map(sn => PersistentRepr(payload = "payload", sequenceNr = sn, persistenceId = "three-atoms"))
+    buf should have size 4
+    buf should contain only (expect:_*)
+  }}
+  () }
+
+  it should "replay correctly against multiple atoms - 3 atom case" in { new Fixture { withJournal { journal =>
+    underTest.batchAppend(ISeq(threeAtoms:_*))
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("three-atoms", 3, 8, 10)(replay(buf)).value.get.get
+    val expect = (3L to 8L) map(sn => PersistentRepr(payload = "payload", sequenceNr = sn, persistenceId = "three-atoms"))
+    buf should have size 6
+    buf should contain only (expect:_*)
+  }}
+  () }
+
   it should "have a default sequence nr when journal is empty" in { new Fixture { withJournal { journal =>
     val result = underTest.maxSequenceNr("unit-test", 5).value.get.get
     result should be (0)
@@ -187,6 +226,20 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     buf should have size 2
     buf should contain(PersistentRepr(payload = msg, sequenceNr = 2, persistenceId = "unit-test", manifest = "M"))
 
+  }}
+  () }
+
+  it should "record metrics" in { new Fixture { withJournal {journal =>
+    underTest.batchAppend(ISeq(AtomicWrite(records)))
+
+    val buf = mutable.Buffer[PersistentRepr]()
+    underTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
+
+
+    val registry = MongoPersistenceDriver.registry
+    registry.getTimers() should have size 4
+    registry.getTimers().keySet() should contain ("akka-persistence-mongo.journal.casbah.read.max-seq.timer")
+    registry.getTimers().get("akka-persistence-mongo.journal.casbah.read.max-seq.timer").getCount should be > 0L
   }}
   () }
 }

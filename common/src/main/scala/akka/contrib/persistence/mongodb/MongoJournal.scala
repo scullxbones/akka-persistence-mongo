@@ -3,18 +3,16 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.Actor
-import akka.pattern.{CircuitBreakerOpenException, CircuitBreaker}
-import com.typesafe.config.Config
-
-import scala.collection.immutable
+import akka.pattern.{CircuitBreaker, CircuitBreakerOpenException}
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext
-import nl.grons.metrics.scala.{MetricName, InstrumentedBuilder, Timer}
+import com.typesafe.config.Config
+import nl.grons.metrics.scala.{MetricName, Timer}
 
-import scala.util.Try
+import scala.collection.immutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.Try
 
 class MongoJournal(config: Config) extends AsyncWriteJournal {
   
@@ -185,8 +183,7 @@ trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
     breaker.withCircuitBreaker(super.maxSequenceNr(pid,from))
 }
 
-trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with InstrumentedBuilder {
-  val metricRegistry = MongoPersistenceDriver.registry
+trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with Instrumented {
   override lazy val metricBaseName = MetricName(s"akka-persistence-mongo.journal.$driverName")
 
   def driverName: String
@@ -195,13 +192,13 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
   private def histName(metric: String) = MetricName(metric, "histo").name
   
   // Timers
-  private lazy val appendTimer = metrics.timer(timerName("write.append"))
-  private lazy val deleteTimer = metrics.timer(timerName("write.delete-range"))
-  private lazy val replayTimer = metrics.timer(timerName("read.replay"))
-  private lazy val maxTimer = metrics.timer(timerName("read.max-seq"))
+  private val appendTimer = metrics.timer(timerName("write.append"))
+  private val deleteTimer = metrics.timer(timerName("write.delete-range"))
+  private val replayTimer = metrics.timer(timerName("read.replay"))
+  private val maxTimer = metrics.timer(timerName("read.max-seq"))
   
   // Histograms
-  private lazy val writeBatchSize = metrics.histogram(histName("write.append.batch-size"))
+  private val writeBatchSize = metrics.histogram(histName("write.append.batch-size"))
 
   private def timeIt[A](timer: Timer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
     val ctx = timer.timerContext()

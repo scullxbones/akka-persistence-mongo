@@ -153,9 +153,9 @@ class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
 }
 
 class EventEnvelopeConverter extends PushStage[Event, EventEnvelope] {
-  var offset = -1
+  var offset = -1L
   override def onPush(elem: Event, ctx: Context[EventEnvelope]) = {
-    offset += 1
+    offset += 1L
     ctx.push(elem.toEnvelope(offset))
   }
 }
