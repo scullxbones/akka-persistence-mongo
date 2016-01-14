@@ -6,8 +6,8 @@ import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import scala.concurrent.{Await, Future, Promise}
 
@@ -71,12 +71,12 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     implicit val system = as
     implicit val mat = ActorMaterializer()
 
-    val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
+    val events = "this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil
 
     val promise = Promise[Unit]()
     val ar = as.actorOf(props("foo",promise))
 
-    events foreach (ar ! _)
+    events map Append.apply foreach (ar ! _)
 
     Await.result(promise.future, 10.seconds.dilated)
 
@@ -84,7 +84,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
     val fut = readJournal.currentAllEvents().runFold(events.toSet){ (received, ee) =>
-      val asAppend = Append(ee.event.asInstanceOf[String])
+      val asAppend = ee.event.asInstanceOf[String]
       events should contain (asAppend)
       received - asAppend
     }

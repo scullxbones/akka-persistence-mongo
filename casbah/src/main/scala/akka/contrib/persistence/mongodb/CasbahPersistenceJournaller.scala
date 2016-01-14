@@ -25,7 +25,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Iterator[Event] =
     journal.find(journalRangeQuery(pid, from, to))
-            .sort(MongoDBObject(FROM -> 1))
+            .sort(MongoDBObject(TO -> 1))
            .flatMap(_.getAs[MongoDBList](EVENTS))
            .flatMap(lst => lst.collect { case x:DBObject => x })
            .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to))

@@ -1,5 +1,10 @@
 ## Changelog for 1.x major version
 
+### 1.1.8
+* Fixes issue [#89](https://github.com/scullxbones/akka-persistence-mongo/issues/89):
+  * Change sort to query that will leverage index
+  * Fix inconsistencies found in read journals, rxm driver
+
 ### 1.1.7
 * Fixes issue [#88](https://github.com/scullxbones/akka-persistence-mongo/issues/88):
   * For Casbah, journal entry query not correctly specifying sequence number bounds

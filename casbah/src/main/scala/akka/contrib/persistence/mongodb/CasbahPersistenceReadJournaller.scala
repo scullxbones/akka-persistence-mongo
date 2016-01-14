@@ -41,7 +41,6 @@ class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher
   override protected def initialCursor: Stream[Event] =
     driver.journal
           .find(MongoDBObject())
-          .sort(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
           .toStream
           .flatMap(_.getAs[MongoDBList](EVENTS))
           .flatMap(lst => lst.collect {case x:DBObject => x} )
@@ -68,7 +67,7 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   override protected def initialCursor: Stream[Event] =
     driver.journal
       .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $lte toSeq) ++ (TO $gte fromSeq))
-      .sort(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1))
+      .sort(MongoDBObject(TO -> 1))
       .toStream
       .flatMap(_.getAs[MongoDBList](EVENTS))
       .flatMap(lst => lst.collect {case x:DBObject => x} )

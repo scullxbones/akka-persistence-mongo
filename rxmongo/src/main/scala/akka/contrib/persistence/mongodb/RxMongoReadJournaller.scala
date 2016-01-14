@@ -97,7 +97,7 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
     Enumerator(
       doc.as[BSONArray](EVENTS).values.collect {
         case d:BSONDocument => driver.deserializeJournal(d)
-      } : _*
+      }:_*
     )
   }
 
@@ -105,7 +105,6 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
     driver.journal
       .find(BSONDocument())
       .options(opts)
-      .sort(BSONDocument(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1))
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
       .enumerate()
@@ -166,10 +165,11 @@ class CurrentEventsByPersistenceId(val driver:RxMongoDriver,persistenceId:String
   override def initial = {
     val q = BSONDocument(
       PROCESSOR_ID -> persistenceId,
-      FROM -> BSONDocument("$gte" -> fromSeq),
+      TO -> BSONDocument("$gte" -> fromSeq),
       FROM -> BSONDocument("$lte" -> toSeq)
     )
     driver.journal.find(q)
+      .sort(BSONDocument(TO -> 1))
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
       .enumerate()
