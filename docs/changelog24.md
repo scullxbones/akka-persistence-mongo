@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.1.9
+* Fixes issue [#91](https://github.com/scullxbones/akka-persistence-mongo/issues/91):
+  * RxMongo driver re-uses `MongoDriver` instance, cutting down on amount of resources used when more than journal or snapshot is used
+  * RxMongo was not batching writes together - fix for performance boost under `persistAsync` scenarios
+  * Remove `no timeout` option from `CurrentAllEvents` read journal query
+
 ### 1.1.8
 * Fixes issue [#89](https://github.com/scullxbones/akka-persistence-mongo/issues/89):
   * Change sort to query that will leverage index

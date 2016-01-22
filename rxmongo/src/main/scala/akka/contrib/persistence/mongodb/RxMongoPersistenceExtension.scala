@@ -32,7 +32,11 @@ object RxMongoPersistenceDriver {
   }
 }
 
-class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
+class RxMongoDriverProvider {
+  val driver = MongoDriver()
+}
+
+class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
 
   import concurrent.Await
@@ -44,7 +48,7 @@ class RxMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenc
   type D = BSONDocument
 
   private def rxSettings = RxMongoDriverSettings(system.settings)
-  private[mongodb] lazy val driver = MongoDriver()
+  private[mongodb] val driver = driverProvider.driver
   private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
     case Success(parsed) => parsed
     case Failure(throwable) => throw throwable

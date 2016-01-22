@@ -91,8 +91,6 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
   import RxMongoSerializers._
   import context.dispatcher
 
-  private val opts = QueryOpts().noCursorTimeout
-
   private val flatten: Enumeratee[BSONDocument,Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
     Enumerator(
       doc.as[BSONArray](EVENTS).values.collect {
@@ -104,7 +102,6 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
   override def initial: Enumerator[Event] = {
     driver.journal
       .find(BSONDocument())
-      .options(opts)
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
       .enumerate()

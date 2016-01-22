@@ -48,14 +48,21 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   }
 
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
-    val batch = writes.toStream.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
-    Future.sequence(batch.map {
-      case Success(document:BSONDocument) =>
-        val result =journal.insert(document, writeConcern).map(writeResultToUnit)
-        if(driver.realtimeEnablePersistence) realtime.insert(document, writeConcern).map(writeResultToUnit)
-        result
-      case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
-    })
+    val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
+    if (batch.forall(_.isSuccess)) {
+      val collected = batch.toStream.collect{case Success(doc) => doc}
+      val result = journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+      if(driver.realtimeEnablePersistence) realtime.bulkInsert(collected, ordered = true, writeConcern)
+      result
+    } else {
+      Future.sequence(batch.map {
+        case Success(document:BSONDocument) =>
+          val result =journal.insert(document, writeConcern).map(writeResultToUnit)
+          if(driver.realtimeEnablePersistence) realtime.insert(document, writeConcern)
+          result
+        case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+      })
+    }
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {

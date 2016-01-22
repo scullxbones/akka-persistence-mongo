@@ -89,7 +89,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       received - asAppend
     }
 
-    Await.result(fut,10.seconds.dilated) shouldBe empty
+    Await.result(fut,10.seconds.dilated).size shouldBe 0
   }
 
   it should "support the realtime journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_) =>
