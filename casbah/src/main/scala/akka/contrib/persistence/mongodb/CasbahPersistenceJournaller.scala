@@ -20,6 +20,9 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long): DBObject =
     (PROCESSOR_ID $eq pid) ++ (FROM $lte to) ++ (TO $gte from)
 
+  private[this] def clearEmptyDocumentsQuery(pid: String): DBObject =
+    (PROCESSOR_ID $eq pid) ++ (EVENTS $size 0)
+
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
   private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
 
@@ -65,7 +68,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
       "$set" -> MongoDBObject(FROM -> (toSequenceNr+1))
     )
     journal.update(query, update, upsert = false, multi = true, writeConcern)
-    journal.remove($and(query, EVENTS $size 0), writeConcern)
+    journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
     ()
   }
 

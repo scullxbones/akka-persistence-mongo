@@ -90,7 +90,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
         accumulator = Option(ar)
         context.setReceiveTimeout(atMost)
       case IncBatch(count) =>
-        persistAll((1 to count).map(_ => 1))(eventHandler)
+        persistAllAsync((1 to count).map(_ => 1))(eventHandler)
       case ReceiveTimeout =>
         if (recoveryFinished) {
           inflight.set(0)
@@ -144,7 +144,21 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
 
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
-    println(s"$total events: $time ms ... ${total.map(_/(time / 1000.0)).map(_.toString).getOrElse("N/A")}")
+    println(
+      s"""
+         |==== Load (write) test result ===
+         |
+         |Extension:       ${extensionClass.getSimpleName}
+         |
+         |Total Actors:    ${actors.size}
+         |Total Events:    ${total.getOrElse(0L)}
+         |Total Time (ms): $time
+         |                 --------
+         |
+         |Write Rate (ev/s): ${math.floor(total.getOrElse(0L) /(time / 1000.0))}
+         |
+         |==== ------------------------ ===
+       """.stripMargin)
     total shouldBe Success(commandsPerBatch * batches * maxActors)
   }
 
@@ -158,6 +172,23 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     val total = Try(Await.result(result.future, 60.seconds))
 
     val time = System.currentTimeMillis - start
+
+    println(
+      s"""
+         |==== Load (read) test result ===
+         |
+         |Extension:       ${extensionClass.getSimpleName}
+         |
+         |Total Actors:    ${actors.size}
+         |Total Events:    ${total.getOrElse(0L)}
+         |Total Time (ms): $time
+         |                 --------
+         |
+         |Recovery time (s): ${math.floor(time / 1000.0)}
+         |
+         |==== ----------------------- ===
+       """.stripMargin)
+
     println(s"$total events: ${time/1000.0}s to recover")
     total shouldBe Success(commandsPerBatch * batches * maxActors)
   }

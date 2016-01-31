@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.1.10
+* Fixes issue [#93](https://github.com/scullxbones/akka-persistence-mongo/issues/93):
+  * Casbah driver had incorrect `events:{$size:0}` query, causing no records to be matched or deleted
+* Add prettier report to logs of load spec runs
+* Make load spec async to significant benefit of casbah and detriment of rxmongo (needs further investigation)
+
 ### 1.1.9
 * Fixes issue [#91](https://github.com/scullxbones/akka-persistence-mongo/issues/91):
   * RxMongo driver re-uses `MongoDriver` instance, cutting down on amount of resources used when more than journal or snapshot is used
