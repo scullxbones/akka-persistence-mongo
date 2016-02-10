@@ -3,7 +3,7 @@ package akka.contrib.persistence.mongodb
 
 import java.util.concurrent.ConcurrentHashMap
 
-import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId}
+import akka.actor._
 import com.codahale.metrics.MetricRegistry
 import com.typesafe.config.{Config, ConfigFactory}
 
@@ -11,9 +11,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Try
 
-object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] {
+object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] with ExtensionIdProvider {
   
-  def lookup = MongoPersistenceExtension
+  override def lookup = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem) = {
     val settings = MongoSettings(actorSystem.settings)
@@ -31,7 +31,10 @@ trait MongoPersistenceExtension extends Extension {
   private val configuredExtensions = new ConcurrentHashMap[Config, ConfiguredExtension].asScala
 
   def apply(config: Config): ConfiguredExtension = {
-    configuredExtensions.putIfAbsent(config, configured(config))
+    if (!configuredExtensions.contains(config)) {
+      val configuredExtension: ConfiguredExtension = configured(config)
+      configuredExtensions.put(config, configuredExtension)
+    }
     configuredExtensions.get(config).get
   }
 
