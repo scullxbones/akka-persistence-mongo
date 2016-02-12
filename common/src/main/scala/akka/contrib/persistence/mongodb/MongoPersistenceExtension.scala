@@ -31,10 +31,7 @@ trait MongoPersistenceExtension extends Extension {
   private val configuredExtensions = new ConcurrentHashMap[Config, ConfiguredExtension].asScala
 
   def apply(config: Config): ConfiguredExtension = {
-    if (!configuredExtensions.contains(config)) {
-      val configuredExtension: ConfiguredExtension = configured(config)
-      configuredExtensions.put(config, configuredExtension)
-    }
+    configuredExtensions.putIfAbsent(config, configured(config))
     configuredExtensions.get(config).get
   }
 

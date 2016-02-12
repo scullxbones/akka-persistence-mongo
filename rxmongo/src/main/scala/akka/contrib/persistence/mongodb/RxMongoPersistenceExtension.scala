@@ -208,7 +208,7 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
 
   case class Configured(config: Config) extends ConfiguredExtension {
 
-    val driver = new RxMongoDriver(actorSystem, config, driverProvider)
+    lazy val driver = new RxMongoDriver(actorSystem, config, driverProvider)
 
     override lazy val journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
       override def driverName = "rxmongo"
