@@ -1,5 +1,8 @@
 ## Changelog for 1.x major version
 
+### 1.1.11
+* Issue [#91](https://github.com/scullxbones/akka-persistence-mongo/issues/91) was reopened - this release fixes and closes that issue
+
 ### 1.1.10
 * Fixes issue [#93](https://github.com/scullxbones/akka-persistence-mongo/issues/93):
   * Casbah driver had incorrect `events:{$size:0}` query, causing no records to be matched or deleted
