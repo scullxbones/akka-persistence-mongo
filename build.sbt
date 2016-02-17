@@ -14,7 +14,7 @@ val commonDeps = Seq(
     .exclude("com.typesafe.akka", "akka-actor_2.10")
     .exclude("com.typesafe.akka", "akka-actor_2.11"),
   "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaV % "provided",
-  "org.mongodb" % "mongo-java-driver" % "2.13.1" % "test",
+  "org.mongodb" % "mongo-java-driver" % "3.2.1" % "test",
   "org.slf4j" % "slf4j-simple" % "1.7.12" % "test",
   "org.scalatest" %% "scalatest" % "2.1.7" % "test",
   "junit" % "junit" % "4.11" % "test",
@@ -69,7 +69,7 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "2.8.1" % "provided"
+      "org.mongodb" %% "casbah" % "3.1.0" % "provided"
     )
   )
 
