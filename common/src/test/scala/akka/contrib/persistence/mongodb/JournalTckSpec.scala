@@ -1,5 +1,6 @@
 package akka.contrib.persistence.mongodb
 
+import akka.persistence.CapabilityFlag
 import akka.persistence.journal.JournalSpec
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -29,5 +30,7 @@ abstract class JournalTckSpec(extensionClass: Class[_])
     super.afterAll()
     JournalTckSpec.doAfter()
   }
+
+  override def supportsRejectingNonSerializableObjects = CapabilityFlag.off()
 
 }

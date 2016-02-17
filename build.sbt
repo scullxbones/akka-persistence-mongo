@@ -1,10 +1,10 @@
-val releaseV = "1.1.11"
+val releaseV = "1.2.0-SNAPSHOT"
 
 val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.4.0"
+val AkkaV = "2.4.2"
 
 val commonDeps = Seq(
   ("com.typesafe.akka" %% "akka-persistence" % AkkaV % "provided")

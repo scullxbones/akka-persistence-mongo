@@ -178,13 +178,15 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety,snapsWTimeout,snapsFsync)
+  private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
 
-  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, keys: (String,Int)*)(implicit ec: ExecutionContext) = { collection =>
+  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String,Int)*)(implicit ec: ExecutionContext) = { collection =>
     val ky = keys.toSeq.map{ case (f,o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending)}
     collection.indexesManager.ensure(new Index(
       key = ky,
       background = true,
       unique = unique,
+      sparse = sparse,
       name = Some(indexName)))
     collection
   }
