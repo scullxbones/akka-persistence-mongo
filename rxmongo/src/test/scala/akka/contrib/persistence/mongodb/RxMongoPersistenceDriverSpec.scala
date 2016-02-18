@@ -67,7 +67,7 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo w
   override def embedDB = "admin"
   override def auth = new AuthenticatingCommandLinePostProcessor()
 
-  val authMode = if(envMongoVersion.contains("3.0")) "?authMode=scram-sha1" else ""
+  val authMode = if( "3.0" :: "3.2" :: Nil exists envMongoVersion.contains) "?authMode=scram-sha1" else ""
 
   val authConfig = ConfigFactory.parseString(
     s"""

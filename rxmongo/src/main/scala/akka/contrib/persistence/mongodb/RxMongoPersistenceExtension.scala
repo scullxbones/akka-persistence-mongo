@@ -53,21 +53,23 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     case Success(parsed) => parsed
     case Failure(throwable) => throw throwable
   }
-  private[this] lazy val unauthenticatedConnection =
+
+  implicit val waitFor = 4.seconds
+
+  private[this] lazy val unauthenticatedConnection = wait {
     // create unauthenticated connection, there is no direct way to wait for authentication this way
     // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
-    waitForPrimary(driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None)))
+    driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
+          .database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
+          .map(_.connection)(system.dispatcher)
+  }
+
   private[mongodb] lazy val connection =
     // now authenticate explicitly and wait for confirmation
     parsedMongoUri.authenticate.fold(unauthenticatedConnection) { auth =>
       waitForAuthentication(unauthenticatedConnection, auth)
     }
 
-  implicit val waitFor = 4.seconds
-  private[this] def waitForPrimary(conn: MongoConnection): MongoConnection = {
-    wait(conn.waitForPrimary(waitFor minus 1.seconds))
-    conn
-  }
   private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
     wait(conn.authenticate(auth.db, auth.user, auth.password))
     conn

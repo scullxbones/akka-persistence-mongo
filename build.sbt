@@ -7,22 +7,22 @@ scalaVersion := scalaV
 val AkkaV = "2.4.2"
 
 val commonDeps = Seq(
-  ("com.typesafe.akka" %% "akka-persistence" % AkkaV % "provided")
+  ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  ("nl.grons" %% "metrics-scala" % "3.5.1_a2.3")
-    .exclude("com.typesafe.akka", "akka-actor_2.10")
+  ("nl.grons"           %% "metrics-scala" % "3.5.1_a2.3")
     .exclude("com.typesafe.akka", "akka-actor_2.11"),
-  "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaV % "provided",
-  "org.mongodb" % "mongo-java-driver" % "3.2.1" % "test",
-  "org.slf4j" % "slf4j-simple" % "1.7.12" % "test",
-  "org.scalatest" %% "scalatest" % "2.1.7" % "test",
-  "junit" % "junit" % "4.11" % "test",
-  "org.mockito" % "mockito-all" % "1.9.5" % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.50.1" % "test",
-  "com.typesafe.akka" %% "akka-testkit" % AkkaV % "test",
-  "com.typesafe.akka" %% "akka-persistence-tck" % AkkaV % "test",
-  "com.typesafe.akka" %% "akka-cluster-sharding" % AkkaV % "test"
+  "com.typesafe.akka"   %% "akka-persistence-query-experimental" % AkkaV % "provided",
+
+  "org.mongodb"         % "mongo-java-driver"         % "3.2.1"   % "test",
+  "org.slf4j"           % "slf4j-simple"              % "1.7.12"  % "test",
+  "org.scalatest"       %% "scalatest"                % "2.1.7"   % "test",
+  "junit"               % "junit"                     % "4.11"    % "test",
+  "org.mockito"         % "mockito-all"               % "1.9.5"   % "test",
+  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.50.2"  % "test",
+  "com.typesafe.akka"   %% "akka-testkit"             % AkkaV     % "test",
+  "com.typesafe.akka"   %% "akka-persistence-tck"     % AkkaV     % "test",
+  "com.typesafe.akka"   %% "akka-cluster-sharding"    % AkkaV     % "test"
 )
 
 val commonSettings = Seq(
@@ -78,8 +78,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.11.6" % "provided")
-        .exclude("com.typesafe.akka","akka-actor_2.10")
+      ("org.reactivemongo" %% "reactivemongo" % "0.11.9" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
     )
   )

@@ -12,12 +12,17 @@ import duration._
 
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
+  val mongoDriver = MongoDriver()
   lazy val connection = {
-    val conn = new MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
-    Await.result(conn.waitForPrimary(3.seconds),4.seconds)
-    conn
+    mongoDriver.connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
   }
   lazy val specDb = connection(embedDB)
+
+  override def doAfter() = {
+    connection.close()
+    mongoDriver.close()
+    super.doAfter()
+  }
 
   class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
     override def db = specDb
