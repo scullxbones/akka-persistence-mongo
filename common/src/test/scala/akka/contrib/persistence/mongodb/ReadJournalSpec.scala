@@ -3,7 +3,8 @@ package akka.contrib.persistence.mongodb
 import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
-import akka.stream.ActorMaterializer
+import akka.stream.{ClosedShape, ActorMaterializer}
+import akka.stream.scaladsl.{RunnableGraph, Sink, Merge, GraphDSL}
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -11,23 +12,17 @@ import org.scalatest.concurrent.Eventually
 
 import scala.concurrent.{Await, Future, Promise}
 
-abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A]) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll with Eventually {
+abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with Eventually {
 
   import ConfigLoanFixture._
 
-  override def embedDB = "read-journal-test"
+  override def embedDB = s"read-journal-test-$dbName"
 
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+  override def afterAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |    # Class name of the plugin.
@@ -112,8 +107,15 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val probe = TestProbe()
 
-    val fut = readJournal.allEvents().runForeach(probe.ref ! _)
+    val promise = Promise[Int]()
+    readJournal.allEvents().runFold(0) { case (accum, ee) =>
+      if (accum == 4) promise.trySuccess(accum)
+      probe.ref ! ee
+      accum + 1
+    }
     events slice(3,6) foreach (ar2 ! _)
+
+    Await.result(promise.future, 3.seconds.dilated) shouldBe 4
 
     probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg.event.toString} should contain allOf("this","is","just","a","test","END")
   }
@@ -268,15 +270,34 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val probe = TestProbe()
 
 
-    (1 to nrOfActors) foreach ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong).runForeach(probe.ref ! _))
+    val sources = (1 to nrOfActors) map ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong) )
+
+    val sink = Sink.actorRef(probe.ref, "complete")
+
+    val merged = GraphDSL.create(sink) { implicit b => (s) =>
+      import GraphDSL.Implicits._
+
+      val merge = b.add(Merge[EventEnvelope](sources.size))
+
+      sources.foldLeft(0){ case(idx,src) =>
+        src ~> merge.in(idx)
+        idx + 1
+      }
+
+      merge.out ~> s
+
+      ClosedShape
+    }
+    RunnableGraph.fromGraph(merged).run()
 
     ars foreach { ar =>
       events foreach ( ar ! _)
     }
 
     implicit val ec = as.dispatcher
+
     val done = Future.sequence(promises.toSeq.map(_._1.future))
-    Await.result(done, 15.seconds.dilated)
+    Await.result(done, 45.seconds.dilated)
 
 
     probe.receiveN(nrOfActors * nrOfEvents, 1.seconds.dilated)

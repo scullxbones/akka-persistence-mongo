@@ -14,6 +14,8 @@ import scala.collection.immutable.{Seq => ISeq}
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
 
+  override def embedDB = "persistence-journaller-rxmongo"
+
   implicit val serialization = SerializationExtension(system)
 
   def await[T](block: Future[T])(implicit ec: ExecutionContext) = {

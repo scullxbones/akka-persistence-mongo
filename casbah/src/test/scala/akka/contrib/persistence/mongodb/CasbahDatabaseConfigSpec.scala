@@ -2,7 +2,6 @@ package akka.contrib.persistence.mongodb
 
 import akka.contrib.persistence.mongodb.ConfigLoanFixture._
 import com.typesafe.config.ConfigFactory
-import org.scalatest.BeforeAndAfterAll
 
 /**
   * Short description
@@ -10,18 +9,11 @@ import org.scalatest.BeforeAndAfterAll
   * @since   15-11-28
   * @version 1.0
   */
-class CasbahDatabaseConfigSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+class CasbahDatabaseConfigSpec extends BaseUnitTest with ContainerMongo {
 
   val config = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+        | mongouri = "mongodb://$host:$noAuthPort/$embedDB"
         | database = "User-Specified-Database"
         |}
       """.stripMargin)

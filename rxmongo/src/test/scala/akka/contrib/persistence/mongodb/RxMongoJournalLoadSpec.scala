@@ -1,3 +1,3 @@
 package akka.contrib.persistence.mongodb
 
-class RxMongoJournalLoadSpec extends JournalLoadSpec(classOf[RxMongoPersistenceExtension])
+class RxMongoJournalLoadSpec extends JournalLoadSpec(classOf[RxMongoPersistenceExtension],"rxmongo")

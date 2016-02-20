@@ -12,15 +12,16 @@ import ExecutionContext.Implicits.global
 import ConfigLoanFixture._
 
 @RunWith(classOf[JUnitRunner])
-class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
-  override def beforeAll() = doBefore()
-  override def afterAll() = doAfter()
+  override def afterAll() = cleanup()
+
+  override def embedDB = "rxmongo-shutdown"
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort/"
+        | mongouri = "mongodb://$host:$noAuthPort/$embedDB"
         | db = "shutdown-spec"
         |}
       """.stripMargin)
@@ -59,20 +60,14 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMon
 }
 
 @RunWith(classOf[JUnitRunner])
-class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-
-  override def beforeAll() = doBefore()
-  override def afterAll() = doAfter()
-
-  override def embedDB = "admin"
-  override def auth = new AuthenticatingCommandLinePostProcessor()
+class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   val authMode = if( "3.0" :: "3.2" :: Nil exists envMongoVersion.contains) "?authMode=scram-sha1" else ""
 
   val authConfig = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin$authMode"
+        | mongouri = "mongodb://admin:password@$host:$authPort/admin$authMode"
         |}
       """.stripMargin)
 

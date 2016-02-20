@@ -2,6 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.persistence._
 import play.api.libs.iteratee.{Iteratee, Enumeratee, Enumerator}
+import reactivemongo.api.Failover2
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
@@ -54,7 +55,9 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect{case Success(doc) => doc}
-      val result = journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+      val result = Failover2(driver.connection, driver.failoverStrategy) {() =>
+        journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+      }.future
       if(driver.realtimeEnablePersistence) realtime.bulkInsert(collected, ordered = true, writeConcern)
       result
     } else {
