@@ -123,6 +123,7 @@ trait JournallingFieldNames {
   final val CONFIRMS = "cs"
   final val DELETED = "dl"
   final val SERIALIZED = "pr"
+  final val MAX_SN = "max_sn"
 
   final val PayloadKey = "p"
   final val SenderKey = "s"

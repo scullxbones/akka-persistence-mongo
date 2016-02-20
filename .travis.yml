@@ -1,19 +1,28 @@
-sudo: true
+sudo: required
+services:
+   - docker
 language: scala
 scala:
    - 2.11.7
 env:
   matrix:
-   - MONGODB_VERSION=2.6
-   - MONGODB_VERSION=3.0
+    - MONGODB_VERSION=2.6
+    - MONGODB_VERSION=3.0
+    - MONGODB_VERSION=3.2
   global:
-    _JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=5"
+    - JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=5"
+    - MONGODB_AUTH_PORT=28117
+    - MONGODB_NOAUTH_PORT=27117
+    - CONTAINER_HOST=127.0.0.1
 jdk:
   - oraclejdk8
+before_install:
+  - docker pull scullxbones/mongodb:$MONGODB_VERSION
+  - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth
+  - docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth
+  - docker ps -a
+before_script:
+  - sleep 3
+  - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
   - sbt ++$TRAVIS_SCALA_VERSION test
-  - find $HOME/.sbt -name "*.lock" | xargs rm
-  - find $HOME/.ivy2 -name "ivydata-*.properties" | xargs rm
-directories:
-  - $HOME/.ivy2/cache
-  - $HOME/.sbt/boot/

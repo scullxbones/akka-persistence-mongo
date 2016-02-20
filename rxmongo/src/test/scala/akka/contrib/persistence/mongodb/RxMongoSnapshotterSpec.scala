@@ -15,6 +15,8 @@ import duration._
 @RunWith(classOf[JUnitRunner])
 class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
 
+  override def embedDB = "persistence-snapshotter-rxmongo"
+
   implicit val serialization = SerializationExtension.get(system)
   implicit val serializer = new RxMongoSnapshotSerialization()
 

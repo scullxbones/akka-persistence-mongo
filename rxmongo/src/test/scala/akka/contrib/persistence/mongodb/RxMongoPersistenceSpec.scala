@@ -3,29 +3,28 @@ package akka.contrib.persistence.mongodb
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
 import com.typesafe.config.ConfigFactory
-import reactivemongo.api.MongoDriver
+import org.scalatest.BeforeAndAfterAll
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
-import duration._
+import scala.concurrent.duration._
 
-trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
+trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] with BeforeAndAfterAll { self: TestKit =>
 
-  lazy val connection = {
-    val conn = new MongoDriver().connection(s"$embedConnectionURL:$embedConnectionPort" :: Nil)
-    Await.result(conn.waitForPrimary(3.seconds),4.seconds)
-    conn
+  override def afterAll() = {
+    cleanup()
+    super.afterAll()
   }
-  lazy val specDb = connection(embedDB)
 
   class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
-    override def db = specDb
+    override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
+
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
-    override def collection(name: String) = specDb(name)
   }
 
   val driver = new SpecDriver
+  lazy val specDb = driver.db
 
   def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
     val collection = specDb[BSONCollection](name)

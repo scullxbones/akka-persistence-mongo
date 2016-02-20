@@ -10,19 +10,13 @@ import org.scalatest.BeforeAndAfterAll
 import collection.JavaConverters._
 import scala.util.Try
 
-abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], toDriver: (ActorSystem,Config) => D) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], database: String, toDriver: (ActorSystem,Config) => D) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   import ConfigLoanFixture._
 
-  override def embedDB = "upgrade-test"
+  override def embedDB = s"upgrade-test-$database"
 
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+  override def afterAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -32,7 +26,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoJournal"
     |  overrides {
-    |     mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |     mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |  }
     |}
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
