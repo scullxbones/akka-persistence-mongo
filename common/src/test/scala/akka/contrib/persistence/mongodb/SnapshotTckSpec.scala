@@ -4,13 +4,14 @@ import akka.persistence.snapshot.SnapshotStoreSpec
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 
-object SnapshotTckSpec extends EmbeddedMongo {
+object SnapshotTckSpec extends ContainerMongo {
 
-  def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+  def config(extensionClass: Class[_], database: String) = ConfigFactory.parseString(s"""
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
     |akka.persistence.journal.leveldb.native = off
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort"
+    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort"
+    |akka.contrib.persistence.mongodb.mongo.database = $database
     |akka-contrib-mongodb-persistence-snapshot {
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
@@ -18,16 +19,12 @@ object SnapshotTckSpec extends EmbeddedMongo {
     """.stripMargin)
 }
 
-abstract class SnapshotTckSpec(extensionClass: Class[_])
-  extends SnapshotStoreSpec(SnapshotTckSpec.config(extensionClass)) with BeforeAndAfterAll {
+abstract class SnapshotTckSpec(extensionClass: Class[_], dbName: String)
+  extends SnapshotStoreSpec(SnapshotTckSpec.config(extensionClass,dbName)) with BeforeAndAfterAll {
 
-  override def beforeAll(): Unit = {
-    SnapshotTckSpec.doBefore()
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
+  override def afterAll() = {
+    SnapshotTckSpec.cleanup(dbName)
     super.afterAll()
-    SnapshotTckSpec.doAfter()
   }
+
 }

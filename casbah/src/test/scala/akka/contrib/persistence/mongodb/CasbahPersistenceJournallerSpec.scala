@@ -20,6 +20,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   import CasbahSerializers.Serializer._
   import JournallingFieldNames._
 
+  override def embedDB = "persistence-journaller-casbah"
+
   implicit val serialization = SerializationExtension(system)
 
   implicit class PimpedDBObject(dbo: DBObject) {

@@ -14,6 +14,8 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
   import akka.contrib.persistence.mongodb.CasbahPersistenceSnapshotter._
   import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 
+  override def embedDB = "persistence-snapshotter-casbah"
+
   implicit val serialization = SerializationExtension(system)
 
   trait Fixture {

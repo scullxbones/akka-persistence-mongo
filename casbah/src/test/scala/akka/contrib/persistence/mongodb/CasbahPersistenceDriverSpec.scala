@@ -11,19 +11,11 @@ import scala.concurrent.duration._
 import ConfigLoanFixture._
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo {
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort/shutdown-spec"
+        | mongouri = "mongodb://$host:$noAuthPort/shutdown-spec"
         | db = "shutdown-spec"
         |}
       """.stripMargin)

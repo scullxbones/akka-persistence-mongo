@@ -11,23 +11,17 @@ import org.scalatest.concurrent.Eventually
 
 import scala.concurrent.{Await, Future, Promise}
 
-abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A]) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll with Eventually {
+abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with Eventually {
 
   import ConfigLoanFixture._
 
-  override def embedDB = "read-journal-test"
+  override def embedDB = s"read-journal-test-$dbName"
 
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+  override def afterAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |    # Class name of the plugin.
@@ -112,8 +106,15 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val probe = TestProbe()
 
-    val fut = readJournal.allEvents().runForeach(probe.ref ! _)
+    val promise = Promise[Int]()
+    readJournal.allEvents().runFold(0) { case (accum, ee) =>
+      if (accum == 4) promise.trySuccess(accum)
+      probe.ref ! ee
+      accum + 1
+    }
     events slice(3,6) foreach (ar2 ! _)
+
+    Await.result(promise.future, 3.seconds.dilated) shouldBe 4
 
     probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg.event.toString} should contain allOf("this","is","just","a","test","END")
   }
