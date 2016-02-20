@@ -20,5 +20,7 @@ before_install:
   - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth
   - docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth
   - docker ps -a
+before_script:
+  - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
   - sbt ++$TRAVIS_SCALA_VERSION test
