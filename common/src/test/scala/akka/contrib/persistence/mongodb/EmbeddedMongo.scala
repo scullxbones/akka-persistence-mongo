@@ -113,3 +113,9 @@ trait EmbeddedMongo {
     if (mongodExe.isProcessRunning) mongodExe.stop()
   }
 }
+
+trait ContainerMongo {
+  def host = sys.env.getOrElse("DOCKER_HOST","localhost")
+  def authPort = 28117
+  def noAuthPort = 27117
+}

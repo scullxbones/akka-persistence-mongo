@@ -54,14 +54,12 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 }
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverAuthSpec extends BaseUnitTest {
+class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo {
 
   val authConfig = ConfigFactory.parseString(
-    """
-    |port = 27117
-    |port = ${?MONGODB_AUTH_PORT}
+    s"""
     |akka.contrib.persistence.mongodb.mongo {
-    | mongouri = "mongodb://admin:password@localhost:$port/admin"
+    | mongouri = "mongodb://admin:password@$host:$authPort/admin"
     |}
      """.stripMargin)
 

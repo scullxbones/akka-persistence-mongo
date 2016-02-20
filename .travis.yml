@@ -13,6 +13,7 @@ env:
     - JAVA_OPTIONS="-Xmx2G -Dakka.test.timefactor=5"
     - MONGODB_AUTH_PORT=28117
     - MONGODB_NOAUTH_PORT=27117
+    - DOCKER_HOST=127.0.0.1
 jdk:
   - oraclejdk8
 before_install:
@@ -21,6 +22,7 @@ before_install:
   - docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth
   - docker ps -a
 before_script:
+  - sleep 3
   - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
   - sbt ++$TRAVIS_SCALA_VERSION test
