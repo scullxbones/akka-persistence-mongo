@@ -269,15 +269,19 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val probe = TestProbe()
 
 
-    (1 to nrOfActors) foreach ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong).runForeach(probe.ref ! _))
+    val streams = (1 to nrOfActors) map ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong).runFold(()){ case (_,ee) => probe.ref ! ee })
 
     ars foreach { ar =>
       events foreach ( ar ! _)
     }
 
     implicit val ec = as.dispatcher
-    val done = Future.sequence(promises.toSeq.map(_._1.future))
-    Await.result(done, 15.seconds.dilated)
+
+    val done = for {
+      stream <- Future.sequence(streams)
+      promise <- Future.sequence(promises.toSeq.map(_._1.future))
+    } yield promise
+    Await.result(done, 45.seconds.dilated)
 
 
     probe.receiveN(nrOfActors * nrOfEvents, 1.seconds.dilated)
