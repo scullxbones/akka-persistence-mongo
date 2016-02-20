@@ -56,7 +56,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   implicit val waitFor = 4.seconds
 
-  private[this] lazy val unauthenticatedConnection = wait {
+  private[this] lazy val unauthenticatedConnection: MongoConnection = wait {
     // create unauthenticated connection, there is no direct way to wait for authentication this way
     // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
     driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
@@ -64,7 +64,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
           .map(_.connection)(system.dispatcher)
   }
 
-  private[mongodb] lazy val connection =
+  private[mongodb] lazy val connection: MongoConnection =
     // now authenticate explicitly and wait for confirmation
     parsedMongoUri.authenticate.fold(unauthenticatedConnection) { auth =>
       waitForAuthentication(unauthenticatedConnection, auth)
@@ -175,7 +175,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       delayFactor = rxMSettings.GrowthFunction
     )
   }
-  private[mongodb] def db = connection(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
+  private[mongodb] def db: DefaultDB = connection(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db[BSONCollection](name)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety,journalWTimeout,journalFsync)
