@@ -7,24 +7,18 @@ import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 
-abstract class Journal1kSpec(extensionClass: Class[_]) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll with ScalaFutures {
+abstract class Journal1kSpec(extensionClass: Class[_], database: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
   import ConfigLoanFixture._
 
-  override def embedDB = "1k-test"
+  override def embedDB = s"1k-test-$database"
 
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+  override def afterAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {

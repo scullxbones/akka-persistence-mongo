@@ -9,7 +9,7 @@ import com.mongodb.casbah.{MongoClient, MongoCollection}
 
 trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver,MongoCollection] { self: TestKit =>
 
-    lazy val mongoDB = MongoClient(embedConnectionURL,embedConnectionPort)(embedDB)
+    lazy val mongoDB = MongoClient(host,noAuthPort)(embedDB)
 
     override val driver = new CasbahMongoDriver(system, ConfigFactory.empty()) {
       override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
