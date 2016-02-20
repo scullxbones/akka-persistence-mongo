@@ -115,7 +115,7 @@ trait EmbeddedMongo {
 }
 
 trait ContainerMongo {
-  def host = sys.env.getOrElse("DOCKER_HOST","localhost")
+  def host = sys.env.getOrElse("CONTAINER_HOST","localhost")
   def authPort = 28117
   def noAuthPort = 27117
 }
