@@ -8,7 +8,6 @@ import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Millis, Seconds, Span}
 
 import scala.concurrent.duration._
 
@@ -72,7 +71,7 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
     }""".stripMargin)
 
   implicit val defaultPatience =
-    PatienceConfig(timeout = Span(5, Seconds), interval = Span(500, Millis))
+    PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
   "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
     implicit val system = as
