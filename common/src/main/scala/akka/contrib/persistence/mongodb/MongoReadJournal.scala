@@ -1,10 +1,11 @@
 package akka.contrib.persistence.mongodb
 
+import akka.NotUsed
 import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
 import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
 import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
-import akka.stream.{Attributes, OverflowStrategy}
+import akka.stream.OverflowStrategy
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.javadsl.{Source => JSource}
 import akka.stream.scaladsl.{Flow, Source}
@@ -33,31 +34,31 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     with AllPersistenceIdsQuery
     with EventsByPersistenceIdQuery{
 
-  def currentAllEvents(): Source[EventEnvelope,Unit] =
+  def currentAllEvents(): Source[EventEnvelope, NotUsed] =
     Source.actorPublisher[Event](impl.currentAllEvents)
-      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
+      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentPersistenceIds(): Source[String, Unit] =
+  override def currentPersistenceIds(): Source[String, NotUsed] =
     Source.actorPublisher[String](impl.currentPersistenceIds)
-      .mapMaterializedValue(_ => ())
+      .mapMaterializedValue(_ => NotUsed)
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
     Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
-      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => ())
+      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => NotUsed)
   }
 
-  def allEvents(): Source[EventEnvelope, Unit] = {
+  def allEvents(): Source[EventEnvelope, NotUsed] = {
 
     val pastSource = Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ())
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
     val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
     val eventEnvelopeConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedEventsByPersistenceId).via(eventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedEventsByPersistenceId).via(eventEnvelopeConverter)
   }
 
-  override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, Unit] = {
+  override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
     val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
       .mapMaterializedValue(_ => ())
@@ -66,27 +67,27 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     val filterByPersistenceId = Flow[Event].filter(_.pid equals persistenceId)
     val removeDuplicatedEvents = Flow[Event].transform(() => new RemoveDuplicatedEvents)
     val eventConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(filterByPersistenceId).via(removeDuplicatedEvents).via(eventConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(filterByPersistenceId).via(removeDuplicatedEvents).via(eventConverter)
   }
 
-  override def allPersistenceIds(): Source[String, Unit] = {
+  override def allPersistenceIds(): Source[String, NotUsed] = {
 
       val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
       val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
         .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor))
       val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
 
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => ()).via(removeDuplicatedpersistenceIds)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedpersistenceIds)
   }
 }
 
 class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ{
-  def currentAllEvents(): JSource[EventEnvelope, Unit] = rj.currentAllEvents().asJava
-  def allEvents(): JSource[EventEnvelope, Unit] = rj.allEvents().asJava
+  def currentAllEvents(): JSource[EventEnvelope, NotUsed] = rj.currentAllEvents().asJava
+  def allEvents(): JSource[EventEnvelope, NotUsed] = rj.allEvents().asJava
 
-  override def currentPersistenceIds(): JSource[String, Unit] = rj.currentPersistenceIds().asJava
+  override def currentPersistenceIds(): JSource[String, NotUsed] = rj.currentPersistenceIds().asJava
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): JSource[EventEnvelope, Unit] = {
+  override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): JSource[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
     rj.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
@@ -95,7 +96,7 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
     rj.eventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
 
-  override def allPersistenceIds(): JSource[String, Unit] = rj.allPersistenceIds().asJava
+  override def allPersistenceIds(): JSource[String, NotUsed] = rj.allPersistenceIds().asJava
 }
 
 

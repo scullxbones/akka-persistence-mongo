@@ -47,7 +47,7 @@ trait CanDeserializeJournal[D] {
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
-private case class IndexSettings(name: String, unique: Boolean, fields: (String, Int)*)
+private case class IndexSettings(name: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)
 
 abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   import MongoPersistenceDriver._
@@ -86,15 +86,15 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def ensureIndex(indexName: String, unique: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C => C
+  private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String,Int)*)(implicit ec: ExecutionContext): C => C
 
   private[mongodb] def closeConnections(): Unit
 
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
-    IndexSettings(journalIndexName, unique = true, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
-    IndexSettings(journalSeqNrIndexName, unique = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
+    IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
+    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
   )
 
   private[mongodb] lazy val journal: C = {
@@ -107,21 +107,28 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
     indexes.foldLeft(journalCollection) { (acc, index) =>
       import index._
-      ensureIndex(name, unique, fields:_*)(concurrent.ExecutionContext.global)(acc)
+      ensureIndex(name, unique, sparse, fields:_*)(concurrent.ExecutionContext.global)(acc)
     }
   }
 
   private[mongodb] lazy val snaps: C = {
     val snapsCollection = collection(snapsCollectionName)
-    ensureIndex(snapsIndexName, unique = true,
+    ensureIndex(snapsIndexName, unique = true, sparse = false,
                 SnapshottingFieldNames.PROCESSOR_ID -> 1,
                 SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-                TIMESTAMP -> -1)(concurrent.ExecutionContext.Implicits.global)(snapsCollection)
+                TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
   }
   private[mongodb] lazy val realtime: C = {
-    cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.Implicits.global)
+    cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.global)
   }
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
+
+  private[mongodb] lazy val metadata: C = {
+    val metadataCollection = collection(metadataCollectionName)
+    ensureIndex("akka_persistence_metadata_pid",
+                unique = true, sparse = true,
+                JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)
+  }
 
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
@@ -138,6 +145,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def realtimeEnablePersistence = settings.realtimeEnablePersistence
   def realtimeCollectionName = settings.realtimeCollectionName
   def realtimeCollectionSize = settings.realtimeCollectionSize
+  def metadataCollectionName = settings.MetadataCollection
   def mongoUri = settings.MongoUri
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 

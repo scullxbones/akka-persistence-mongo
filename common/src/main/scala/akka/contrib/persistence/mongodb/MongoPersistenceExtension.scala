@@ -98,11 +98,11 @@ class MongoSettings(val config: Config) {
   val realtimeCollectionName = config.getString("realtime-collection")
   val realtimeCollectionSize = config.getLong("realtime-collection-size")
 
+  val MetadataCollection = config.getString("metadata-collection")
+
   val Tries = config.getInt("breaker.maxTries")
   val CallTimeout = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
   val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
-
-  val ReadJournalPerFillLimit = config.getInt("journal-read-fill-limit")
 
   val UseLegacyJournalSerialization = config.getBoolean("use-legacy-serialization")
 }
