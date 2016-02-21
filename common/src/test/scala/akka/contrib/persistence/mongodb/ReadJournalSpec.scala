@@ -3,7 +3,8 @@ package akka.contrib.persistence.mongodb
 import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
-import akka.stream.ActorMaterializer
+import akka.stream.{ClosedShape, ActorMaterializer}
+import akka.stream.scaladsl.{RunnableGraph, Sink, Merge, GraphDSL}
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -269,7 +270,25 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     val probe = TestProbe()
 
 
-    val streams = (1 to nrOfActors) map ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong).runFold(()){ case (_,ee) => probe.ref ! ee })
+    val sources = (1 to nrOfActors) map ( nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue).take(events.size.toLong) )
+
+    val sink = Sink.actorRef(probe.ref, "complete")
+
+    val merged = GraphDSL.create(sink) { implicit b => (s) =>
+      import GraphDSL.Implicits._
+
+      val merge = b.add(Merge[EventEnvelope](sources.size))
+
+      sources.foldLeft(0){ case(idx,src) =>
+        src ~> merge.in(idx)
+        idx + 1
+      }
+
+      merge.out ~> s
+
+      ClosedShape
+    }
+    RunnableGraph.fromGraph(merged).run()
 
     ars foreach { ar =>
       events foreach ( ar ! _)
@@ -277,10 +296,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     implicit val ec = as.dispatcher
 
-    val done = for {
-      stream <- Future.sequence(streams)
-      promise <- Future.sequence(promises.toSeq.map(_._1.future))
-    } yield promise
+    val done = Future.sequence(promises.toSeq.map(_._1.future))
     Await.result(done, 45.seconds.dilated)
 
 
