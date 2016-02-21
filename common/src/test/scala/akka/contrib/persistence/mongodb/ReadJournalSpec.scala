@@ -144,7 +144,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     import collection.JavaConverters._
     val pids = mongoClient.getDB(embedDB).getCollection("akka_persistence_journal").distinct("pid").asScala.toList.map(_.toString)
 
-    println(s"Found pids - ${pids.mkString(",")}")
     Await.result(fut,10.seconds.dilated) should contain allOf("1","2","3","4","5")
   }
 

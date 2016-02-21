@@ -14,15 +14,19 @@ val commonDeps = Seq(
     .exclude("com.typesafe.akka", "akka-actor_2.11"),
   "com.typesafe.akka"   %% "akka-persistence-query-experimental" % AkkaV % "provided",
 
-  "org.mongodb"         % "mongo-java-driver"         % "3.2.1"   % "test",
-  "org.slf4j"           % "slf4j-simple"              % "1.7.12"  % "test",
-  "org.scalatest"       %% "scalatest"                % "2.1.7"   % "test",
-  "junit"               % "junit"                     % "4.11"    % "test",
-  "org.mockito"         % "mockito-all"               % "1.9.5"   % "test",
-  "de.flapdoodle.embed" % "de.flapdoodle.embed.mongo" % "1.50.2"  % "test",
-  "com.typesafe.akka"   %% "akka-testkit"             % AkkaV     % "test",
-  "com.typesafe.akka"   %% "akka-persistence-tck"     % AkkaV     % "test",
-  "com.typesafe.akka"   %% "akka-cluster-sharding"    % AkkaV     % "test"
+  "org.mongodb"               % "mongo-java-driver"         % "3.2.1"   % "test",
+  "org.slf4j"                 % "slf4j-api"                 % "1.7.12"  % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.5"     % "test",
+  "org.scalatest"             %% "scalatest"                % "2.1.7"   % "test",
+  "junit"                     % "junit"                     % "4.11"    % "test",
+  "org.mockito"               % "mockito-all"               % "1.9.5"   % "test",
+  "de.flapdoodle.embed"       % "de.flapdoodle.embed.mongo" % "1.50.2"  % "test",
+  "com.typesafe.akka"         %% "akka-slf4j"               % AkkaV     % "test",
+  "com.typesafe.akka"         %% "akka-testkit"             % AkkaV     % "test",
+  "com.typesafe.akka"         %% "akka-persistence-tck"     % AkkaV     % "test",
+  "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test"
 )
 
 val commonSettings = Seq(
@@ -58,7 +62,8 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  parallelExecution in Test := false
+  parallelExecution in Test := false,
+  testOptions in Test += Tests.Argument("-oDS")
 )
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))

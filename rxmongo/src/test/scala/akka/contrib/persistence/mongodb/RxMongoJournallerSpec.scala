@@ -41,9 +41,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     val (range, head) = await(inserted)
     range should have size 1
 
-    underTest.journalRange("unit-test",1,3) onComplete {
-      case Failure(t) => t.printStackTrace()
-      case Success(unwrap) => unwrap.foreach(println)
+    underTest.journalRange("unit-test",1,3) onFailure {
+      case t => t.printStackTrace()
     }
 
     val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {

@@ -163,7 +163,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String) exten
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
 
-    val total = Try(Await.result(result.future, 60.seconds))
+    val total = Try(Await.result(result.future, 60.seconds)).getOrElse(0L)
 
     val time = System.currentTimeMillis - start
 
@@ -174,16 +174,16 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String) exten
          |Extension:       ${extensionClass.getSimpleName}
          |
          |Total Actors:    ${actors.size}
-         |Total Events:    ${total.getOrElse(0L)}
+         |Total Events:    $total
          |Total Time (ms): $time
          |                 --------
          |
-         |Recovery time (s): ${math.floor(time / 1000.0)}
+         |Recovery rate (ev/s): ${if (time > 0) math.floor(total.toDouble / (time.toDouble / 1000.0)) else 0.0}
          |
          |==== ----------------------- ===
        """.stripMargin)
 
     println(s"$total events: ${time/1000.0}s to recover")
-    total shouldBe Success(commandsPerBatch * batches * maxActors)
+    total shouldBe commandsPerBatch * batches * maxActors
   }
 }
