@@ -3,13 +3,12 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
-import akka.testkit.TestKit
+import akka.testkit._
 import reactivemongo.bson._
 
+import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Success, Failure}
-import scala.collection.immutable.{Seq => ISeq}
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -17,9 +16,10 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
   override def embedDB = "persistence-journaller-rxmongo"
 
   implicit val serialization = SerializationExtension(system)
+  implicit val as = system
 
   def await[T](block: Future[T])(implicit ec: ExecutionContext) = {
-    Await.result(block,3.seconds)
+    Await.result(block,3.seconds.dilated)
   }
 
   trait Fixture {
