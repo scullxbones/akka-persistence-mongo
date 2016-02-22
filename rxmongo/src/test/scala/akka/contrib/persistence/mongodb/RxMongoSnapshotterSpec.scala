@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.RxMongoSerializers.RxMongoSnapshotSerialization
 import akka.persistence.{SnapshotMetadata, SelectedSnapshot}
 import akka.serialization.SerializationExtension
-import akka.testkit.TestKit
+import akka.testkit._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import reactivemongo.bson.BSONDocument
@@ -19,6 +19,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
   implicit val serialization = SerializationExtension.get(system)
   implicit val serializer = new RxMongoSnapshotSerialization()
+  implicit val as = system
 
   "A rxmongo snapshotter" should "support legacy snapshots" in { withSnapshot { ss =>
 
@@ -26,7 +27,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
     val snapshots = metadata.map(SelectedSnapshot(_,"snapshot"))
     val legacyDocs = snapshots.map(serializer.legacyWrite)
 
-    Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true),3.seconds).n should be (metadata.size)
+    Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true),3.seconds.dilated).n should be (metadata.size)
 
     val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
     val result = Await.result(extracted,3.seconds)
@@ -45,7 +46,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
     Await.result(ss.bulkInsert((legacyDocs ++ newDocs).toStream, ordered = true),3.seconds).n should be (metadata.size)
 
     val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
-    val result = Await.result(extracted,3.seconds)
+    val result = Await.result(extracted,3.seconds.dilated)
     result.size should be (10)
     result.foreach { sn =>
       sn.metadata.persistenceId should be ("p-1")
