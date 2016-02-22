@@ -7,27 +7,21 @@ import akka.persistence.PersistentActor
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 
-import scala.concurrent.{Promise, Await}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Promise}
 import scala.util.{Success, Try}
 
-abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
+abstract class JournalLoadSpec(extensionClass: Class[_], database: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   import ConfigLoanFixture._
 
-  override def embedDB = "load-test"
+  override def embedDB = s"load-test-$database"
 
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+  override def afterAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
     |akka.contrib.persistence.mongodb.mongo.breaker.maxTries = 0
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
@@ -169,7 +163,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
 
-    val total = Try(Await.result(result.future, 60.seconds))
+    val total = Try(Await.result(result.future, 60.seconds)).getOrElse(0L)
 
     val time = System.currentTimeMillis - start
 
@@ -180,16 +174,16 @@ abstract class JournalLoadSpec(extensionClass: Class[_]) extends BaseUnitTest wi
          |Extension:       ${extensionClass.getSimpleName}
          |
          |Total Actors:    ${actors.size}
-         |Total Events:    ${total.getOrElse(0L)}
+         |Total Events:    $total
          |Total Time (ms): $time
          |                 --------
          |
-         |Recovery time (s): ${math.floor(time / 1000.0)}
+         |Recovery rate (ev/s): ${if (time > 0) math.floor(total.toDouble / (time.toDouble / 1000.0)) else 0.0}
          |
          |==== ----------------------- ===
        """.stripMargin)
 
     println(s"$total events: ${time/1000.0}s to recover")
-    total shouldBe Success(commandsPerBatch * batches * maxActors)
+    total shouldBe commandsPerBatch * batches * maxActors
   }
 }

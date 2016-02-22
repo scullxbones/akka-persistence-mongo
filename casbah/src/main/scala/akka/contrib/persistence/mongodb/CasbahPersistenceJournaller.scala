@@ -24,7 +24,10 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     (PROCESSOR_ID $eq pid) ++ (EVENTS $size 0)
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
+
   private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
+
+  private[this] def metadata(implicit ec: ExecutionContext) = driver.metadata
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Iterator[Event] =
     journal.find(journalRangeQuery(pid, from, to))
@@ -57,6 +60,23 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     }
   }
 
+  private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Option[Long] = {
+    val $match = MongoDBObject("$match" -> MongoDBObject(PROCESSOR_ID -> persistenceId, TO -> MongoDBObject("$lte" -> maxSequenceNr)))
+    val $group = MongoDBObject("$group" -> MongoDBObject("_id" -> s"$$$PROCESSOR_ID", "max" -> MongoDBObject("$max" -> s"$$$TO")))
+
+    journal.aggregate($match :: $group :: Nil).results.flatMap(_.getAs[Long]("max")).headOption
+  }
+
+  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
+    metadata.update(
+      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
+      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
+      upsert = true,
+      multi = false,
+      concern = driver.metadataWriteConcern
+    )
+  }
+
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
     val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
     val update:DBObject = MongoDBObject(
@@ -67,7 +87,9 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
         )),
       "$set" -> MongoDBObject(FROM -> (toSequenceNr+1))
     )
+    val maxSn = findMaxSequence(persistenceId, toSequenceNr)
     journal.update(query, update, upsert = false, multi = true, writeConcern)
+    maxSn.foreach(setMaxSequenceMetadata(persistenceId,_))
     journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
     ()
   }
@@ -76,8 +98,11 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     val query = PROCESSOR_ID $eq pid
     val projection = MongoDBObject(TO -> 1)
     val sort = MongoDBObject(TO -> -1)
-    val max = journal.find(query, projection).sort(sort).limit(1).one()
-    max.getAs[Long](TO).getOrElse(0L)
+    val max = journal.find(query, projection).sort(sort).limit(1).toStream.headOption
+    val maxDelete = metadata.findOne(query)
+    max.flatMap(_.getAs[Long](TO))
+       .orElse(maxDelete.flatMap(_.getAs[Long](MAX_SN)))
+       .getOrElse(0L)
   }
 
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) = Future {

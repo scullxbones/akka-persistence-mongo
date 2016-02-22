@@ -3,21 +3,23 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
-import akka.testkit.TestKit
+import akka.testkit._
 import reactivemongo.bson._
 
+import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Success, Failure}
-import scala.collection.immutable.{Seq => ISeq}
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
 
+  override def embedDB = "persistence-journaller-rxmongo"
+
   implicit val serialization = SerializationExtension(system)
+  implicit val as = system
 
   def await[T](block: Future[T])(implicit ec: ExecutionContext) = {
-    Await.result(block,3.seconds)
+    Await.result(block,3.seconds.dilated)
   }
 
   trait Fixture {
@@ -39,9 +41,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     val (range, head) = await(inserted)
     range should have size 1
 
-    underTest.journalRange("unit-test",1,3) onComplete {
-      case Failure(t) => t.printStackTrace()
-      case Success(unwrap) => unwrap.foreach(println)
+    underTest.journalRange("unit-test",1,3) onFailure {
+      case t => t.printStackTrace()
     }
 
     val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {

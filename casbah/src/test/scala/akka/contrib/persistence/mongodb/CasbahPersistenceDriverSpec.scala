@@ -11,19 +11,11 @@ import scala.concurrent.duration._
 import ConfigLoanFixture._
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
+class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo {
 
   val shutdownConfig = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort/shutdown-spec"
+        | mongouri = "mongodb://$host:$noAuthPort/shutdown-spec"
         | db = "shutdown-spec"
         |}
       """.stripMargin)
@@ -54,25 +46,14 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with EmbeddedMong
 }
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
-
-  override def afterAll(): Unit = {
-    doAfter()
-  }
-
-  override def embedDB = "admin"
-  override def auth = new AuthenticatingCommandLinePostProcessor()
+class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo {
 
   val authConfig = ConfigFactory.parseString(
     s"""
-        |akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://admin:password@localhost:$embedConnectionPort/admin"
-        |}
-      """.stripMargin)
+    |akka.contrib.persistence.mongodb.mongo {
+    | mongouri = "mongodb://admin:password@$host:$authPort/admin"
+    |}
+     """.stripMargin)
 
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig, "akka-contrib-mongodb-persistence-journal") { case (actorSystem,config) =>
     val underTest = new CasbahMongoDriver(actorSystem, config)

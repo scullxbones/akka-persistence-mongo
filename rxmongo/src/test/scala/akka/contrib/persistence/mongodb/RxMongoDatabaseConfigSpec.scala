@@ -13,18 +13,15 @@ import org.scalatest.junit.JUnitRunner
   * @version 1.0
   */
 @RunWith(classOf[JUnitRunner])
-class RxMongoDatabaseConfigSpec extends BaseUnitTest with EmbeddedMongo with BeforeAndAfterAll {
-  override def beforeAll(): Unit = {
-    doBefore()
-  }
+class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
-    doAfter()
+    cleanup()
   }
 
   val config = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
-        | mongouri = "mongodb://localhost:$embedConnectionPort/$embedDB"
+        | mongouri = "mongodb://$host:$noAuthPort/$embedDB"
         | database = "User-Specified-Database"
         |}
       """.stripMargin)
