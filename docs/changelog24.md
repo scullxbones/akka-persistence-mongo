@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.2.0
+* Now tested compatible with Mongo `3.2`,`3.0`,`2.6`
+* Issue [#96](https://github.com/scullxbones/akka-persistence-mongo/issues/91) updates ReactiveMongo to recent `0.11` version
+* Issue [#92](https://github.com/scullxbones/akka-persistence-mongo/issues/92) update to support Akka 2.4.2 (really support new non-experimental streams API)
+* Merges in [#99](https://github.com/scullxbones/akka-persistence-mongo/pull/99) thanks @marekzebrowski!
+
 ### 1.1.11
 * Issue [#91](https://github.com/scullxbones/akka-persistence-mongo/issues/91) was reopened - this release fixes and closes that issue
 

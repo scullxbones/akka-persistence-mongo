@@ -4,9 +4,11 @@
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver
    * rxmongo provides an implementation against the ReactiveMongo driver
- * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
+ * The tests expect two mongods running, with and without authentication.  A utility script will boot these as docker containers.
+   * A `CONTAINER_HOST` environment variable must be set with the docker host endpoint.
+   * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
  * Supports Akka 2.4 series
- * Supports MongoDB major versions 2.6 and 3.0
+ * Supports MongoDB major versions 2.6, 3.0, 3.2
  * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up 
 
 ### Change log is [here](changelog24.md)
@@ -19,12 +21,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.1.11"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.2.0"
 ```
 (Reactive Mongo)
-##### Please note: Supported versions of reactive mongo require the `0.11` series, with a maximum version number of `0.11.7` due to backward incompatibility issues with higher versions
+##### Please note: Supported versions of reactive mongo require the `0.11` series, with a minimum version number of `0.11.8` due to backward incompatibility issues with higher versions
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.1.11"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.2.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -123,9 +125,8 @@ Similarly there is a JavaDsl version.
 * The `CircuitBreaker` implementation operates a little differently:
   * Writes operate as before
   * Reads (think replays) do not contribute to timeouts or errors, but if the `CircuitBreaker` is in `Open` state, replays will fail fast.
-* Travis now verifies builds and tests run against both Mongo 2.6 and 3.0
+* Travis now verifies builds and tests run against all supported Mongo versions
 * Several metrics were no longer relevant due to journal changes in 2.4
-* 
 
 <a name="config"/>
 #### Configuration

@@ -2,7 +2,7 @@
 
 [![Join the chat at https://gitter.im/scullxbones/akka-persistence-mongo](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/scullxbones/akka-persistence-mongo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-* Supports MongoDB 2.6, 3.0
+* Supports MongoDB 2.6, 3.0, 3.2
 
 ### Using Akka 2.4? Use 1.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
@@ -13,7 +13,7 @@
 * Backward incompatible to 0.x series - details in docs
 * Compiled for 2.11 - Java 8 targeted
 * Active development
-* Latest release - `1.1.11`
+* Latest release - `1.2.0` ~ compatible with Akka 2.4 (2.4.2+ for read journals)
 
 ### Using Akka 2.3? Use 0.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka23)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
