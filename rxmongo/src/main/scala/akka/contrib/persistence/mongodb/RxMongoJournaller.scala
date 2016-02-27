@@ -10,6 +10,7 @@ import DefaultBSONHandlers._
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
+import scala.util.control.NoStackTrace
 import scala.util.{Failure, Try, Success}
 
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
@@ -48,7 +49,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
     if (wr.ok) Success(())
-    else throw wr
+    else throw new Exception(wr.errmsg.getOrElse(s"${wr.message} - [${wr.code.fold("N/A")(_.toString)}]")) with NoStackTrace
   }
 
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {

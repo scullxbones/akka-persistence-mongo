@@ -22,7 +22,7 @@ object JournalTckSpec extends ContainerMongo {
 abstract class JournalTckSpec(extensionClass: Class[_], dbName: String)
   extends JournalSpec(JournalTckSpec.config(extensionClass, dbName)) with BeforeAndAfterAll {
 
-  override def supportsRejectingNonSerializableObjects = CapabilityFlag.off()
+  override def supportsRejectingNonSerializableObjects = CapabilityFlag.on()
 
   override def afterAll() = {
     JournalTckSpec.cleanup(dbName)

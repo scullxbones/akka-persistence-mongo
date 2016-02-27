@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.2.1
+* Update to be compatible with ReactiveMongo from 0.11.8 - 0.11.10
+* Enable serializable checking in TCK
+
 ### 1.2.0
 * Now tested compatible with Mongo `3.2`,`3.0`,`2.6`
 * Issue [#96](https://github.com/scullxbones/akka-persistence-mongo/issues/91) updates ReactiveMongo to recent `0.11` version
