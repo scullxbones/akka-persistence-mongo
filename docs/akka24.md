@@ -350,7 +350,41 @@ akka-contrib-mongodb-persistence-journal-other {
   overrides = {
     mongouri = "mongodb://host1:27017/special"
   }
+  # use this parametes to config akka persistence
+  circuit-breaker {
+    max-failures = 10
+    call-timeout = 10s
+    reset-timeout = 30s
+  }
+  replay-filter {
+    mode = repair-by-discard-old
+    window-size = 100
+    max-old-writers = 10
+    debug = on
+  }
 }
+
+akka-contrib-mongodb-persistence-journal-other-snapshot {
+  # Select this plugin as journal snapshot implementation
+  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
+  # Overrides to supply overridden parameters (can be anything) - config root is `akka.contrib.persistence.mongodb.mongo`
+  overrides = {
+    mongouri = "mongodb://host1:27017/special"
+  }  
+  # use this parametes to config akka persistence
+  circuit-breaker {
+    max-failures = 10
+    call-timeout = 10s
+    reset-timeout = 30s
+  }
+  replay-filter {
+    mode = repair-by-discard-old
+    window-size = 100
+    max-old-writers = 10
+    debug = on
+  }
+}
+
 ```
 
 Given the above configuration, all `PersistentActor`s will default to the "defaultHost db1" pair.  
