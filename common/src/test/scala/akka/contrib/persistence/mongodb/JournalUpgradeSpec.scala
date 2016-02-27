@@ -65,6 +65,10 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     new BasicDBObjectBuilder().add(PROCESSOR_ID,pid).get()
   }
 
+  def sortByTo: DBObject = {
+    new BasicDBObjectBuilder().add(TO,1).get()
+  }
+
   def createLegacyIndex(coll: DBCollection): Unit = {
     val idxSpec =
       new BasicDBObjectBuilder()
@@ -87,7 +91,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
 
     as.journal // executes upgrade
 
-    val records = coll.find(queryByProcessorId("foo")).toArray.asScala.toList
+    val records = coll.find(queryByProcessorId("foo")).sort(sortByTo).toArray.asScala.toList
     records should have size 3
     records.zipWithIndex.foreach { case (dbo,idx) =>
       dbo.get(PROCESSOR_ID) should be ("foo")
