@@ -193,7 +193,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     eventually {
       mongoClient.getDatabase(embedDB).listCollectionNames()
         .into(new java.util.HashSet[String]()).asScala.filter(_.startsWith("persistenceids-")) should have size 0L
-    }(PatienceConfig(timeout = Span(1L, Seconds), interval = Span(5L, Seconds)))
+    }(PatienceConfig(timeout = Span(5L, Seconds), interval = Span(500L, Millis)))
   }
 
   it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>
