@@ -3,10 +3,13 @@ package akka.contrib.persistence.mongodb
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.stream.actor.ActorPublisher
+import akka.{Done => ADone}
 import play.api.libs.iteratee._
-import reactivemongo.api.commands.Command
-import reactivemongo.api.{BSONSerializationPack, QueryOpts}
+import reactivemongo.api.QueryOpts
 import reactivemongo.bson._
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
@@ -24,39 +27,55 @@ trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
   private case class Next(enumerator: Enumerator[T], iteratee: Iteratee[T,Unit])
 
-  private var completed: Boolean = false
-
   private def respondToDemand(enumerator: Enumerator[T], iter: Iteratee[T,Unit]) = {
-    enumerator(iter).map(Next(enumerator,_)).pipeTo(self)
+    Concurrent.runPartial(enumerator, iter).map{ case(_,e) => Next(e,iter)}.pipeTo(self)
   }
 
-  val nextElem: Iteratee[T,Unit] = {
-    Cont {
-      case Input.EOF =>
-        onComplete()
-        completed = true
-        Done(())
-      case Input.Empty =>
-        nextElem
-      case Input.El(elem) =>
-        onNext(elem)
-        nextElem
+  private class DoneIteratee extends Iteratee[T, Unit] {
+    override def fold[B](folder: (Step[T,Unit]) => Future[B])(implicit ec: ExecutionContext): Future[B] = {
+      folder(Step.Done((),Input.Empty))
     }
   }
 
+  private class CursorIteratee extends Iteratee[T, Unit] {
+    override def fold[B](folder: (Step[T, Unit]) => Future[B])(implicit ec: ExecutionContext): Future[B] = {
+      folder(Step.Cont({
+        case Input.El(elem) =>
+          onNext(elem)
+          if (totalDemand > 0L) this
+          else new DoneIteratee
+        case Input.EOF =>
+          onComplete()
+          cleanup().pipeTo(self)
+          new DoneIteratee
+        case Input.Empty =>
+          if (totalDemand > 0L) this
+          else new DoneIteratee
+      }))
+    }
+  }
+
+  def cleanup(): Future[ADone] = Future.successful(ADone)
+
   def defaults: Receive = {
     case _:Cancel|SubscriptionTimeoutExceeded =>
-      log.debug(s"Cancelling stream")
+      log.warning(s"Cancelling stream")
       onCompleteThenStop()
+      cleanup().pipeTo(self)
+      ()
     case Status.Failure(t) =>
       log.error(t,"Failure occurred while streaming")
       onErrorThenStop(t)
+      cleanup().pipeTo(self)
+      ()
+    case ADone =>
+      context.stop(self)
   }
 
   def awaiting(enumerator: Enumerator[T]): Receive = defaults orElse handleNext("Awaiting") orElse {
     case Request(_) =>
       log.debug(s"Awaiting: Request received, demand = $totalDemand")
-      respondToDemand(enumerator, nextElem)
+      respondToDemand(enumerator, new CursorIteratee)
       context.become(streaming(enumerator))
   }
 
@@ -65,11 +84,7 @@ trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
   private def handleNext(header: String): Receive = {
     case Next(enm, it) =>
       log.debug("Next received")
-      if (completed) {
-        log.debug(s"$header: completed - now stopping")
-        context.stop(self)
-      }
-      else if (totalDemand > 0) {
+      if (totalDemand > 0) {
         log.debug(s"$header: requesting more, demand = $totalDemand")
         respondToDemand(enm, it)
         context.become(streaming(enm))
@@ -118,22 +133,30 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   import context.dispatcher
   import reactivemongo.bson._
 
-  private def flatten(doc: BSONDocument): Enumerator[String] = {
-    val result = for {
-      arr <- doc.getAs[BSONArray]("values").toStream
-      elem <- arr.values
-      bson <- elem.seeAsOpt[BSONString].toStream
-    } yield bson.value
-    Enumerator.enumerate[String](result)
+  val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+
+  override def cleanup() = {
+    driver.collection(temporaryCollectionName).drop().map(_ => ADone)
   }
 
+  val flattened = Enumeratee.mapConcat[BSONDocument](_.getAs[String]("_id").toSeq)
+
   override def initial = {
-    val q = BSONDocument("distinct" -> driver.journalCollectionName, "key" -> PROCESSOR_ID, "query" -> BSONDocument())
-    val cmd = Command.run(BSONSerializationPack)
-    cmd(driver.db,cmd.rawCommand(q))
-      .cursor[BSONDocument]
-      .enumerate()
-      .flatMap(flatten)
+    import driver.journal.BatchCommands.AggregationFramework.{Group, Out, Project}
+
+    val enumerator = for {
+     _ <- driver.journal.aggregate(Project(BSONDocument(PROCESSOR_ID -> 1)),
+                                    List(
+                                      Group(BSONString(s"$$$PROCESSOR_ID"))(),
+                                      Out(temporaryCollectionName)
+                                    ))
+     results <- Future.successful(driver.collection(temporaryCollectionName)
+                                        .find(BSONDocument())
+                                        .cursor[BSONDocument]()
+                                        .enumerate().through(flattened))
+    } yield results
+
+    Enumerator.flatten(enumerator)
   }
 }
 

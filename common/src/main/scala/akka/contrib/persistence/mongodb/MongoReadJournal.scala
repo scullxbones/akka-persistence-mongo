@@ -195,8 +195,10 @@ trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {
     case Request(_) =>
       val (filled,remaining) = next(cursor, totalDemand)
       filled foreach onNext
-      if (isCompleted(remaining))
+      if (isCompleted(remaining)) {
         onCompleteThenStop()
+        discard(remaining)
+      }
       else
         context.become(streaming(remaining, offset + filled.size))
   }
