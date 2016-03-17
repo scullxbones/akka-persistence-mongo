@@ -14,9 +14,11 @@ object CasbahPersistenceSnapshotter {
   import SnapshottingFieldNames._
 
   implicit def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): DBObject = {
-    val obj = MongoDBObject(PROCESSOR_ID -> snapshot.metadata.persistenceId,
+    val obj = MongoDBObject(
+      PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
-      TIMESTAMP -> snapshot.metadata.timestamp)
+      TIMESTAMP -> snapshot.metadata.timestamp
+    )
     snapshot.snapshot match {
       case o: DBObject =>
         obj.put(V2.SERIALIZED, o)
@@ -80,7 +82,10 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   }
 
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = Future {
-    snaps.insert(snapshot, writeConcern)
+    val query = MongoDBObject(PROCESSOR_ID -> snapshot.metadata.persistenceId,
+                              SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
+                              TIMESTAMP -> snapshot.metadata.timestamp)
+    snaps.update(query, snapshot, upsert = true, multi = false, writeConcern)
     ()
   }
 

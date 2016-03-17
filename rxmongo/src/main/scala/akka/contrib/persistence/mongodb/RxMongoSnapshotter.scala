@@ -27,8 +27,14 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     selected
   }
 
-  private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) =
-    snaps.insert(snapshot, writeConcern).map(_ => ())
+  private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = {
+    val query = BSONDocument(
+      PROCESSOR_ID -> snapshot.metadata.persistenceId,
+      SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
+      TIMESTAMP -> snapshot.metadata.timestamp
+    )
+    snaps.update(query, snapshot, writeConcern, upsert = true, multi = false).map(_ => ())
+  }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
     val criteria =

@@ -3,22 +3,30 @@ package akka.contrib.persistence.mongodb
 import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
-import akka.stream.{ClosedShape, ActorMaterializer}
-import akka.stream.scaladsl.{RunnableGraph, Sink, Merge, GraphDSL}
+import akka.stream.scaladsl.{GraphDSL, Merge, RunnableGraph, Sink}
+import akka.stream.{ActorMaterializer, ClosedShape}
 import akka.testkit._
+import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.ConfigFactory
-import org.scalatest.BeforeAndAfterAll
+import org.bson.Document
 import org.scalatest.concurrent.Eventually
+import org.scalatest.time._
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import scala.concurrent.{Await, Future, Promise}
+import scala.util.Random
 
-abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with Eventually {
+abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   import ConfigLoanFixture._
 
   override def embedDB = s"read-journal-test-$dbName"
 
   override def afterAll() = cleanup()
+
+  before {
+    "akka_persistence_realtime" :: "akka_persistence_journal" :: Nil foreach(mongoClient.getDatabase(embedDB).getCollection(_).drop())
+  }
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -141,10 +149,51 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val fut = readJournal.currentPersistenceIds().runFold(Seq.empty[String])(_ :+ _)
 
-    import collection.JavaConverters._
-    val pids = mongoClient.getDB(embedDB).getCollection("akka_persistence_journal").distinct("pid").asScala.toList.map(_.toString)
-
     Await.result(fut,10.seconds.dilated) should contain allOf("1","2","3","4","5")
+  }
+
+  it should "support the current persistence ids query with more than 16MB of ids" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as, _) =>
+    import concurrent.duration._
+
+    implicit val system = as
+    implicit val ec = as.dispatcher
+    implicit val mat = ActorMaterializer()
+
+    val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+    val PID_SIZE = 900
+    val EVENT_COUNT = 187 * 100
+
+    PID_SIZE * EVENT_COUNT shouldBe > (16 * 1024 * 1024)
+
+    def pidGen = (0 to PID_SIZE).map(_ => alphabet.charAt(Random.nextInt(alphabet.length))).mkString
+
+    import collection.JavaConverters._
+
+    val journalCollection = mongoClient.getDatabase(embedDB).getCollection("akka_persistence_journal")
+    Stream.from(1).takeWhile(_ <= EVENT_COUNT).map{i =>
+      new Document()
+        .append(JournallingFieldNames.PROCESSOR_ID, s"$pidGen-$i")
+          .append(JournallingFieldNames.FROM, 0L)
+          .append(JournallingFieldNames.TO, 0L)
+          .append(JournallingFieldNames.VERSION, 1)
+    }.grouped(1000).foreach{ dbos =>
+      val batch = dbos.toList.map(new InsertOneModel(_)).asJava
+      journalCollection.bulkWrite(batch, new BulkWriteOptions().ordered(false).bypassDocumentValidation(true))
+      ()
+    }
+
+    mongoClient.getDatabase(embedDB).getCollection("akka_persistence_journal").count() shouldBe EVENT_COUNT
+
+    val readJournal =
+      PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+    val fut = readJournal.currentPersistenceIds().runFold(0){ case (inc,_) => inc + 1}
+    Await.result(fut,10.seconds.dilated) shouldBe EVENT_COUNT
+
+    eventually {
+      mongoClient.getDatabase(embedDB).listCollectionNames()
+        .into(new java.util.HashSet[String]()).asScala.filter(_.startsWith("persistenceids-")) should have size 0L
+    }(PatienceConfig(timeout = Span(5L, Seconds), interval = Span(500L, Millis)))
   }
 
   it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") { case (as,_)  =>

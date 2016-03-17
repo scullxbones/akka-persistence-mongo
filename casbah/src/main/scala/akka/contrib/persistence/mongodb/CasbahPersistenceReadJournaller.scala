@@ -5,6 +5,7 @@ import com.mongodb.casbah.Imports._
 import com.mongodb.{Bytes, DBObject}
 
 import scala.concurrent.Future
+import scala.util.Random
 
 object CurrentAllPersistenceIds {
   def props(driver: CasbahMongoDriver): Props = Props(new CurrentAllPersistenceIds(driver))
@@ -13,11 +14,17 @@ object CurrentAllPersistenceIds {
 class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
   import CasbahSerializers._
 
-  override protected def initialCursor: Stream[String] =
-    driver.journal
-          .distinct(PROCESSOR_ID, MongoDBObject())
-          .toStream
-          .collect { case s:String => s }
+  val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+
+  override protected def initialCursor: Stream[String] = {
+    driver.journal.aggregate(
+      MongoDBObject("$project" -> MongoDBObject(PROCESSOR_ID -> 1)) ::
+        MongoDBObject("$group" -> MongoDBObject("_id" -> s"$$$PROCESSOR_ID")) ::
+        MongoDBObject("$out" -> temporaryCollectionName) ::
+        Nil).results
+
+    driver.collection(temporaryCollectionName).find().toStream.flatMap(_.getAs[String]("_id"))
+  }
 
   override protected def next(c: Stream[String], atMost: Long): (Vector[String], Stream[String]) = {
     val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
@@ -28,7 +35,9 @@ class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorP
     c.isEmpty
   }
 
-  override protected def discard(c: Stream[String]): Unit = ()
+  override protected def discard(c: Stream[String]): Unit = {
+    driver.collection(temporaryCollectionName).drop()
+  }
 }
 
 object CurrentAllEvents {
