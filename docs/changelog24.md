@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.2.2
+* Issue [#100](https://github.com/scullxbones/akka-persistence-mongo/issues/100)
+  * Provides support for very large number of `persistenceId`s without hitting mongodb document size limit
+* Issue [#108](https://github.com/scullxbones/akka-persistence-mongo/issues/108):
+  * Uses upsert rather than insert on snapshots to replace latest snapshot when snapshotting faster than 1 per millisecond
+
 ### 1.2.1
 * Update to be compatible with ReactiveMongo from 0.11.8 - 0.11.10
 * Enable serializable checking in TCK
