@@ -7,6 +7,7 @@
  * The tests will automatically download mongodb via flapdoodle's embedded mongo utility, do not be alarmed :)
  * Supports MongoDB major versions 2.6 and 3.0
  * Cross compiled to `2.11` and `2.10` series.
+ * Be aware that there is a maximum `16MB` size limit for snapshots and journal entries
 
 ### Outstanding tasks:
 
