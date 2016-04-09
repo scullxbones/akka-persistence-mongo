@@ -9,7 +9,8 @@
    * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
  * Supports Akka 2.4 series
  * Supports MongoDB major versions 2.6, 3.0, 3.2
- * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up 
+ * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up.
+ * Be aware that there is a `16MB` limit on snapshot and journal size.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
 
 ### Change log is [here](changelog24.md)
 
