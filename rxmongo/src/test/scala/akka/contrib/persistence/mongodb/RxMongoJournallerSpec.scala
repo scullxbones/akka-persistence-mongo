@@ -5,10 +5,10 @@ import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
 import akka.testkit._
 import reactivemongo.bson._
-
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
+import play.api.libs.iteratee.Iteratee
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -40,7 +40,11 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     } yield (range, head)
     val (range, head) = await(inserted)
     range should have size 1
-
+    
+    underTest.journalRange("unit-test",1,3,Int.MaxValue).run(Iteratee.getChunks[Event]) onFailure {
+      case t => t.printStackTrace()
+    }
+    
     val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
       case e: BSONDocument => e
     }).head
