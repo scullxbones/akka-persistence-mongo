@@ -33,18 +33,17 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     FROM -> BSONDocument("$lte" -> to)
   )
 
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext) = {
-    val enum = journal.find(journalRangeQuery(pid, from, to))
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Long)(implicit ec: ExecutionContext) = {
+    journal.find(journalRangeQuery(pid, from, to))
                       .sort(BSONDocument(TO -> 1))
                       .projection(BSONDocument(EVENTS -> 1))
                       .cursor[BSONDocument]()
-                      .enumerate()
+                      .enumerate(maxDocs = max.toIntWithoutWrapping)
                       .flatMap(d => Enumerator(
                         d.as[BSONArray](EVENTS).values.collect {
                           case d:BSONDocument => driver.deserializeJournal(d)
                         }.toSeq : _*))
                       .through(Enumeratee.filter[Event](ev => ev.sn >= from && ev.sn <= to))
-    enum.run(Iteratee.getChunks[Event])
   }
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
@@ -140,8 +139,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
     if (max == 0L) Future.successful(())
     else {
-      val maxInt = max.toIntWithoutWrapping
-      journalRange(pid, from, to).map(_.take(maxInt).map(_.toRepr).foreach(replayCallback))
+      journalRange(pid, from, to, max).map(_.toRepr).run(Iteratee.foreach { replayCallback })
     }
 
 }
