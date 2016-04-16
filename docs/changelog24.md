@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.2.3
+* Issue [#111](https://github.com/scullxbones/akka-persistence-mongo/issues/111)
+  * Fix for rxmongo loading all of a single persistent actor's events into memory - thanks @marcuslinke!
+
 ### 1.2.2
 * Issue [#100](https://github.com/scullxbones/akka-persistence-mongo/issues/100)
   * Provides support for very large number of `persistenceId`s without hitting mongodb document size limit
