@@ -5,11 +5,11 @@ import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
 import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
 import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
-import akka.stream.OverflowStrategy
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.javadsl.{Source => JSource}
 import akka.stream.scaladsl.{Flow, Source}
-import akka.stream.stage.{Context, PushStage, SyncDirective}
+import akka.stream.stage._
+import akka.stream.{javadsl => _, scaladsl => _, _}
 import com.typesafe.config.Config
 
 import scala.collection.mutable
@@ -61,13 +61,16 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
     val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
-      .mapMaterializedValue(_ => ())
+      .mapMaterializedValue(_ => NotUsed)
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
-      .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
-    val filterByPersistenceId = Flow[Event].filter(_.pid equals persistenceId)
-    val removeDuplicatedEvents = Flow[Event].transform(() => new RemoveDuplicatedEvents)
-    val eventConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(filterByPersistenceId).via(removeDuplicatedEvents).via(eventConverter)
+      .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
+    val stages = Flow[Event].filter(_.pid == persistenceId)
+                            .filter(_.sn >= fromSequenceNr)
+                            .via(new StopAtSeq(toSequenceNr))
+                            .transform[Event](() => new RemoveDuplicatedEvents)
+                            .transform[EventEnvelope](() => new EventEnvelopeConverter)
+
+    (pastSource concat realtimeSource).via(stages)
   }
 
   override def allPersistenceIds(): Source[String, NotUsed] = {
@@ -103,6 +106,29 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
 trait JournalStream[Cursor] {
   def cursor(): Cursor
   def publishEvents(): Unit
+}
+
+class StopAtSeq(to: Long) extends GraphStage[FlowShape[Event, Event]] {
+  val in = Inlet[Event]("flowIn")
+  val out = Outlet[Event]("flowOut")
+
+  override def shape: FlowShape[Event, Event] = FlowShape(in, out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
+    setHandler(in, new InHandler {
+      override def onPush(): Unit = {
+        val ev = grab(in)
+        push(out, ev)
+        if (ev.sn == to) completeStage()
+      }
+    })
+
+    setHandler(out, new OutHandler {
+      override def onPull(): Unit = {
+        pull(in)
+      }
+    })
+  }
 }
 
 class RemoveDuplicatedEvents extends PushStage[Event, Event]{
