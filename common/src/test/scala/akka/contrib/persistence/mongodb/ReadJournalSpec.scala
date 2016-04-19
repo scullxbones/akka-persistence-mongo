@@ -268,11 +268,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
     val probe = TestProbe()
 
-    events slice(0, 2) foreach ( ar ! _ )
-    val fut = readJournal.eventsByPersistenceId("foo-live", 0L, Long.MaxValue).take(events.size.toLong).runForeach(probe.ref ! _)
+    readJournal.eventsByPersistenceId("foo-live", 2L, 3L).runForeach(probe.ref ! _)
 
-    ar ! events(2)
-    probe.receiveN(events.size, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should contain allOf("foo","bar","bar2")
+    events foreach ( ar ! _ )
+
+    probe.receiveN(2, 10.seconds.dilated).collect{case msg:EventEnvelope => msg}.toList.map(_.event) should contain allOf("bar","bar2")
   }
 
   it should "support the events by id query with multiple persistent actors" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal"){ case (as, _) =>
