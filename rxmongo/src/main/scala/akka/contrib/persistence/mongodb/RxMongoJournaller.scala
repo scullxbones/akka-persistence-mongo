@@ -7,17 +7,19 @@ import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
 import DefaultBSONHandlers._
-
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Try, Success}
+import org.slf4j.LoggerFactory
 
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import RxMongoSerializers._
   import JournallingFieldNames._
 
+  protected val logger = LoggerFactory.getLogger(getClass)
+  
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
@@ -51,22 +53,43 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     else throw new Exception(wr.errmsg.getOrElse(s"${wr.message} - [${wr.code.fold("N/A")(_.toString)}]")) with NoStackTrace
   }
 
-  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext):Future[ISeq[Try[Unit]]] = {
+  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
+    
     if (batch.forall(_.isSuccess)) {
-      val collected = batch.toStream.collect{case Success(doc) => doc}
-      val result = Failover2(driver.connection, driver.failoverStrategy) {() =>
-        journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+      val collected = batch.toStream.collect { case Success(doc) => doc }
+      val result = Failover2(driver.connection, driver.failoverStrategy) { () =>
+        val j = journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+        if (driver.realtimeEnablePersistence) {
+          j.flatMap { _j => realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => _j).recover {
+              case t: Throwable => {
+                logger.error("Error bulk inserting into realtime collection", t)
+                _j 
+              }
+            }
+          }
+        } else {
+          j
+        }
       }.future
-      if(driver.realtimeEnablePersistence) realtime.bulkInsert(collected, ordered = true, writeConcern)
+
       result
     } else {
       Future.sequence(batch.map {
-        case Success(document:BSONDocument) =>
-          val result =journal.insert(document, writeConcern).map(writeResultToUnit)
-          if(driver.realtimeEnablePersistence) realtime.insert(document, writeConcern)
-          result
-        case f:Failure[_] => Future.successful(Failure[Unit](f.exception))
+        case Success(document: BSONDocument) =>
+          val j = journal.insert(document, writeConcern).map(writeResultToUnit)
+          if (driver.realtimeEnablePersistence) {
+            j.flatMap { _j => realtime.insert(document, writeConcern).map(_ => _j).recover {
+                case t: Throwable => {
+                  logger.error("Error inserting into realtime collection", t)
+                  _j 
+                }
+              }
+            }
+          } else {
+            j
+          }
+        case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }
   }
