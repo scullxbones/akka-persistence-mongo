@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.2.4
+* Issue [#114](https://github.com/scullxbones/akka-persistence-mongo/issues/114)
+  * Fix for rxmongo correct sequencing of realtime inserts to eliminate holes in PersistentQueries - thanks @marcuslinke!
+* Issue [#113](https://github.com/scullxbones/akka-persistence-mongo/issues/113)
+  * Fix for `EventsByPersistenceId` queries to respect from/to sequence numbers
+
 ### 1.2.3
 * Issue [#111](https://github.com/scullxbones/akka-persistence-mongo/issues/111)
   * Fix for rxmongo loading all of a single persistent actor's events into memory - thanks @marcuslinke!

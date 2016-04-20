@@ -1,22 +1,22 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
-import play.api.libs.iteratee.{Iteratee, Enumeratee, Enumerator}
+import org.slf4j.LoggerFactory
+import play.api.libs.iteratee.{Enumeratee, Enumerator, Iteratee}
 import reactivemongo.api.Failover2
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
-import DefaultBSONHandlers._
+
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.util.control.NoStackTrace
-import scala.util.{Failure, Try, Success}
-import org.slf4j.LoggerFactory
+import scala.util.{Failure, Success, Try}
 
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
-  import RxMongoSerializers._
   import JournallingFieldNames._
+  import RxMongoSerializers._
 
   protected val logger = LoggerFactory.getLogger(getClass)
   
@@ -43,8 +43,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
                       .enumerate(maxDocs = max)
                       .flatMap(d => Enumerator(
                         d.as[BSONArray](EVENTS).values.collect {
-                          case d:BSONDocument => driver.deserializeJournal(d)
-                        }.toSeq : _*))
+                          case d: BSONDocument => driver.deserializeJournal(d)
+                        } : _*))
                       .through(Enumeratee.filter[Event](ev => ev.sn >= from && ev.sn <= to))
   }
 
@@ -55,22 +55,25 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
-    
+    val zero = Seq.empty[Try[Unit]]
+
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
       val result = Failover2(driver.connection, driver.failoverStrategy) { () =>
         val j = journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
-        if (driver.realtimeEnablePersistence) {
-          j.flatMap { _j => realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => _j).recover {
-              case t: Throwable => {
+        val r =
+          if(driver.realtimeEnablePersistence)
+            realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
+              case t: Throwable =>
                 logger.error("Error bulk inserting into realtime collection", t)
-                _j 
-              }
+                zero
             }
-          }
-        } else {
-          j
-        }
+          else Future.successful(zero)
+
+        for {
+          _j <- j
+          _r <- r
+        } yield _j
       }.future
 
       result
@@ -78,17 +81,17 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
           val j = journal.insert(document, writeConcern).map(writeResultToUnit)
-          if (driver.realtimeEnablePersistence) {
-            j.flatMap { _j => realtime.insert(document, writeConcern).map(_ => _j).recover {
-                case t: Throwable => {
-                  logger.error("Error inserting into realtime collection", t)
-                  _j 
-                }
-              }
-            }
-          } else {
-            j
-          }
+          val r = if (driver.realtimeEnablePersistence)
+                    realtime.insert(document, writeConcern).map(_ => zero).recover {
+                      case t: Throwable =>
+                        logger.error("Error inserting into realtime collection", t)
+                        zero
+                    }
+                  else Future.successful(zero)
+          for {
+            _j <- j
+            _r <- r
+          } yield _j
         case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }
@@ -96,7 +99,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def findMaxSequence(persistenceId: String,maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
     val j:BSONCollection = journal
-    import j.BatchCommands.AggregationFramework.{Match,GroupField,Max}
+    import j.BatchCommands.AggregationFramework.{GroupField, Match, Max}
 
     j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
                 otherOperators = GroupField(PROCESSOR_ID)("max" -> Max(TO)) :: Nil).map(
@@ -163,7 +166,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     if (max == 0L) Future.successful(())
     else {
       val maxInt = max.toIntWithoutWrapping
-      (journalRange(pid, from, to, maxInt).map(_.toRepr) &> (Enumeratee.take(maxInt))).run(Iteratee.foreach {
+      (journalRange(pid, from, to, maxInt).map(_.toRepr) through Enumeratee.take(maxInt)).run(Iteratee.foreach {
         replayCallback
       })
     }
