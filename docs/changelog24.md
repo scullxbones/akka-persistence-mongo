@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.2.5
+* Issue [#116](https://github.com/scullxbones/akka-persistence-mongo/issues/116)
+  * Fix to create dependency between insert into journal and insert into realtime collection for rxmongo
+
 ### 1.2.4
 * Issue [#114](https://github.com/scullxbones/akka-persistence-mongo/issues/114)
   * Fix for rxmongo correct sequencing of realtime inserts to eliminate holes in PersistentQueries - thanks @marcuslinke!

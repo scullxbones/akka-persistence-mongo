@@ -60,38 +60,32 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
       val result = Failover2(driver.connection, driver.failoverStrategy) { () =>
-        val j = journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
-        val r =
-          if(driver.realtimeEnablePersistence)
-            realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
-              case t: Throwable =>
-                logger.error("Error bulk inserting into realtime collection", t)
-                zero
-            }
-          else Future.successful(zero)
-
         for {
-          _j <- j
-          _r <- r
-        } yield _j
+          j <- journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+          _  <- if(driver.realtimeEnablePersistence)
+                  realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
+                    case t: Throwable =>
+                      logger.error("Error bulk inserting into realtime collection", t)
+                      zero
+                  }
+                else Future.successful(zero)
+        } yield j
       }.future
 
       result
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
-          val j = journal.insert(document, writeConcern).map(writeResultToUnit)
-          val r = if (driver.realtimeEnablePersistence)
+          for {
+            j <- journal.insert(document, writeConcern).map(writeResultToUnit)
+            _ <- if (driver.realtimeEnablePersistence)
                     realtime.insert(document, writeConcern).map(_ => zero).recover {
                       case t: Throwable =>
                         logger.error("Error inserting into realtime collection", t)
                         zero
                     }
                   else Future.successful(zero)
-          for {
-            _j <- j
-            _r <- r
-          } yield _j
+          } yield j
         case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }
