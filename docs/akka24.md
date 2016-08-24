@@ -405,7 +405,7 @@ Some more information is covered in [#43](https://github.com/scullxbones/akka-pe
 #### Overview
 Without any further configuration, events are stored in some unique collection, named by default "akka_persistence_journal", while snapshots are stored in "akka_persistence_snaps". This is the primary and widely used behavior of event sourcing through Akka-persistence, but it may happen to be insufficient in some cases.
 
-As described [in issue #39](https://github.com/scullxbones/akka-persistence-mongo/issues/39), some kind of `persistenceId` mapping to collection names should do the trick, and this is what inspired the *suffixed collection names* feature development.
+As described in issue [#39](https://github.com/scullxbones/akka-persistence-mongo/issues/39), some kind of `persistenceId` mapping to collection names should do the trick, and this is what inspired the *suffixed collection names* feature development.
 
 The main idea here is to create as many journal and snapshot collections as needed, which names are built from default (or [configured](#mongocollection)) names, *suffixed* by a separator, followed by some information "picked" from `persistenceId`.
 
@@ -424,7 +424,7 @@ journal name would be "akka_persistence_journal_*suffix*" while snapshot name wo
 
 ##### Important notes:
 * capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
-* the *suffixed collection names* feature does **not** have *yet* any migration process, so it should **not** be used on existing database.
+* the *suffixed collection names* feature does **not** have *yet* any migration process, so it should **not** be used with existing database.
 
 <a name="suffixusage"/>
 #### Usage
@@ -438,7 +438,7 @@ akka.contrib.persistence.mongodb.mongo.suffix-builder.separator = "_"
 akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "com.mycompany.myproject.SuffixCollectionNames"
 ```
 
-First line purpose is obvious: enabling or not he feature. If set to *false*, both the remaining lines are ignored. By default, this property is set to false.
+First line purpose is obvious: enabling or not the feature. If set to *false*, both the remaining lines are ignored. By default, this property is set to false.
 
 If set to *true*, nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method returns an empty string.
 
