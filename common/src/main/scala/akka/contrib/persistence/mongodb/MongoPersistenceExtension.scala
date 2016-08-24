@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 
@@ -105,4 +111,9 @@ class MongoSettings(val config: Config) {
   val ResetTimeout = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
 
   val UseLegacyJournalSerialization = config.getBoolean("use-legacy-serialization")
+  
+  val UseSuffixedCollectionNames = config.getBoolean("use-suffixed-collection-names")
+  val SuffixBuilderClass = config.getString("suffix-builder.class")
+  val SuffixSeparator = config.getString("suffix-builder.separator")
+  
 }

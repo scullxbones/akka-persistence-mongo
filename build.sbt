@@ -4,7 +4,7 @@ val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.4.2"
+val AkkaV = "2.4.7"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
@@ -26,7 +26,8 @@ val commonDeps = Seq(
   "com.typesafe.akka"         %% "akka-slf4j"               % AkkaV     % "test",
   "com.typesafe.akka"         %% "akka-testkit"             % AkkaV     % "test",
   "com.typesafe.akka"         %% "akka-persistence-tck"     % AkkaV     % "test",
-  "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test"
+  "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test",
+  "com.typesafe.scala-logging"  %% "scala-logging"  % "3.1.0"     % "test"
 )
 
 val commonSettings = Seq(
@@ -71,6 +72,7 @@ lazy val `akka-persistence-mongo-common` = (project in file("common"))
 
 lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
+  //.dependsOn(`akka-persistence-mongo-common` % "compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -80,6 +82,7 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
+  //.dependsOn(`akka-persistence-mongo-common` % "compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(

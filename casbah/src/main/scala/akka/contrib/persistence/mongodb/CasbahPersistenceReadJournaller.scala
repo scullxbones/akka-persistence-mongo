@@ -1,8 +1,14 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorRef, Props}
+import akka.actor.{ ActorRef, Props }
 import com.mongodb.casbah.Imports._
-import com.mongodb.{Bytes, DBObject}
+import com.mongodb.{ Bytes, DBObject }
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -15,19 +21,24 @@ class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorP
   import CasbahSerializers._
 
   val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+  val temporaryCollection = driver.collection(temporaryCollectionName)
 
   override protected def initialCursor: Stream[String] = {
-    driver.journal.aggregate(
-      MongoDBObject("$project" -> MongoDBObject(PROCESSOR_ID -> 1)) ::
-        MongoDBObject("$group" -> MongoDBObject("_id" -> s"$$$PROCESSOR_ID")) ::
-        MongoDBObject("$out" -> temporaryCollectionName) ::
-        Nil).results
-
-    driver.collection(temporaryCollectionName).find().toStream.flatMap(_.getAs[String]("_id"))
+    driver.getJournalCollections()
+      .map { journal =>
+        journal.aggregate(
+          MongoDBObject("$project" -> MongoDBObject(PROCESSOR_ID -> 1)) ::
+            MongoDBObject("$group" -> MongoDBObject("_id" -> s"$$$PROCESSOR_ID")) ::
+            MongoDBObject("$out" -> temporaryCollectionName) ::
+            Nil).results
+        temporaryCollection.find().toStream
+      }
+      .fold(Stream.empty)(_ ++ _)
+      .flatMap(_.getAs[String]("_id"))
   }
 
   override protected def next(c: Stream[String], atMost: Long): (Vector[String], Stream[String]) = {
-    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    val (buf, remainder) = c.splitAt(atMost.toIntWithoutWrapping)
     (buf.toVector, remainder)
   }
 
@@ -36,7 +47,7 @@ class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorP
   }
 
   override protected def discard(c: Stream[String]): Unit = {
-    driver.collection(temporaryCollectionName).drop()
+    temporaryCollection.drop()
   }
 }
 
@@ -47,16 +58,15 @@ object CurrentAllEvents {
 class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, Stream[Event]] {
   import CasbahSerializers._
 
-  override protected def initialCursor: Stream[Event] =
-    driver.journal
-          .find(MongoDBObject())
-          .toStream
-          .flatMap(_.getAs[MongoDBList](EVENTS))
-          .flatMap(lst => lst.collect {case x:DBObject => x} )
-          .map(driver.deserializeJournal)
+  override protected def initialCursor: Stream[Event] = {
+    driver.getJournalCollections().map(_.find(MongoDBObject()).toStream).fold(Stream.empty)(_ ++ _)
+      .flatMap(_.getAs[MongoDBList](EVENTS))
+      .flatMap(lst => lst.collect { case x: DBObject => x })
+      .map(driver.deserializeJournal)
+  }
 
   override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
-    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    val (buf, remainder) = c.splitAt(atMost.toIntWithoutWrapping)
     (buf.toVector, remainder)
   }
 
@@ -73,18 +83,19 @@ object CurrentEventsByPersistenceId {
 class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends SyncActorPublisher[Event, Stream[Event]] {
   import CasbahSerializers._
 
-  override protected def initialCursor: Stream[Event] =
-    driver.journal
+  override protected def initialCursor: Stream[Event] = {
+    driver.getJournal(persistenceId)
       .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $lte toSeq) ++ (TO $gte fromSeq))
       .sort(MongoDBObject(TO -> 1))
       .toStream
       .flatMap(_.getAs[MongoDBList](EVENTS))
-      .flatMap(lst => lst.collect {case x:DBObject => x} )
+      .flatMap(lst => lst.collect { case x: DBObject => x })
       .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
       .map(driver.deserializeJournal)
+  }
 
   override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
-    val (buf,remainder) = c.splitAt(atMost.toIntWithoutWrapping)
+    val (buf, remainder) = c.splitAt(atMost.toIntWithoutWrapping)
     (buf.toVector, remainder)
   }
 
@@ -93,7 +104,7 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   override protected def discard(c: Stream[Event]): Unit = ()
 }
 
-class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection]{
+class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection] {
   import CasbahSerializers._
 
   override def cursor() = {
@@ -102,8 +113,7 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
     c.addOption(Bytes.QUERYOPTION_AWAITDATA)
     c
   }
-
-  override def publishEvents() = {
+    override def publishEvents() = {
     implicit val ec = driver.querySideDispatcher
     Future {
       cursor().foreach { next =>
@@ -130,7 +140,7 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
   override def currentPersistenceIds: Props = CurrentAllPersistenceIds.props(driver)
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    CurrentEventsByPersistenceId.props(driver,persistenceId,fromSeq,toSeq)
+    CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)
 
   override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
     driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])

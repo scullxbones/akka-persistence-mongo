@@ -53,7 +53,11 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Legacy Serialization](#legacyser)
    * [Metrics](#metrics)
    * [Multiple plugins](#multiplugin)
-
+1. [Suffixed collection names](#suffixcollection)
+   * [Overview](#suffixoverview)
+   * [Usage](#suffixusage)
+   * [Details](#suffixdetail)
+   
 <a name="major"/>
 ### Major Changes in 1.x
 <a name="akka24"/>
@@ -393,3 +397,99 @@ Given the above configuration, all `PersistentActor`s will default to the "defau
 In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persistence-journal-other" and use the "host1 special" pair.
 
 Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
+
+<a name="suffixcollection"/>
+### Suffixed collection names
+
+<a name="suffixoverview"/>
+#### Overview
+Without any further configuration, events are stored in some unique collection, named by default "akka_persistence_journal", while snapshots are stored in "akka_persistence_snaps". This is the primary and widely used behavior of event sourcing through Akka-persistence, but it may happen to be insufficient in some cases.
+
+As described [in issue #39](https://github.com/scullxbones/akka-persistence-mongo/issues/39), some kind of `persistenceId` mapping to collection names should do the trick, and this is what inspired the *suffixed collection names* feature development.
+
+The main idea here is to create as many journal and snapshot collections as needed, which names are built from default (or [configured](#mongocollection)) names, *suffixed* by a separator, followed by some information "picked" from `persistenceId`.
+
+Additionally, we provide a trait called `CanSuffixCollectionNames` that should be extended / mixed in some class, leading to override a function allowing to "pick" relevant information from `persistenceId`:
+
+```scala 
+def getSuffixfromPersistenceId(persistenceId: String): String
+```
+
+For example, say that:
+* `persistenceId` is "suffix-test" for some `PersistentActor`
+* separator is the underscore character
+* `getSuffixfromPersistenceId` removes the string "-test" from any string passed in argument
+
+journal name would be "akka_persistence_journal_*suffix*" while snapshot name would be "akka_persistence_snaps_*suffix*"
+
+##### Important notes:
+* capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
+* the *suffixed collection names* feature does **not** have *yet* any migration process, so it should **not** be used on existing database.
+
+<a name="suffixusage"/>
+#### Usage
+Using the *suffixed collection names* feature is a matter of configuration and a little code writting.
+
+##### Configuration
+Inside your `application.conf` file, use the following lines to enable the feature:
+```
+akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true
+akka.contrib.persistence.mongodb.mongo.suffix-builder.separator = "_"
+akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "com.mycompany.myproject.SuffixCollectionNames"
+```
+
+First line purpose is obvious: enabling or not he feature. If set to *false*, both the remaining lines are ignored. By default, this property is set to false.
+
+If set to *true*, nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method returns an empty string.
+
+Second line defines a separator as a `String`, but only its first character will be used as a separator (keep in mind that mongoDB does not allow collection names longer than 64 characters) By default, this property is set to an underscore character "_".
+
+Third line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below). By default, this property is set to an internal `akka.contrib.persistence.mongodb.SuffixCollectionNames` class, which `getSuffixfromPersistenceId` function returns an empty string, leading to **not** suffix any collection..
+
+##### Code
+Add some `com.mycompany.myproject.SuffixCollectionNames` class in your code, extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait:
+
+```scala
+package com.mycompany.myproject
+
+import akka.contrib.persistence.mongodb.CanSuffixCollectionNames
+
+class SuffixCollectionNames extends CanSuffixCollectionNames {
+  
+    override def getSuffixfromPersistenceId(persistenceId: String): String = persistenceId match {
+      // in this example, we remove any leading "-test" string from persistenceId passed as parameter
+      case str: String if (str.endsWith("-test")) => str.substring(0, str.indexOf("-test"))
+      // otherwise, we do not suffix our collection
+      case _ => ""
+    }
+}
+```
+
+Remember that returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file. This behavior is the default one, as implemented in the default internal `akka.contrib.persistence.mongodb.SuffixCollectionNames` class.
+
+<a name="suffixdetail"/>
+#### Details
+
+##### Batch writing
+Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per persistenceId manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
+
+Events are first *grouped* by `persistenceId`, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
+
+If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collections for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
+
+##### Reading
+Instead of reading a single journal, we now collect all journals and, for each of them, perform the appropriate Mongo queries.
+
+Of course, for reading via the "xxxByPersistenceId" methods, we directly point to the correspondant journal collection.
+
+
+
+
+
+
+
+
+
+
+
+

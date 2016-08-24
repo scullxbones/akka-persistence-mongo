@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.persistence.serialization.Snapshot
@@ -67,12 +73,13 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
 
-  private[this] def snaps(implicit ec: ExecutionContext) = driver.snaps
+  //private[this] def snaps(implicit ec: ExecutionContext) = driver.snaps
 
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =
     $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $lte maxSeq, TIMESTAMP $lte maxTs)
 
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
+    val snaps = driver.getSnaps(pid)
     snaps.find(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs))
       .sort(MongoDBObject(SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
       .limit(1)
@@ -82,6 +89,7 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   }
 
   private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = Future {
+    val snaps = driver.snaps(snapshot.metadata.persistenceId)
     val query = MongoDBObject(PROCESSOR_ID -> snapshot.metadata.persistenceId,
                               SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
                               TIMESTAMP -> snapshot.metadata.timestamp)
@@ -90,12 +98,14 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = Future {
+    val snaps = driver.getSnaps(pid)
     val criteria = Seq(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq) ++ Option(TIMESTAMP $eq ts).filter(_ => ts > 0).toList
     snaps.remove($and(criteria : _*), writeConcern)
     ()
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
+    val snaps = driver.getSnaps(pid)
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
     ()
   }

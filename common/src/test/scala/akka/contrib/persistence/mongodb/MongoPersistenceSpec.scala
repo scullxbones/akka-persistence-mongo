@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.testkit.TestKit
@@ -15,10 +21,24 @@ trait MongoPersistenceSpec[D,C] extends BaseUnitTest with ContainerMongo with Be
   override def afterAll() = cleanup()
 
   def driver:D
+  
+  def extendedDriver:D
 
   def withCollection(name: String)(testCode: C => Any):Any
+  
+  def withJournalCollections(testCode: D => Any):Any
+  
+  def withSnapshotCollections(testCode: D => Any):Any
 
   def withJournal(testCode: C => Any):Any
+  
+  def withSuffixedJournal(suffix: String)(testCode: C => Any):Any
+  
+  def withAutoSuffixedJournal(testCode: D => Any):Any
 
   def withSnapshot(testCode: C => Any):Any
+  
+  def withSuffixedSnapshot(suffix: String)(testCode: C => Any):Any
+  
+  def withAutoSuffixedSnapshot(testCode: D => Any):Any
 }

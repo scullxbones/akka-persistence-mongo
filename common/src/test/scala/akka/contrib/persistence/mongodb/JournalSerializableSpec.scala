@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.actor.Props
@@ -48,7 +54,7 @@ class OrderIdActor extends PersistentActor {
   override def persistenceId: String = "order-id"
 }
 
-abstract class JournalSerializableSpec(extensionClass: Class[_], database: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
+abstract class JournalSerializableSpec(extensionClass: Class[_], database: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
   import ConfigLoanFixture._
 
   override def embedDB = s"serializable-spec-$database"
@@ -68,7 +74,9 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
     |akka-contrib-mongodb-persistence-snapshot {
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
-    }""".stripMargin)
+    }
+    $extendedConfig
+    |""".stripMargin)
 
   "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
     implicit val system = as
