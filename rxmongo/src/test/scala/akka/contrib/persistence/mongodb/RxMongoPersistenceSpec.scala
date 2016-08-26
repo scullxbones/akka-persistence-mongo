@@ -19,8 +19,8 @@ import scala.concurrent.duration._
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
   class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()
-    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("300ms"))
-    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("750ms"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(10))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
       ) {
@@ -30,8 +30,8 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   }
 
   class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.empty()
-    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("300ms"))
-    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("750ms"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(10))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
     .withValue("akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names", ConfigValueFactory.fromAnyRef(true))
