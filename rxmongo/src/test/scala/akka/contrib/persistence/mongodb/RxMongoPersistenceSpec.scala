@@ -23,7 +23,6 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
-    .withValue("akka.test.default-timeout", ConfigValueFactory.fromAnyRef("5 seconds"))
       ) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
@@ -35,7 +34,6 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
     .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
-    .withValue("akka.test.default-timeout", ConfigValueFactory.fromAnyRef("5 seconds"))
     .withValue("akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names", ConfigValueFactory.fromAnyRef(true))
     .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class",
       ConfigValueFactory.fromAnyRef("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"))
