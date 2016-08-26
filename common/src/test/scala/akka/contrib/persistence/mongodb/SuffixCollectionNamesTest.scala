@@ -15,4 +15,14 @@ object SuffixCollectionNamesTest {
     |akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true 
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
     |""".stripMargin
+    
+  val rxMongoExtendedConfig = """
+    |akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true 
+    |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
+    |akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay = 300ms 
+    |akka.contrib.persistence.mongodb.rxmongo.failover.retries = 15
+    |akka.contrib.persistence.mongodb.rxmongo.failover.growth = con
+    |akka.contrib.persistence.mongodb.rxmongo.failover.factor = 1
+    |akka.test.default-timeout = 5 seconds
+    |""".stripMargin
 }

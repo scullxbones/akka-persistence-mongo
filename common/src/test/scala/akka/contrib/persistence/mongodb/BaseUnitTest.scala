@@ -21,7 +21,7 @@ object ConfigLoanFixture {
       testCode( (actorSystem, overrides) )
     } finally {
       actorSystem.terminate()
-      Await.result(actorSystem.whenTerminated, 3.seconds)
+      Await.ready(actorSystem.whenTerminated, 3.seconds)
       ()
     }
   }

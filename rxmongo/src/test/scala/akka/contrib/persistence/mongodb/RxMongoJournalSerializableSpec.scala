@@ -6,6 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-class RxMongoJournalSerializableSpec extends JournalSerializableSpec(classOf[RxMongoPersistenceExtension],"rxmongo")
+class RxMongoJournalSerializableSpec extends JournalSerializableSpec(classOf[RxMongoPersistenceExtension],"rxmongo", RxMongoConfigTest.rxMongoConfig)
 
-class RxMongoSuffixJournalSerializableSpec extends JournalSerializableSpec(classOf[RxMongoPersistenceExtension],"rxmongo", SuffixCollectionNamesTest.extendedConfig)
+class RxMongoSuffixJournalSerializableSpec extends JournalSerializableSpec(classOf[RxMongoPersistenceExtension],"rxmongo", SuffixCollectionNamesTest.rxMongoExtendedConfig)

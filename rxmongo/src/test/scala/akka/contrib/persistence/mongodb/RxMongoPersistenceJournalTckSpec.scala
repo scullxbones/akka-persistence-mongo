@@ -10,8 +10,8 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
-class RxMongoPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoJournalTck")
+class RxMongoPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoJournalTck", RxMongoConfigTest.rxMongoConfig)
 
 
 @RunWith(classOf[JUnitRunner])
-class RxMongoSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoJournalTck", SuffixCollectionNamesTest.extendedConfig)
+class RxMongoSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoJournalTck", SuffixCollectionNamesTest.rxMongoExtendedConfig)

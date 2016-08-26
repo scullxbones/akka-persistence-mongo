@@ -6,6 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-class RxMongoReadJournalSpec extends ReadJournalSpec(classOf[RxMongoPersistenceExtension], "rxmongo")
+class RxMongoReadJournalSpec extends ReadJournalSpec(classOf[RxMongoPersistenceExtension], "rxmongo", RxMongoConfigTest.rxMongoConfig)
 
-class RxMongoSuffixReadJournalSpec extends ReadJournalSpec(classOf[RxMongoPersistenceExtension], "rxmongo", SuffixCollectionNamesTest.extendedConfig)
+class RxMongoSuffixReadJournalSpec extends ReadJournalSpec(classOf[RxMongoPersistenceExtension], "rxmongo", SuffixCollectionNamesTest.rxMongoExtendedConfig)

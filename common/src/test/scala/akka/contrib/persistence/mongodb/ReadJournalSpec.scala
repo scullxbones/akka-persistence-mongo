@@ -138,7 +138,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       }
       events slice (3, 6) foreach (ar2 ! _)
 
-      Await.result(promise.future, 3.seconds.dilated) shouldBe 4
+      Await.result(promise.future, 10.seconds.dilated) shouldBe 4
 
       probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
   }
@@ -368,7 +368,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       implicit val ec = as.dispatcher
 
       val done = Future.sequence(promises.toSeq.map(_._1.future))
-      Await.result(done, 45.seconds.dilated)
+      Await.result(done, 1.minute.dilated)
 
       probe.receiveN(nrOfActors * nrOfEvents, 1.seconds.dilated)
       ()

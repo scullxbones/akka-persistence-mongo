@@ -18,13 +18,24 @@ import scala.concurrent.duration._
 
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
-  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
+  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("300ms"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
+    .withValue("akka.test.default-timeout", ConfigValueFactory.fromAnyRef("5 seconds"))
+      ) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
   class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.empty()
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay", ConfigValueFactory.fromAnyRef("300ms"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.retries", ConfigValueFactory.fromAnyRef(15))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.growth", ConfigValueFactory.fromAnyRef("con"))
+    .withValue("akka.contrib.persistence.mongodb.rxmongo.failover.factor", ConfigValueFactory.fromAnyRef(1))
+    .withValue("akka.test.default-timeout", ConfigValueFactory.fromAnyRef("5 seconds"))
     .withValue("akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names", ConfigValueFactory.fromAnyRef(true))
     .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class",
       ConfigValueFactory.fromAnyRef("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"))
