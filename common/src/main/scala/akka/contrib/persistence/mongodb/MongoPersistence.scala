@@ -107,7 +107,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   /**
    * retrieve suffix from persistenceId
    */
-  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
+  private[mongodb] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
       val builderClass = Class.forName(suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
@@ -175,11 +175,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * CAUTION: this method does NOT create the snapshot and its indexes.
    */
   private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
-   
+
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
-    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
-  )
+    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1))
 
   private[mongodb] lazy val journal: C = journal("")
 
@@ -201,7 +200,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def snaps(persistenceId: String): C = {
     val snapsCollection = collection(getSnapsCollectionName(persistenceId))
-    ensureIndex(snapsIndexName /*getSnapsIndexName(persistenceId)*/, unique = true, sparse = false,
+    ensureIndex(snapsIndexName /*getSnapsIndexName(persistenceId)*/ , unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
       TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)

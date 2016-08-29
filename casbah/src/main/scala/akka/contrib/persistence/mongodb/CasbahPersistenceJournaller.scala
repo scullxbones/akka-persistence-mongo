@@ -62,7 +62,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batchFuture = Future {
       if (driver.useSuffixedCollectionNames) {
-        writes.groupBy(_.persistenceId).flatMap {
+        writes.groupBy(w => driver.getSuffixFromPersistenceId(w.persistenceId)).flatMap {
           case (pid, writeSeq) => doBatchAppend(writeSeq, driver.journal(pid))
         }.to[collection.immutable.Seq]
       } else {
