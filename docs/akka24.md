@@ -433,18 +433,15 @@ Using the *suffixed collection names* feature is a matter of configuration and a
 ##### Configuration
 Inside your `application.conf` file, use the following lines to enable the feature:
 ```
-akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true
 akka.contrib.persistence.mongodb.mongo.suffix-builder.separator = "_"
 akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "com.mycompany.myproject.SuffixCollectionNames"
 ```
 
-First line purpose is obvious: enabling or not the feature. If set to *false*, both the remaining lines are ignored. By default, this property is set to false.
+Nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method returns an empty string.
 
-If set to *true*, nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method returns an empty string.
+First line defines a separator as a `String`, but only its first character will be used as a separator (keep in mind that mongoDB does not allow collection names longer than 64 characters) By default, this property is set to an underscore character "_".
 
-Second line defines a separator as a `String`, but only its first character will be used as a separator (keep in mind that mongoDB does not allow collection names longer than 64 characters) By default, this property is set to an underscore character "_".
-
-Third line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below). By default, this property is set to an internal `akka.contrib.persistence.mongodb.SuffixCollectionNames` class, which `getSuffixfromPersistenceId` function returns an empty string, leading to **not** suffix any collection..
+Second line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below).
 
 ##### Code
 Add some `com.mycompany.myproject.SuffixCollectionNames` class in your code, extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait:
@@ -465,7 +462,7 @@ class SuffixCollectionNames extends CanSuffixCollectionNames {
 }
 ```
 
-Remember that returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file. This behavior is the default one, as implemented in the default internal `akka.contrib.persistence.mongodb.SuffixCollectionNames` class.
+Remember that returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file.
 
 <a name="suffixdetail"/>
 #### Details

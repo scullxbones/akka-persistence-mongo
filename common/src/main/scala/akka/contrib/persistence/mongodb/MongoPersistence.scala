@@ -55,10 +55,6 @@ trait CanSuffixCollectionNames {
   def getSuffixFromPersistenceId(persistenceId: String): String
 }
 
-class SuffixCollectionNames() extends CanSuffixCollectionNames {
-  override def getSuffixFromPersistenceId(persistenceId: String): String = "" // does nothing by default
-}
-
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
 
 private case class IndexSettings(name: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)
@@ -111,20 +107,14 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   /**
    * retrieve suffix from persistenceId
    */
-  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = {
-    if (!useSuffixedCollectionNames)
-      ""
-    else {
-      suffixBuilderClassOption match {
-        case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
-          val builderClass = Class.forName(suffixBuilderClass)
-          val builderCons = builderClass.getConstructor()
-          val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
-          builderIns.getSuffixFromPersistenceId(persistenceId)
-        }
-        case _ => ""
-      }
+  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
+    case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
+      val builderClass = Class.forName(suffixBuilderClass)
+      val builderCons = builderClass.getConstructor()
+      val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
+      builderIns.getSuffixFromPersistenceId(persistenceId)
     }
+    case _ => ""
   }
 
   /**
@@ -153,14 +143,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * by appending separator and suffix to usual name in settings
    */
   private[this] def appendSuffixToName(nameInSettings: String)(suffix: String): String = {
-    val name = if (useSuffixedCollectionNames) {
+    val name =
       suffix match {
         case "" => nameInSettings
         case _  => s"${nameInSettings}${suffixSeparator}${validateMongoCharacters(suffix)}"
       }
-    } else {
-      nameInSettings
-    }
     logger.debug(s"""Suffixed name for value "$nameInSettings" in settings and suffix "$suffix" is "$name"""")
     name
   }
@@ -252,6 +239,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)
   }
 
+  // useful in batchAppend methods in each driver
+  def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined && !suffixBuilderClassOption.get.trim.isEmpty
+
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
   def snapsIndexName = settings.SnapsIndex
@@ -271,7 +261,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def mongoUri = settings.MongoUri
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
-  def useSuffixedCollectionNames = settings.UseSuffixedCollectionNames
   def suffixBuilderClassOption = Option(settings.SuffixBuilderClass)
   def suffixSeparator = settings.SuffixSeparator match {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)

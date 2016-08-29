@@ -12,12 +12,10 @@ class SuffixCollectionNamesTest extends CanSuffixCollectionNames {
 
 object SuffixCollectionNamesTest {
   val extendedConfig = """
-    |akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true 
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
     |""".stripMargin
     
   val rxMongoExtendedConfig = """
-    |akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names = true 
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
     |akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay = 750ms 
     |akka.contrib.persistence.mongodb.rxmongo.failover.retries = 10

@@ -25,7 +25,6 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
 
   override val extendedDriver = {
     val extendedConfig = ConfigFactory.empty()
-    .withValue("akka.contrib.persistence.mongodb.mongo.use-suffixed-collection-names", ConfigValueFactory.fromAnyRef(true))
     .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class",
         ConfigValueFactory.fromAnyRef("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"))
     .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.separator", ConfigValueFactory.fromAnyRef("_"))
