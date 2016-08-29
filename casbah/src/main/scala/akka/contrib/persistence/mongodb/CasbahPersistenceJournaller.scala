@@ -57,7 +57,6 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     } else { // degraded performance, can't batch
       batch.map(_.map { serialized =>
         journal.insert(serialized)(identity, writeConcern)
-        //if (driver.realtimeEnablePersistence) realtime.insert(serialized)(identity, writeConcern)
       }.map(_ => ()))
     }
   }

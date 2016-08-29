@@ -73,8 +73,6 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
 
-  //private[this] def snaps(implicit ec: ExecutionContext) = driver.snaps
-
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =
     $and(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $lte maxSeq, TIMESTAMP $lte maxTs)
 
