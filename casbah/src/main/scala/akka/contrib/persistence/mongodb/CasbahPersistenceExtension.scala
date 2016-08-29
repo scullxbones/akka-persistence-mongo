@@ -54,7 +54,7 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
       }
 
     Try(j.dropIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))).orElse(
-      Try(j.dropIndex(getJournalIndexName(persistenceId)))).map(
+      Try(j.dropIndex(settings.JournalIndex))).map(
         _ => logger.info("Successfully dropped legacy index")).recover {
           case e: MongoCommandException if e.getErrorMessage.startsWith("index not found with name") =>
             logger.info("Legacy index has already been dropped")

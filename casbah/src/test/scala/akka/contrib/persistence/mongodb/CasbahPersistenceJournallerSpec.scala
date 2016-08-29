@@ -105,11 +105,11 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         val journalName = extendedDriver.getJournalCollectionName(suffix)
         extendedDriver.db.collectionExists(journalName) should be(true)
 
-        val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.getJournalIndexName(suffix))).head
+        val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
         idx("unique") should ===(true)
         idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1, TO -> 1))
 
-        val seqNumIdx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.getJournalSeqNrIndexName(suffix))).head
+        val seqNumIdx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalSeqNrIndexName)).head
         seqNumIdx.getAs[Boolean]("unique") shouldBe None
         seqNumIdx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, TO -> -1))
       }

@@ -63,7 +63,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
         (TIMESTAMP, IndexType.Descending)),
       background = true,
       unique = true,
-      name = Some(driver.getSnapsIndexName(suffix))))
+      name = Some(driver.snapsIndexName)))
     snaps
   }
 

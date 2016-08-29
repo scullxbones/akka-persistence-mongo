@@ -72,7 +72,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
         val snapsName = extendedDriver.getSnapsCollectionName(suffix)
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
-        val idx = snapshot.getIndexInfo.filter(obj => obj("name").equals(driver.getSnapsIndexName(suffix))).head
+        val idx = snapshot.getIndexInfo.filter(obj => obj("name").equals(driver.snapsIndexName)).head
         idx("unique") should ===(true)
         idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
       }

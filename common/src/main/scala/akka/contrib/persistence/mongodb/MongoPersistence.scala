@@ -159,28 +159,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
 
   /**
-   * Convenient methods to retrieve journal index name from persistenceId
-   */
-  private[mongodb] def getJournalIndexName(persistenceId: String): String =
-    appendSuffixToName(journalIndexName)(getSuffixFromPersistenceId(persistenceId))
-
-  /**
-   * Convenient methods to retrieve journal sequence number index name from persistenceId
-   */
-  private[mongodb] def getJournalSeqNrIndexName(persistenceId: String): String =
-    appendSuffixToName(journalSeqNrIndexName)(getSuffixFromPersistenceId(persistenceId))
-
-  /**
    * Convenient methods to retrieve snapshot name from persistenceId
    */
   private[mongodb] def getSnapsCollectionName(persistenceId: String): String =
     appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
-
-  /**
-   * Convenient methods to retrieve snapshot index name from persistenceId
-   */
-  private[mongodb] def getSnapsIndexName(persistenceId: String): String =
-    appendSuffixToName(snapsIndexName)(getSuffixFromPersistenceId(persistenceId))
 
   /**
    * Convenient methods to retrieve EXISTING journal collection from persistenceId.
@@ -193,12 +175,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * CAUTION: this method does NOT create the snapshot and its indexes.
    */
   private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
-
-  private[mongodb] lazy val indexes: Seq[IndexSettings] = indexes("")
-
-  private[mongodb] def indexes(persistenceId: String): Seq[IndexSettings] = Seq(
-    IndexSettings(getJournalIndexName(persistenceId), unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
-    IndexSettings(getJournalSeqNrIndexName(persistenceId), unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1))
+   
+  private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
+    IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
+    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1)
+  )
 
   private[mongodb] lazy val journal: C = journal("")
 
@@ -210,7 +191,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     }
     val journalCollection = collection(getJournalCollectionName(persistenceId))
 
-    indexes(persistenceId).foldLeft(journalCollection) { (acc, index) =>
+    indexes.foldLeft(journalCollection) { (acc, index) =>
       import index._
       ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
     }
@@ -220,7 +201,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def snaps(persistenceId: String): C = {
     val snapsCollection = collection(getSnapsCollectionName(persistenceId))
-    ensureIndex(getSnapsIndexName(persistenceId), unique = true, sparse = false,
+    ensureIndex(snapsIndexName /*getSnapsIndexName(persistenceId)*/, unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
       TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)

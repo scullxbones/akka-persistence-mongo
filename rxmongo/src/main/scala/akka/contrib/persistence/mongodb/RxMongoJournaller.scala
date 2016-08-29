@@ -61,7 +61,6 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def doBatchJournalAppend(writes: ISeq[AtomicWrite], journal: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
-    val zero = ISeq.empty[Try[Unit]]
 
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
@@ -83,15 +82,13 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
-      val result = Failover2(driver.connection, driver.failoverStrategy) { () =>
+      Failover2(driver.connection, driver.failoverStrategy) { () =>
           realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
               case t: Throwable =>
                 logger.error("Error bulk inserting into realtime collection", t)
                 zero
         }.map(_ => zero)
       }.future
-
-      result
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
