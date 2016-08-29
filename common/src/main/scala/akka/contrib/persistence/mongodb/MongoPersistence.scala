@@ -107,18 +107,24 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
   private[mongodb] def upgradeJournalIfNeeded(suffix: String): Unit
-  
 
   /**
    * retrieve suffix from persistenceId
    */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = {
-    if (useSuffixedCollectionNames && suffixBuilderClass != null && !suffixBuilderClass.trim.isEmpty) {
-      val builderClass = Class.forName(suffixBuilderClass)
-      val builderCons = builderClass.getConstructor()
-      val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
-      builderIns.getSuffixFromPersistenceId(persistenceId)
-    } else ""
+    if (!useSuffixedCollectionNames)
+      ""
+    else {
+      suffixBuilderClassOption match {
+        case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
+          val builderClass = Class.forName(suffixBuilderClass)
+          val builderCons = builderClass.getConstructor()
+          val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
+          builderIns.getSuffixFromPersistenceId(persistenceId)
+        }
+        case _ => ""
+      }
+    }
   }
 
   /**
@@ -266,10 +272,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
   def useSuffixedCollectionNames = settings.UseSuffixedCollectionNames
-  def suffixBuilderClass = settings.SuffixBuilderClass
+  def suffixBuilderClassOption = Option(settings.SuffixBuilderClass)
   def suffixSeparator = settings.SuffixSeparator match {
-    case str if ! str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0,1)
-    case _ => "_"
+    case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
+    case _                   => "_"
   }
 
   implicit def serialization = SerializationExtension(actorSystem)
