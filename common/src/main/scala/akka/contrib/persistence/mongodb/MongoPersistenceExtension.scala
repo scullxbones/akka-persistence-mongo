@@ -112,7 +112,6 @@ class MongoSettings(val config: Config) {
 
   val UseLegacyJournalSerialization = config.getBoolean("use-legacy-serialization")
   
-  val UseSuffixedCollectionNames = config.getBoolean("use-suffixed-collection-names")
   val SuffixBuilderClass = config.getString("suffix-builder.class")
   val SuffixSeparator = config.getString("suffix-builder.separator")
   
