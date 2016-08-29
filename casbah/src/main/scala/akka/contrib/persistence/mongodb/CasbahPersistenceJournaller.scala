@@ -45,32 +45,17 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
       .map(driver.deserializeJournal)
   }
 
-  import collection.immutable.{ Seq => ISeq }
-  private[this] def doBatchJournalAppend(writes: ISeq[AtomicWrite], journal: MongoCollection)(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
+  import collection.immutable.{ Seq => ISeq }  
+  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: MongoCollection)(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
     val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
     
     if (batch.forall(_.isSuccess)) {
-      val bulk = journal.initializeOrderedBulkOperation
+      val bulk = collection.initializeOrderedBulkOperation
       batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
       bulk.execute(writeConcern)
       batch.map(t => t.map(_ => ()))
     } else { // degraded performance, can't batch
-      batch.map(_.map { serialized =>
-        journal.insert(serialized)(identity, writeConcern)
-      }.map(_ => ()))
-    }
-  }
-
-  private[this] def doBatchRealtimeAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
-    val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
-    if (batch.forall(_.isSuccess)) {
-      val bulk = realtime.initializeOrderedBulkOperation
-      batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
-      bulk.execute(writeConcern)
-
-      batch.map(t => t.map(_ => ()))
-    } else { // degraded performance, can't batch
-      batch.map(_.map { serialized => realtime.insert(serialized)(identity, writeConcern) }.map(_ => ()))
+      batch.map(_.map { serialized => collection.insert(serialized)(identity, writeConcern) }.map(_ => ()))
     }
   }
 
@@ -78,15 +63,15 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     val batchFuture = Future {
       if (driver.useSuffixedCollectionNames) {
         writes.groupBy(_.persistenceId).flatMap {
-          case (pid, writeSeq) => doBatchJournalAppend(writeSeq, driver.journal(pid))
+          case (pid, writeSeq) => doBatchAppend(writeSeq, driver.journal(pid))
         }.to[collection.immutable.Seq]
       } else {
-        doBatchJournalAppend(writes, journal)
+        doBatchAppend(writes, journal)
       }
     }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.flatMap { _ => Future { doBatchRealtimeAppend(writes) } }
+      batchFuture.flatMap { _ => Future { doBatchAppend(writes, realtime) } }
     else
       batchFuture
   }
