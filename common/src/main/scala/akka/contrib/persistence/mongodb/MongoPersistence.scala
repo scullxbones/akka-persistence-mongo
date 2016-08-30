@@ -107,7 +107,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   /**
    * retrieve suffix from persistenceId
    */
-  private[mongodb] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
+  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
       val builderClass = Class.forName(suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
