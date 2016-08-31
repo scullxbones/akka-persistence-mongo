@@ -59,48 +59,47 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     else throw new Exception(wr.errmsg.getOrElse(s"${wr.message} - [${wr.code.fold("N/A")(_.toString)}]")) with NoStackTrace
   }
 
-  private[this] def doBatchJournalAppend(writes: ISeq[AtomicWrite], journal: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
+  /*private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
 
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
       Failover2(driver.connection, driver.failoverStrategy) { () =>
-        journal.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
+        collection.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ())))
       }.future
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
-          journal.insert(document, writeConcern).map(writeResultToUnit)
+          collection.insert(document, writeConcern).map(writeResultToUnit)
         case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }
-  }
+  }*/
 
-  private[this] def doBatchRealtimeAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
+  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
     val zero = ISeq.empty[Try[Unit]]
 
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
       Failover2(driver.connection, driver.failoverStrategy) { () =>
-          realtime.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
+          collection.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
               case t: Throwable =>
-                logger.error("Error bulk inserting into realtime collection", t)
+                logger.error(s"Error bulk inserting into ${collection.name} collection", t)
                 zero
         }.map(_ => zero)
       }.future
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
-          realtime.insert(document, writeConcern).map(_ => zero).recover {
+          collection.insert(document, writeConcern).map(_ => zero).recover {
             case t: Throwable =>
-              logger.error("Error inserting into realtime collection", t)
+              logger.error(s"Error inserting into ${collection.name} collection", t)
               zero
           }.map(_ => Try[Unit](()))
         case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }
-
   }
 
   private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
@@ -109,14 +108,14 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
       // this should guarantee that futures are performed sequentially...
       writes.groupBy(_.persistenceId).toList // list of tuples (persistenceId: String, writeSeq: Seq[AtomicWrite])
-        .foldLeft(fZero) { (future, tuple) => future.flatMap { _ => doBatchJournalAppend(tuple._2, driver.journal(tuple._1)) } }
+        .foldLeft(fZero) { (future, tuple) => future.flatMap { _ => doBatchAppend(tuple._2, driver.journal(tuple._1)) } }
 
     } else {
-      doBatchJournalAppend(writes, journal)
+      doBatchAppend(writes, journal)
     }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.flatMap { _ => doBatchRealtimeAppend(writes) }
+      batchFuture.flatMap { _ => doBatchAppend(writes, realtime) }
     else
       batchFuture
 
