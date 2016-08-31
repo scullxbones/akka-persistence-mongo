@@ -7,7 +7,7 @@
 package akka.contrib.persistence.mongodb
 
 class SuffixCollectionNamesTest extends CanSuffixCollectionNames {
-  override def getSuffixFromPersistenceId(persistenceId: String): String = persistenceId  
+  override def getSuffixFromPersistenceId(persistenceId: String): String = s"$persistenceId-test"  
 }
 
 object SuffixCollectionNamesTest {
