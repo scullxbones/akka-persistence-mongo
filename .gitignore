@@ -25,6 +25,8 @@ target/
 
 # Eclipse
 .cache
+.cache-main
+.cache-tests
 .classpath
 .project
 .scala_dependencies

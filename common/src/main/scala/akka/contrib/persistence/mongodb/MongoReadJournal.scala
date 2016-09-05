@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.NotUsed
-import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props}
+import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props, ActorLogging}
 import akka.persistence.query._
 import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
 import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
@@ -194,7 +194,7 @@ trait MongoPersistenceReadJournallingApi {
   def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
-trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] {
+trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] with ActorLogging {
   import ActorPublisherMessage._
 
   override def preStart() = {

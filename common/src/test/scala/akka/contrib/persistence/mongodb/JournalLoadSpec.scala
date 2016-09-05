@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -11,7 +17,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.util.{Success, Try}
 
-abstract class JournalLoadSpec(extensionClass: Class[_], database: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
+abstract class JournalLoadSpec(extensionClass: Class[_], database: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   import ConfigLoanFixture._
 
@@ -34,6 +40,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String) exten
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
+    $extendedConfig
     |""".stripMargin)
 
   def actorProps(id: String, eventCount: Int, atMost: FiniteDuration = 60.seconds): Props =

@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
@@ -10,7 +16,7 @@ import org.scalatest.BeforeAndAfterAll
 import collection.JavaConverters._
 import scala.util.Try
 
-abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], database: String, toDriver: (ActorSystem,Config) => D) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
+abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersistenceExtension](extensionClass: Class[X], database: String, toDriver: (ActorSystem,Config) => D, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   import ConfigLoanFixture._
 
@@ -34,6 +40,7 @@ abstract class JournalUpgradeSpec[D <: MongoPersistenceDriver, X <: MongoPersist
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
+    $extendedConfig
     |""".stripMargin)
 
   def configured[A](testCode: D => A) = withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "upgrade-test")(toDriver.tupled andThen testCode)

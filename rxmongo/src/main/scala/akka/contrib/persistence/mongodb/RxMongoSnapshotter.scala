@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.persistence.SelectedSnapshot
@@ -17,7 +23,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     val selected =
-      snaps.find(
+      snaps(pid).find(
         BSONDocument(PROCESSOR_ID -> pid,
           SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
           TIMESTAMP -> BSONDocument("$lte" -> maxTs)
@@ -33,24 +39,24 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp
     )
-    snaps.update(query, snapshot, writeConcern, upsert = true, multi = false).map(_ => ())
+    snaps(snapshot.metadata.persistenceId).update(query, snapshot, writeConcern, upsert = true, multi = false).map(_ => ())
   }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
     val criteria =
       Seq[Producer[BSONElement]](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
         Option[Producer[BSONElement]](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
-    snaps.remove(BSONDocument(criteria : _*), writeConcern).map(_ => ())
+    snaps(pid).remove(BSONDocument(criteria : _*), writeConcern).map(_ => ())
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
-    snaps.remove(BSONDocument(PROCESSOR_ID -> pid,
+    snaps(pid).remove(BSONDocument(PROCESSOR_ID -> pid,
                               SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
                               TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
                               writeConcern).map(_ => ())
 
-  private[this] def snaps(implicit ec: ExecutionContext) = {
-    val snaps = driver.collection(driver.snapsCollectionName)
+  private[this] def snaps(suffix: String)(implicit ec: ExecutionContext) = {
+    val snaps = driver.getSnaps(suffix)
     snaps.indexesManager.ensure(new Index(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),
         (SEQUENCE_NUMBER, IndexType.Descending),

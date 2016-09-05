@@ -1,3 +1,9 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * ...
+ */
+
 package akka.contrib.persistence.mongodb
 
 import akka.actor.Props
@@ -7,7 +13,7 @@ import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 
-abstract class Journal1kSpec(extensionClass: Class[_], database: String) extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
+abstract class Journal1kSpec(extensionClass: Class[_], database: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
   import ConfigLoanFixture._
 
@@ -30,6 +36,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String) extends
     |	  # Class name of the plugin.
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
+    $extendedConfig
     |""".stripMargin)
 
   object Counter {
