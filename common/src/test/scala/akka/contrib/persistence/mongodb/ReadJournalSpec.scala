@@ -59,8 +59,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     $extendedConfig
     |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
-  def suffixCollNamesEnabled = config(extensionClass).getValue("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest") != null &&
-    !config(extensionClass).getValue("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest").toString.trim.isEmpty
+  def suffixCollNamesEnabled = config(extensionClass).getValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") != null &&
+    !config(extensionClass).getValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").toString.trim.isEmpty
 
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
 
