@@ -59,7 +59,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     else throw new Exception(wr.errmsg.getOrElse(s"${wr.message} - [${wr.code.fold("N/A")(_.toString)}]")) with NoStackTrace
   }
 
-  /*private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
+  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
 
     if (batch.forall(_.isSuccess)) {
@@ -71,32 +71,6 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
           collection.insert(document, writeConcern).map(writeResultToUnit)
-        case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
-      })
-    }
-  }*/
-
-  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: BSONCollection)(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
-    val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
-    val zero = ISeq.empty[Try[Unit]]
-
-    if (batch.forall(_.isSuccess)) {
-      val collected = batch.toStream.collect { case Success(doc) => doc }
-      Failover2(driver.connection, driver.failoverStrategy) { () =>
-          collection.bulkInsert(collected, ordered = true, writeConcern).map(_ => zero).recover {
-              case t: Throwable =>
-                logger.error(s"Error bulk inserting into ${collection.name} collection", t)
-                zero
-        }.map(_ => zero)
-      }.future
-    } else {
-      Future.sequence(batch.map {
-        case Success(document: BSONDocument) =>
-          collection.insert(document, writeConcern).map(_ => zero).recover {
-            case t: Throwable =>
-              logger.error(s"Error inserting into ${collection.name} collection", t)
-              zero
-          }.map(_ => Try[Unit](()))
         case f: Failure[_] => Future.successful(Failure[Unit](f.exception))
       })
     }

@@ -200,7 +200,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def snaps(persistenceId: String): C = {
     val snapsCollection = collection(getSnapsCollectionName(persistenceId))
-    ensureIndex(snapsIndexName /*getSnapsIndexName(persistenceId)*/ , unique = true, sparse = false,
+    ensureIndex(snapsIndexName , unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
       TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
