@@ -147,7 +147,6 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   val temporaryCollection = driver.collection(temporaryCollectionName)
 
   override def cleanup() = {
-    driver.collection(temporaryCollectionName).drop().map(_ => ADone)
     import reactivemongo.api.commands.bson.DefaultBSONCommandError
     driver.collection(temporaryCollectionName).drop().recover {
       // we ignore the "ns not found" error which is NOT filtered out by ReactiveMongo when trying to drop a non existing collection
