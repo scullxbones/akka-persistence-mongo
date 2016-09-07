@@ -66,7 +66,7 @@ trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
   def defaults: Receive = {
     case _: Cancel | SubscriptionTimeoutExceeded =>
-      log.warning(s"Cancelling stream")
+      log.warning("Cancelling stream")
       onCompleteThenStop()
       cleanup().pipeTo(self)
       ()
@@ -148,14 +148,10 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
 
   override def cleanup() = {
     import reactivemongo.api.commands.bson.DefaultBSONCommandError
-    driver.collection(temporaryCollectionName).drop().recover {
+    temporaryCollection.drop().recover {
       // we ignore the "ns not found" error which is NOT filtered out by ReactiveMongo when trying to drop a non existing collection
       // see https://github.com/ReactiveMongo/ReactiveMongo/issues/205
-      case commandError: DefaultBSONCommandError => {
-        commandError.errmsg match {
-          case Some(str) if str.equals("ns not found") => ()
-        }
-      }
+      case commandError: DefaultBSONCommandError if commandError.errmsg.contains("ns not found") => ()
     }.map(_ => ADone)
   }
 
