@@ -102,7 +102,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
-  private[mongodb] def upgradeJournalIfNeeded(suffix: String): Unit
+  private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit
+
+  private[mongodb] def migrateToSuffixCollectionsIfNeeded(): Unit
 
   /**
    * retrieve suffix from persistenceId
@@ -139,8 +141,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * build name of a collection, index, etc...
-   * by appending separator and suffix to usual name in settings
+   * build name of a collection by appending separator and suffix to usual name in settings
    */
   private[this] def appendSuffixToName(nameInSettings: String)(suffix: String): String = {
     val name =
@@ -188,12 +189,21 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       upgradeJournalIfNeeded(persistenceId)
       logger.debug("Journal automatic upgrade process has completed")
     }
+    
     val journalCollection = collection(getJournalCollectionName(persistenceId))
 
     indexes.foldLeft(journalCollection) { (acc, index) =>
       import index._
       ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
     }
+    
+    if (settings.SuffixAutomaticMigration && !persistenceId.trim.isEmpty) {
+      logger.debug("Suffix automatic migration is enabled, executing process")
+      migrateToSuffixCollectionsIfNeeded()
+      logger.debug("Suffix automatic migration process has completed")
+    }
+    
+    journalCollection
   }
 
   private[mongodb] lazy val snaps: C = snaps("")
@@ -219,7 +229,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)
   }
 
-  // useful in batchAppend methods in each driver
+  // useful in some methods in each driver
   def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined && !suffixBuilderClassOption.get.trim.isEmpty
 
   def databaseName = settings.Database
