@@ -8,14 +8,13 @@ import scala.util.Try
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import scala.util.Random
 
-
 class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends CasbahMongoDriver(system, config) {
 
   def migrateToSuffixCollections(): Unit = {
 
     // INIT //
 
-    logger.info("Starting automatic migration to collections with suffixed names")
+    logger.info("Starting automatic migration to collections with suffixed names.\nThis may take a while...")
 
     if (settings.JournalAutomaticUpgrade) {
       logger.warn("Please, disable 'journal-automatic-upgrade' option when migrating from unique to suffixed collections. Aborting...")
@@ -43,34 +42,36 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
 
     // for each retrieved persistenceId, bulk insert corresponding records from unique journal
     // to appropriate (and newly created) suffixed journal, then remove them from unique journal
-    if (temporaryCollection.find().size > 0) {
+    if (temporaryCollection.count() > 0) {
       temporaryCollection.find().foreach { dbObject =>
         dbObject.getAs[String]("_id") match {
-          case Some(persistenceId) if (!getJournalCollectionName(persistenceId).equals(settings.JournalCollection) &&
-            !db.collectionNames().contains(getJournalCollectionName(persistenceId))) => {
+          case Some(persistenceId) if (!getJournalCollectionName(persistenceId).equals(settings.JournalCollection)) => {
 
             val tryInsert = Try {
-              logger.info(s"Journal suffix migration: inserting records in '${getJournalCollectionName(persistenceId)}'")
-              val bulkInsert = getJournal(persistenceId).initializeOrderedBulkOperation
+              val bulkInsert = journal(persistenceId).initializeOrderedBulkOperation
               journal.find(pidQuery(persistenceId)) foreach bulkInsert.insert
               bulkInsert.execute(journalWriteConcern)
             }
             if (tryInsert.isSuccess) {
-              logger.info(s"Journal suffix migration: inserting records in '${getJournalCollectionName(persistenceId)}' completed successfully")
-              val tryRemove = Try {
-                logger.info(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' ")
-                val bulkRemove = journal.initializeOrderedBulkOperation
-                bulkRemove.find(pidQuery(persistenceId)).remove()
-                bulkRemove.execute(journalWriteConcern)
+              logger.debug(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' completed successfully")
+              Try {
+                journal.remove(pidQuery(persistenceId), journalWriteConcern)
+                logger.debug(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' completed successfully")
+              } recover {
+                case t: Throwable =>
+                  logger.error(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' did NOT complete successfully", t)
               }
-              if (tryRemove.isSuccess)
-                logger.info(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' completed successfully")
-              else
-                logger.warn(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' did NOT complete successfully")
+
             } else {
-              logger.warn(s"Journal suffix migration: inserting records in '${getJournalCollectionName(persistenceId)}' did NOT complete successfully")
+              logger.error(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' did NOT complete successfully")
             }
           }
+
+          case Some(persistenceId) if (getJournalCollectionName(persistenceId).equals(settings.JournalCollection)) =>
+            logger.warn(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' ignored")
+
+          case _ =>
+            logger.warn(s"Journal suffix migration: record without '_id' field encountered in temporary collection")
         }
       }
     }
@@ -85,41 +86,46 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
 
     // for each retrieved persistenceId, bulk insert corresponding records from unique snaps
     // to appropriate (and newly created) suffixed snaps, then remove them from unique snaps
-    if (temporaryCollection.find().size > 0) {
+    if (temporaryCollection.count() > 0) {
       temporaryCollection.find().foreach { dbObject =>
         dbObject.getAs[String]("_id") match {
-          case Some(persistenceId) if (!getSnapsCollectionName(persistenceId).equals(settings.SnapsCollection) &&
-            !db.collectionNames().contains(getSnapsCollectionName(persistenceId))) => {
+          case Some(persistenceId) if (!getSnapsCollectionName(persistenceId).equals(settings.SnapsCollection)) => {
 
             val tryInsert = Try {
-              logger.info(s"Snapshot suffix migration: inserting records in '${getSnapsCollectionName(persistenceId)}'")
               val bulkInsert = snaps(persistenceId).initializeOrderedBulkOperation
               snaps.find(pidQuery(persistenceId)) foreach bulkInsert.insert
               bulkInsert.execute(snapsWriteConcern)
             }
             if (tryInsert.isSuccess) {
-              logger.info(s"Snapshot suffix migration: inserting records in '${getSnapsCollectionName(persistenceId)}' completed successfully")
-              val tryRemove = Try {
-                logger.info(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' ")
-                val bulkRemove = snaps.initializeOrderedBulkOperation
-                bulkRemove.find(pidQuery(persistenceId)).remove()
-                bulkRemove.execute(snapsWriteConcern)
+              logger.debug(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' completed successfully")
+              Try {
+                snaps.remove(pidQuery(persistenceId), snapsWriteConcern)
+                logger.debug(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' completed successfully")
+              } recover {
+                case t: Throwable =>
+                  logger.error(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' did NOT complete successfully", t)
               }
-              if (tryRemove.isSuccess)
-                logger.info(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' completed successfully")
-              else
-                logger.warn(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' did NOT complete successfully")
+
             } else {
-              logger.warn(s"Snapshot suffix migration: inserting records in '${getSnapsCollectionName(persistenceId)}' did NOT complete successfully")
+              logger.error(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' did NOT complete successfully")
             }
           }
+
+          case Some(persistenceId) if (getSnapsCollectionName(persistenceId).equals(settings.SnapsCollection)) =>
+            logger.warn(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' ignored")
+
+          case _ =>
+            logger.warn(s"Snapshot suffix migration: record without '_id' field encountered in temporary collection")
         }
       }
     }
 
     // CLEANING //
 
-    temporaryCollection.drop()
-    logger.info("Automatic migration to collections with suffixed names has completed")
+    Try(temporaryCollection.drop()) recover {
+      case t: Throwable => logger.warn("No temporary collection to drop", t)
+    }
+
+    logger.info("Automatic migration to collections with suffixed names has completed.\nYou are all good if no ERROR message appeared.")
   }
 }
