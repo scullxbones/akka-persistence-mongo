@@ -102,20 +102,9 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
           SEQUENCE_NUMBER -> MongoDBObject("$lte" -> toSequenceNr))),
       "$set" -> MongoDBObject(FROM -> (toSequenceNr + 1)))
     val maxSn = findMaxSequence(persistenceId, toSequenceNr)
-    // journal.update(query, update, upsert = false, multi = true, writeConcern)
-    // maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
-    // journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
-    val bulkUpdate = journal.initializeOrderedBulkOperation
-    val tryUpdate = Try {
-      bulkUpdate.find(query).update(update)
-      bulkUpdate.execute(writeConcern)      
-    }
-    if (tryUpdate.isSuccess) {
-      maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
-      val bulkRemove = journal.initializeOrderedBulkOperation
-      bulkRemove.find(clearEmptyDocumentsQuery(persistenceId)).remove()
-      bulkRemove.execute(writeConcern)
-    }
+    journal.update(query, update, upsert = false, multi = true, writeConcern)
+    maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
+    journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
     ()
   }
 
