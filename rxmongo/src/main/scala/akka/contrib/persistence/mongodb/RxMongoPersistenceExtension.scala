@@ -169,9 +169,6 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
     ()
   }
-  
-  // TODO
-  override private[mongodb] def migrateToSuffixCollectionsIfNeeded(): Unit = ()
 
   private[mongodb] def closeConnections(): Unit = driver.close()
 

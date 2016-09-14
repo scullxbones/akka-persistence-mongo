@@ -104,8 +104,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit
 
-  private[mongodb] def migrateToSuffixCollectionsIfNeeded(): Unit
-
   /**
    * retrieve suffix from persistenceId
    */
@@ -196,14 +194,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       import index._
       ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
     }
-    
-    if (settings.SuffixAutomaticMigration && !persistenceId.trim.isEmpty) {
-      logger.debug("Suffix automatic migration is enabled, executing process")
-      migrateToSuffixCollectionsIfNeeded()
-      logger.debug("Suffix automatic migration process has completed")
-    }
-    
-    journalCollection
   }
 
   private[mongodb] lazy val snaps: C = snaps("")
