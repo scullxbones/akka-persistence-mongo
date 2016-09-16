@@ -14,7 +14,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
 
     // INIT //
 
-    logger.info("Starting automatic migration to collections with suffixed names.\nThis may take a while...")
+    logger.info("Starting automatic migration to collections with suffixed names\nThis may take a while...")
 
     if (settings.JournalAutomaticUpgrade) {
       logger.warn("Please, disable 'journal-automatic-upgrade' option when migrating from unique to suffixed collections. Aborting...")
@@ -43,38 +43,53 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // for each retrieved persistenceId, bulk insert corresponding records from unique journal
     // to appropriate (and newly created) suffixed journal, then remove them from unique journal
     if (temporaryCollection.count() > 0) {
-      temporaryCollection.find().foreach { dbObject =>
-        dbObject.getAs[String]("_id") match {
-          case Some(persistenceId) if (!getJournalCollectionName(persistenceId).equals(settings.JournalCollection)) => {
-
-            val tryInsert = Try {
-              val bulkInsert = journal(persistenceId).initializeOrderedBulkOperation
-              journal.find(pidQuery(persistenceId)) foreach bulkInsert.insert
-              bulkInsert.execute(journalWriteConcern)
-            }
-            if (tryInsert.isSuccess) {
-              logger.debug(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' completed successfully")
-              Try {
-                journal.remove(pidQuery(persistenceId), journalWriteConcern)
-                logger.debug(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' completed successfully")
-              } recover {
-                case t: Throwable =>
-                  logger.error(s"Journal suffix migration: removing '$persistenceId' records from '${settings.JournalCollection}' did NOT complete successfully", t)
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getJournalCollectionName(tempDbObject.get("_id").toString)).foldLeft(0) {
+        case (n, (collectionName, tempDbObjects)) => {
+          if (!collectionName.equals(settings.JournalCollection)) {
+            val bulkInsert = journal(tempDbObjects.head.get("_id").toString).initializeOrderedBulkOperation
+            tempDbObjects.foldLeft(0) {
+              case (i, tdbo) =>
+                val query = pidQuery(tdbo.get("_id").toString)
+                val count = journal.count(query)
+                journal.find(query) foreach bulkInsert.insert
+                i + count
+            } match {
+              case ssTotalToInsert => {
+                Try { bulkInsert.execute(journalWriteConcern) } map { wr =>
+                  logger.info(s"${wr.getInsertedCount}/$ssTotalToInsert records were inserted into '$collectionName' journal")
+                  tempDbObjects.foldLeft(0) {
+                    case (i, tdbo) =>
+                      val query = pidQuery(tdbo.get("_id").toString)
+                      val count = journal.count(query)
+                      Try { journal.remove(query, journalWriteConcern) } map { r =>
+                        i + count
+                      } recover {
+                        case _: Throwable =>
+                          logger.warn(s"Errors occurred when trying to remove records from '${settings.JournalCollection}' journal")
+                          i
+                      } getOrElse (i)
+                  } match {
+                    case ssTotalToRemove => {
+                      logger.info(s"$ssTotalToRemove records were removed from '${settings.JournalCollection}' journal")
+                      n + ssTotalToInsert
+                    }
+                  }
+                } recover {
+                  case _: Throwable =>
+                    logger.warn(s"Errors occurred when trying to insert records into '$collectionName' journal")
+                    n
+                } getOrElse (n)
               }
-
-            } else {
-              logger.error(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' did NOT complete successfully")
             }
+          } else {
+            n
           }
-
-          case Some(persistenceId) if (getJournalCollectionName(persistenceId).equals(settings.JournalCollection)) =>
-            logger.warn(s"Journal suffix migration: inserting '$persistenceId' records in '${getJournalCollectionName(persistenceId)}' ignored")
-
-          case _ =>
-            logger.warn(s"Journal suffix migration: record without '_id' field encountered in temporary collection")
         }
+      } match {
+        case total => logger.info(s"SUMMARY: $total records were successfully transfered to suffixed journals")
       }
     }
+
 
     // SNAPSHOTS //
 
@@ -87,37 +102,59 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // for each retrieved persistenceId, bulk insert corresponding records from unique snaps
     // to appropriate (and newly created) suffixed snaps, then remove them from unique snaps
     if (temporaryCollection.count() > 0) {
-      temporaryCollection.find().foreach { dbObject =>
-        dbObject.getAs[String]("_id") match {
-          case Some(persistenceId) if (!getSnapsCollectionName(persistenceId).equals(settings.SnapsCollection)) => {
-
-            val tryInsert = Try {
-              val bulkInsert = snaps(persistenceId).initializeOrderedBulkOperation
-              snaps.find(pidQuery(persistenceId)) foreach bulkInsert.insert
-              bulkInsert.execute(snapsWriteConcern)
-            }
-            if (tryInsert.isSuccess) {
-              logger.debug(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' completed successfully")
-              Try {
-                snaps.remove(pidQuery(persistenceId), snapsWriteConcern)
-                logger.debug(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' completed successfully")
-              } recover {
-                case t: Throwable =>
-                  logger.error(s"Snapshot suffix migration: removing '$persistenceId' records from '${settings.SnapsCollection}' did NOT complete successfully", t)
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getSnapsCollectionName(tempDbObject.get("_id").toString)).foldLeft(0) {
+        case (n, (collectionName, tempDbObjects)) => {
+          if (!collectionName.equals(settings.SnapsCollection)) {
+            val bulkInsert = snaps(tempDbObjects.head.get("_id").toString).initializeOrderedBulkOperation
+            tempDbObjects.foldLeft(0) {
+              case (i, tdbo) =>
+                val query = pidQuery(tdbo.get("_id").toString)
+                val count = snaps.count(query)
+                snaps.find(query) foreach bulkInsert.insert
+                i + count
+            } match {
+              case ssTotalToInsert => {
+                Try { bulkInsert.execute(snapsWriteConcern) } map { wr =>
+                  logger.info(s"${wr.getInsertedCount}/$ssTotalToInsert records were inserted into '$collectionName' snapshot")
+                  tempDbObjects.foldLeft(0) {
+                    case (i, tdbo) =>
+                      val query = pidQuery(tdbo.get("_id").toString)
+                      val count = snaps.count(query)
+                      Try { snaps.remove(query, snapsWriteConcern) } map { r =>
+                        i + count
+                      } recover {
+                        case _: Throwable =>
+                          logger.warn(s"Errors occurred when trying to remove records from '${settings.SnapsCollection}' snapshot")
+                          i
+                      } getOrElse (i)
+                  } match {
+                    case ssTotalToRemove => {
+                      logger.info(s"$ssTotalToRemove records were removed from '${settings.SnapsCollection}' snapshot")
+                      n + ssTotalToInsert
+                    }
+                  }
+                } recover {
+                  case _: Throwable =>
+                    logger.warn(s"Errors occurred when trying to insert records into '$collectionName' snapshot")
+                    n
+                } getOrElse (n)
               }
-
-            } else {
-              logger.error(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' did NOT complete successfully")
             }
+          } else {
+            n
           }
-
-          case Some(persistenceId) if (getSnapsCollectionName(persistenceId).equals(settings.SnapsCollection)) =>
-            logger.warn(s"Snapshot suffix migration: inserting '$persistenceId' records in '${getSnapsCollectionName(persistenceId)}' ignored")
-
-          case _ =>
-            logger.warn(s"Snapshot suffix migration: record without '_id' field encountered in temporary collection")
         }
+      } match {
+        case total => logger.info(s"SUMMARY: $total records were successfully transfered to suffixed snapshots")
       }
+    }
+
+
+    // METADATA
+
+    // Empty metadata collection, it will be rebuilt from suffixed collections through normal event sourcing process
+    Try(metadata.remove(MongoDBObject(), metadataWriteConcern)) recover {
+      case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
 
     // CLEANING //
@@ -126,6 +163,6 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       case t: Throwable => logger.warn("No temporary collection to drop", t)
     }
 
-    logger.info("Automatic migration to collections with suffixed names has completed.\nYou are all good if no ERROR message appeared.")
+    logger.info("Automatic migration to collections with suffixed names has completed")
   }
 }
