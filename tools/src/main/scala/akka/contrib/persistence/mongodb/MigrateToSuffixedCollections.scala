@@ -1,3 +1,8 @@
+/* 
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" migration tool
+ * ...
+ */
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
@@ -65,12 +70,12 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
                         i + count
                       } recover {
                         case _: Throwable =>
-                          logger.warn(s"Errors occurred when trying to remove records from '${settings.JournalCollection}' journal")
+                          logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' journal, from '${settings.JournalCollection}' journal")
                           i
                       } getOrElse (i)
                   } match {
                     case ssTotalToRemove => {
-                      logger.info(s"$ssTotalToRemove records were removed from '${settings.JournalCollection}' journal")
+                      logger.info(s"$ssTotalToRemove records, previously copied to '$collectionName' journal, were removed from '${settings.JournalCollection}' journal")
                       n + ssTotalToInsert
                     }
                   }
@@ -124,12 +129,12 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
                         i + count
                       } recover {
                         case _: Throwable =>
-                          logger.warn(s"Errors occurred when trying to remove records from '${settings.SnapsCollection}' snapshot")
+                          logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' snapshot, from '${settings.SnapsCollection}' snapshot")
                           i
                       } getOrElse (i)
                   } match {
                     case ssTotalToRemove => {
-                      logger.info(s"$ssTotalToRemove records were removed from '${settings.SnapsCollection}' snapshot")
+                      logger.info(s"$ssTotalToRemove records, previously copied to '$collectionName' snapshot, were removed from '${settings.SnapsCollection}' snapshot")
                       n + ssTotalToInsert
                     }
                   }
@@ -152,8 +157,9 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
 
     // METADATA
 
-    // Empty metadata collection, it will be rebuilt from suffixed collections through normal event sourcing process
-    Try(metadata.remove(MongoDBObject(), metadataWriteConcern)) recover {
+    // Empty metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
+    Try { metadata.remove(MongoDBObject(), metadataWriteConcern) } map {
+      r => logger.info(s"SUMMARY: ${r.getN} records were successfully removed from ${settings.MetadataCollection} collection") }recover {
       case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
 
