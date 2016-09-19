@@ -158,8 +158,9 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // METADATA
 
     // Empty metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
+    val count = metadata.count()
     Try { metadata.remove(MongoDBObject(), metadataWriteConcern) } map {
-      r => logger.info(s"SUMMARY: ${r.getN} records were successfully removed from ${settings.MetadataCollection} collection") }recover {
+      r => logger.info(s"SUMMARY: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection") }recover {
       case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
 
