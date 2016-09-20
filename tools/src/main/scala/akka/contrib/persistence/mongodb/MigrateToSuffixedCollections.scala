@@ -10,12 +10,12 @@ import com.mongodb.casbah.Imports._
 import com.typesafe.config.Config
 
 import scala.util.Try
-import akka.contrib.persistence.mongodb.JournallingFieldNames._
-import scala.util.Random
 
 class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends CasbahMongoDriver(system, config) {
 
   def migrateToSuffixCollections(): Unit = {
+    import akka.contrib.persistence.mongodb.JournallingFieldNames._
+    import scala.util.Random
 
     // INIT //
 
@@ -95,7 +95,6 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       }
     }
 
-
     // SNAPSHOTS //
 
     // aggregate persistenceIds, contained in unique snaps, and store them in temporary collection
@@ -154,13 +153,13 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       }
     }
 
-
     // METADATA
 
     // Empty metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
     val count = metadata.count()
     Try { metadata.remove(MongoDBObject(), metadataWriteConcern) } map {
-      r => logger.info(s"SUMMARY: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection") }recover {
+      r => logger.info(s"SUMMARY: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection")
+    } recover {
       case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
 
