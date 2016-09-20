@@ -57,6 +57,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Overview](#suffixoverview)
    * [Usage](#suffixusage)
    * [Details](#suffixdetail)
+   * [Migration tool](#suffixmigration)
    
 <a name="major"/>
 ### Major Changes in 1.x
@@ -422,9 +423,9 @@ For example, say that:
 
 journal name would be "akka_persistence_journal_*suffix*" while snapshot name would be "akka_persistence_snaps_*suffix*"
 
-##### Important notes:
-* capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
-* the *suffixed collection names* feature does **not** have *yet* any migration process, so it should **not** be used with existing database.
+##### Important note:
+Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
+
 
 <a name="suffixusage"/>
 #### Usage
@@ -468,9 +469,9 @@ Remember that returning an empty `String` will *not* suffix any collection name,
 #### Details
 
 ##### Batch writing
-Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per persistenceId manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
+Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per collection manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
 
-Events are first *grouped* by `persistenceId`, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
+Events are first *grouped* by collection name, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
 
 If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collections for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
 
@@ -478,6 +479,30 @@ If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-pers
 Instead of reading a single journal, we now collect all journals and, for each of them, perform the appropriate Mongo queries.
 
 Of course, for reading via the "xxxByPersistenceId" methods, we directly point to the correspondant journal collection.
+
+<a name="suffixmigration"/>
+#### Migration tool
+
+##### Overview
+We provide a **basic** migration tool from **1.x** unique journal and snapshot to *suffixed collection names*. Unless the [migration of 0.x journal](#migration), this process cannot be performed on the fly, as it directly deals with (and builds) collections inside the database. So, yes, you have to stop your application during the migration process...
+
+###### How does it work ?
+The main idea is to parse unique journal, pick up every record, insert it in newly created appropriate suffixed journal, and finally remove it from unique journal. Additionally, we do the same for snapshots, and remove all records from "akka_persistence_metadata" capped collection. This capped collection will be built again through usual event sourcing process...
+
+Of course, this process would be very long, but thanks to *aggregation* and *batch writing*, we actually "gather" records by future suffixed collection, append them **in one step** to that new suffixed collection, and remove them, again **in one step**, from unique original collection. This way, we hope this migration tool will not take **too long** to rebuild your database.
+
+###### Recommended migration steps:
+* **backup your database** (use, for example, the `mongodump` command)
+* stop your application
+* update your configuration to prepare for migration (see below)
+* run the migration tool (this may take a while)
+* update your configuration again to remove migration process but keep *suffixed collection names* feature
+* start your application
+
+Optionally, you could perform the entire process on some database and application running offline, for example to determine how long it takes.
+
+Remember that you work **directly** inside the database, so do not forget about replication if you have several mongo servers...
+
 
 
 
