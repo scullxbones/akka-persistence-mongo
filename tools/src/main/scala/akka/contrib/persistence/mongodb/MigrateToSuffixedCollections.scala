@@ -91,7 +91,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
           }
         }
       } match {
-        case total => logger.info(s"SUMMARY: $total records were successfully transfered to suffixed journals")
+        case total => logger.info(s"JOURNALS: $total records were successfully transfered to suffixed collections")
       }
     }
 
@@ -149,7 +149,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
           }
         }
       } match {
-        case total => logger.info(s"SUMMARY: $total records were successfully transfered to suffixed snapshots")
+        case total => logger.info(s"SNAPSHOTS: $total records were successfully transfered to suffixed collections")
       }
     }
 
@@ -158,7 +158,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // Empty metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
     val count = metadata.count()
     Try { metadata.remove(MongoDBObject(), metadataWriteConcern) } map {
-      r => logger.info(s"SUMMARY: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection")
+      r => logger.info(s"METADATA: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection")
     } recover {
       case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
