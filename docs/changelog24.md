@@ -1,5 +1,10 @@
 ## Changelog for 1.x major version
 
+### 1.3.0
+* Issue [#39](https://github.com/scullxbones/akka-persistence-mongo/issues/39)
+  * Support for mapping persistenceId to different collections by suffix
+  * Merges in [#118](https://github.com/scullxbones/akka-persistence-mongo/pull/118) thanks @JeanFrancoisGuena!
+
 ### 1.2.5
 * Issue [#116](https://github.com/scullxbones/akka-persistence-mongo/issues/116)
   * Fix to create dependency between insert into journal and insert into realtime collection for rxmongo

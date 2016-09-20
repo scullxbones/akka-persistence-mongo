@@ -22,12 +22,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.2.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.3.0"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.11` series, with a minimum version number of `0.11.8` and maximum number of `0.11.9` due to backward incompatibility issues with higher versions
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.2.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.3.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -423,9 +423,8 @@ For example, say that:
 
 journal name would be "akka_persistence_journal_*suffix*" while snapshot name would be "akka_persistence_snaps_*suffix*"
 
-##### Important note:
+##### Important notes:
 Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
-
 
 <a name="suffixusage"/>
 #### Usage
@@ -469,9 +468,9 @@ Remember that returning an empty `String` will *not* suffix any collection name,
 #### Details
 
 ##### Batch writing
-Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per collection manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
+Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per persistenceId manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
 
-Events are first *grouped* by collection name, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
+Events are first *grouped* by `persistenceId`, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
 
 If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collections for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
 
@@ -502,16 +501,4 @@ Of course, this process would be very long, but thanks to *aggregation* and *bat
 Optionally, you could perform the entire process on some database and application running offline, for example to determine how long it takes.
 
 Remember that you work **directly** inside the database, so do not forget about replication if you have several mongo servers...
-
-
-
-
-
-
-
-
-
-
-
-
 
