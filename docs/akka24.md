@@ -423,12 +423,12 @@ For example, say that:
 
 journal name would be "akka_persistence_journal_*suffix*" while snapshot name would be "akka_persistence_snaps_*suffix*"
 
-##### Important notes:
+##### Important note:
 Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
 
 <a name="suffixusage"/>
 #### Usage
-Using the *suffixed collection names* feature is a matter of configuration and a little code writting.
+Using the *suffixed collection names* feature is a matter of configuration and a little code writing.
 
 ##### Configuration
 Inside your `application.conf` file, use the following lines to enable the feature:
@@ -498,7 +498,110 @@ Of course, this process would be very long, but thanks to *aggregation* and *bat
 * update your configuration again to remove migration process but keep *suffixed collection names* feature
 * start your application
 
-Optionally, you could perform the entire process on some database and application running offline, for example to determine how long it takes.
+Optionally, you could perform the entire process on some dummy database and application running offline, for example to determine how long it takes.
 
 Remember that you work **directly** inside the database, so do not forget about replication if you have several mongo servers...
+
+##### Usage
+From now on, we refer to unique journal as "akka_persistence_journal" and unique snapshot as "akka_persistence_snapshot" even if they could have different names through [configuration](#mongocollection) (let's keep those explanations simple)
+
+First of all, **backup your database and stop your application**.
+
+Using the *suffixed collection names* migration tool is a matter of configuration and a little code writing, and the first thing you should do is enable the *suffixed collection names* feature as explained in [*suffixed collection names* usage](#suffixusage). From now on, we consider that you have provided appropriate properties in your `application.conf` file and written your `getSuffixfromPersistenceId` method that do not **always** return an empty string (if it does, nothing will be migrated)
+
+###### Important note
+Design your `getSuffixfromPersistenceId` method carefully, as this migration process **does not work** from suffixed collections depending on some `getSuffixfromPersistenceId` method to *new* suffixed collections depending on some *modified* `getSuffixfromPersistenceId` method !
+
+Of course, once this is done, you should **not** start your application, unless you want to run some tests on some dummy database !
+
+###### Configuration
+Add the following to your `build.sbt` file:
+```scala
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.0",
+                             "org.mongodb" %% "casbah" % "3.1.0" )
+```
+
+Notice that even if you currently don't use it, migration process is performed through Casbah driver.
+
+Notice that if you use Casbah driver, `"org.mongodb" %% "casbah" % "3.1.0"` dependency should already be part of your `build.sbt` file.
+
+Additionally, you may configure your logging system with **INFO** level for `MigrateToSuffixedCollections` class, otherwise there will be no output to console or log files. With *log4J*, this should be done like that:
+```xml
+<logger name="akka.contrib.persistence.mongodb.MigrateToSuffixedCollections" level="INFO" />
+```
+
+###### Code
+Provide an `ActorSystem` and its `Config` object (based on your `application.conf` file of course) then instantiate a `MigrateToSuffixedCollections` class and call its `migrateToSuffixCollections` method as shown in the following example:
+```scala
+package com.mycompany.myproject.myapplication.main
+
+object Migrate extends App {
+    import com.typesafe.config.Config
+    import akka.actor.ActorSystem
+    val config: Config = ???
+    val system: ActorSystem = ActorSystem("my system name", config)
+
+    import akka.contrib.persistence.mongodb.MigrateToSuffixedCollections
+    val migration = new MigrateToSuffixedCollections(system, config)
+    try {
+        migration.migrateToSuffixCollections()
+    } catch {
+        case t: Throwable =>
+            println("Error occurred on migration to suffixed collections")
+            t.printStackTrace()
+            System.exit(-1)
+    }
+}
+```
+Providing an `ActorSystem` and its `Config` object depends on the manner your application is designed and is beyond the scope of this documentation.
+
+As the process **must** be performed offline, its a good idea to use an object (we call it "Migrate" in our example) extending the `scala.App` trait and run it through the `sbt run` command that allows us to choose which one to run:
+
+```
+Multiple main classes detected, select one to run:
+
+ [1] com.mycompany.myproject.myapplication.main.Main
+ [2] com.mycompany.myproject.myapplication.main.Migrate
+
+Enter number: 
+```
+If we choose number 2 here, we should see something like this (remember to configure INFO level for `MigrateToSuffixedCollections` class)
+```
+Starting automatic migration to collections with suffixed names
+This may take a while...
+54826/54826 records were inserted into 'akka_persistence_journal_foo1' journal
+54826 records, previously copied to 'akka_persistence_journal_foo1' journal, were removed from 'akka_persistence_journal' journal
+63/63 records were inserted into 'akka_persistence_journal_foo2' journal
+63 records, previously copied to 'akka_persistence_journal_foo2' journal, were removed from 'akka_persistence_journal' journal
+1/1 records were inserted into 'akka_persistence_journal_foo3' journal
+1 records, previously copied to 'akka_persistence_journal_foo3' journal, were removed from 'akka_persistence_journal' journal
+19/19 records were inserted into 'akka_persistence_journal_foo4' journal
+19 records, previously copied to 'akka_persistence_journal_foo4' journal, were removed from 'akka_persistence_journal' journal
+SUMMARY: 54909 records were successfully transfered to suffixed journals
+2/2 records were inserted into 'akka_persistence_snaps_foo1' snapshot
+2 records, previously copied to 'akka_persistence_snaps_foo1' snapshot, were removed from 'akka_persistence_snaps' snapshot
+SUMMARY: 2 records were successfully transfered to suffixed snapshots
+SUMMARY: 5/5 records were successfully removed from akka_persistence_metadata collection
+Automatic migration to collections with suffixed names has completed
+```
+Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` method sometimes returns an empty string. In that case, no information regarding these records is printed in the console above, so don't worry if they do not appear in totals.
+
+Notice that unique collections "akka_persistence_journal" and "akka_persistence_snapshot" remain in the database, even if empty. You should remove them if you want, using mongo shell...
+
+###### What's next ?
+**Keep *suffixed collection names* feature enabled** as explained in [*suffixed collection names* usage](#suffixusage), and of course, **do not modify** your `getSuffixfromPersistenceId` method.
+
+Keep your database safe, **avoid running again the migration process**, so:
+* remove migration code (in our example, we remove our `Migrate` object)
+* remove `"com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.0"` dependency from your `build.sbt` file
+
+That's it, you should **start your application** and enjoy *suffixed collection names* feature.
+
+
+
+
+
+
+
+
 
