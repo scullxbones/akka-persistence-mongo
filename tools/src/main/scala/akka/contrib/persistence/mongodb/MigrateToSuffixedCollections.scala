@@ -49,10 +49,10 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // to appropriate (and newly created) suffixed journal, then remove them from unique journal
     if (temporaryCollection.count() > 0) {
       val totalCount = journal.count()
-      temporaryCollection.find().toSeq.groupBy(tempDbObject => getJournalCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L) {
-        case (n, (collectionName, tempDbObjects)) => {
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getJournalCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L, 0L) {
+        case ((done, ignored), (collectionName, tempDbObjects)) => {
+          val newCollection = journal(tempDbObjects.head.get("_id").toString)
           if (!collectionName.equals(settings.JournalCollection)) {
-            val newCollection = journal(tempDbObjects.head.get("_id").toString)
             tempDbObjects.foldLeft(0L, 0L) {
               case ((ok, tot), tdbo) =>
                 val query = pidQuery(tdbo.get("_id").toString)
@@ -83,12 +83,32 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
                 } match {
                   case removed =>
                     logger.info(s"$removed/$count records, previously copied to '$collectionName' journal, were removed from '${settings.JournalCollection}' journal")
-                    if (removed < inserted) n + removed else n + inserted
+                    if (removed < inserted) (done + removed, ignored) else (done + inserted, ignored)
                 }
             }
-          } else n
+          } else {
+            tempDbObjects.foldLeft(0L) {
+              case (tot, tdbo) =>
+                val query = pidQuery(tdbo.get("_id").toString)
+                val cnt = journal.count(query).toLong
+                tot + cnt
+            } match { case ssTotIgnored => 
+                logger.info(s"$ssTotIgnored records were ignored and remain in '${settings.JournalCollection}' journal")
+                (done, ignored + ssTotIgnored)
+            }
+          }
         }
-      } match { case totalOk => logger.info(s"JOURNALS: $totalOk/$totalCount records were successfully transfered to suffixed collections") }
+      } match { 
+        case (totalOk, totalIgnored) => 
+          logger.info(s"JOURNALS: $totalOk/$totalCount records were successfully transfered to suffixed collections")
+          if ( totalIgnored > 0) {
+            logger.info(s"JOURNALS: $totalIgnored/$totalCount records were ignored and remain in '${settings.JournalCollection}' journal")
+            if (totalIgnored + totalOk == totalCount)
+              logger.info(s"JOURNALS: $totalOk + $totalIgnored = $totalCount, all records were successfully handled")
+            else
+              logger.warn(s"JOURNALS: $totalOk + $totalIgnored does NOT equal $totalCount, check remaining records  in '${settings.JournalCollection}' journal")
+          }
+      }
     }
 
     // SNAPSHOTS //
@@ -103,8 +123,8 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     // to appropriate (and newly created) suffixed snaps, then remove them from unique snaps
     if (temporaryCollection.count() > 0) {
       val totalCount = snaps.count()
-      temporaryCollection.find().toSeq.groupBy(tempDbObject => getSnapsCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L) {
-        case (n, (collectionName, tempDbObjects)) => {
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getSnapsCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L, 0L) {
+        case ((done, ignored), (collectionName, tempDbObjects)) => {
           if (!collectionName.equals(settings.SnapsCollection)) {
             val newCollection = snaps(tempDbObjects.head.get("_id").toString)
             tempDbObjects.foldLeft(0L, 0L) {
@@ -131,20 +151,39 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
                       ok + r.getN
                     } recover {
                       case _: Throwable =>
-                        logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' snapshot, from '${settings.JournalCollection}' snapshot")
+                        logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' snapshot, from '${settings.SnapsCollection}' snapshot")
                         ok
                     } getOrElse (ok)
                 } match {
                   case removed =>
-                    logger.info(s"$removed/$count records, previously copied to '$collectionName' snapshot, were removed from '${settings.JournalCollection}' snapshot")
-                    if (removed < inserted) n + removed else n + inserted
+                    logger.info(s"$removed/$count records, previously copied to '$collectionName' snapshot, were removed from '${settings.SnapsCollection}' snapshot")
+                    if (removed < inserted) (done + removed, ignored) else (done + inserted, ignored)
                 }
             }
-          } else n
+          } else {
+            tempDbObjects.foldLeft(0L) {
+              case (tot, tdbo) =>
+                val query = pidQuery(tdbo.get("_id").toString)
+                val cnt = snaps.count(query).toLong
+                tot + cnt
+            } match { case ssTotIgnored => 
+                logger.info(s"$ssTotIgnored records were ignored and remain in '${settings.SnapsCollection}' journal")
+                (done, ignored + ssTotIgnored)
+            }
+          }
         }
-      } match { case totalOk => logger.info(s"SNAPSHOTS: $totalOk/$totalCount records were successfully transfered to suffixed collections") }
+      } match { 
+        case (totalOk, totalIgnored) => 
+          logger.info(s"SNAPSHOTS: $totalOk/$totalCount records were successfully transfered to suffixed collections")
+          if ( totalIgnored > 0) {
+            logger.info(s"SNAPSHOTS: $totalIgnored/$totalCount records were ignored and remain in '${settings.SnapsCollection}' snapshot")
+            if (totalIgnored + totalOk == totalCount)
+              logger.info(s"SNAPSHOTS: $totalOk + $totalIgnored = $totalCount, all records were successfully handled")
+            else
+              logger.warn(s"SNAPSHOTS: $totalOk + $totalIgnored does NOT equal $totalCount, check remaining records  in '${settings.SnapsCollection}' snapshot")
+          }
+      }
     }
-    
 
     // METADATA
 
