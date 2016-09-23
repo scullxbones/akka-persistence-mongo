@@ -462,15 +462,15 @@ class SuffixCollectionNames extends CanSuffixCollectionNames {
 }
 ```
 
-Remember that returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file.
+Remember that **always** returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file.
 
 <a name="suffixdetail"/>
 #### Details
 
 ##### Batch writing
-Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per persistenceId manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
+Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per collection manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
 
-Events are first *grouped* by `persistenceId`, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
+Events are first *grouped* by collection, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
 
 If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collections for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
 
@@ -488,7 +488,7 @@ We provide a **basic** migration tool from **1.x** unique journal and snapshot t
 ###### How does it work ?
 The main idea is to parse unique journal, pick up every record, insert it in newly created appropriate suffixed journal, and finally remove it from unique journal. Additionally, we do the same for snapshots, and remove all records from "akka_persistence_metadata" capped collection. This capped collection will be built again through usual event sourcing process...
 
-Of course, this process would be very long, but thanks to *aggregation* and *batch writing*, we actually "gather" records by future suffixed collection, append them **in one step** to that new suffixed collection, and remove them, again **in one step**, from unique original collection. This way, we hope this migration tool will not take **too long** to rebuild your database.
+Of course, this process would be very long, but thanks to *aggregation*, we actually "gather" records by future suffixed collection, append them **one by one** to that new suffixed collection, and remove them **in one step**, from unique original collection. Appending records to new collection *one by one* may appear as a bad choice regarding performance issues, but trying to append a great number of records in a single bulk operation may lead to `OutOfMemoryError` exception. Remember, its a *basic* tool and there is no need to hurry here, as this is actually a maintenance operation. So, once more, let's keep it simple but efficient.
 
 ###### Recommended migration steps:
 * **backup your database** (use, for example, the `mongodump` command)
@@ -510,7 +510,7 @@ First of all, **backup your database and stop your application**.
 Using the *suffixed collection names* migration tool is a matter of configuration and a little code writing, and the first thing you should do is enable the *suffixed collection names* feature as explained in [*suffixed collection names* usage](#suffixusage). From now on, we consider that you have provided appropriate properties in your `application.conf` file and written your `getSuffixfromPersistenceId` method that do not **always** return an empty string (if it does, nothing will be migrated)
 
 ###### Important note
-Design your `getSuffixfromPersistenceId` method carefully, as this migration process **does not work** from suffixed collections depending on some `getSuffixfromPersistenceId` method to *new* suffixed collections depending on some *modified* `getSuffixfromPersistenceId` method !
+Design your `getSuffixfromPersistenceId` method **carefully**, as this migration process **does not work** from suffixed collections depending on some `getSuffixfromPersistenceId` method to *new* suffixed collections depending on some *modified* `getSuffixfromPersistenceId` method !
 
 Of course, once this is done, you should **not** start your application, unless you want to run some tests on some dummy database !
 
@@ -567,24 +567,29 @@ Enter number:
 ```
 If we choose number 2 here, we should see something like this (remember to configure INFO level for `MigrateToSuffixedCollections` class)
 ```
-Starting automatic migration to collections with suffixed names
+2016-09-23_15:43:31.823  INFO - Starting automatic migration to collections with suffixed names
 This may take a while...
-54826/54826 records were inserted into 'akka_persistence_journal_foo1' journal
-54826 records, previously copied to 'akka_persistence_journal_foo1' journal, were removed from 'akka_persistence_journal' journal
-63/63 records were inserted into 'akka_persistence_journal_foo2' journal
-63 records, previously copied to 'akka_persistence_journal_foo2' journal, were removed from 'akka_persistence_journal' journal
-1/1 records were inserted into 'akka_persistence_journal_foo3' journal
-1 records, previously copied to 'akka_persistence_journal_foo3' journal, were removed from 'akka_persistence_journal' journal
-19/19 records were inserted into 'akka_persistence_journal_foo4' journal
-19 records, previously copied to 'akka_persistence_journal_foo4' journal, were removed from 'akka_persistence_journal' journal
-SUMMARY: 54909 records were successfully transfered to suffixed journals
-2/2 records were inserted into 'akka_persistence_snaps_foo1' snapshot
-2 records, previously copied to 'akka_persistence_snaps_foo1' snapshot, were removed from 'akka_persistence_snaps' snapshot
-SUMMARY: 2 records were successfully transfered to suffixed snapshots
-SUMMARY: 5/5 records were successfully removed from akka_persistence_metadata collection
-Automatic migration to collections with suffixed names has completed
+2016-09-23_15:43:36.519  INFO - 1/1 records were inserted into 'akka_persistence_journal_foo1' journal
+2016-09-23_15:43:36.536  INFO - 1/1 records, previously copied to 'akka_persistence_journal_foo1' journal, were removed from 'akka_persistence_journal' journal
+2016-09-23_15:43:36.649  INFO - 24/24 records were inserted into 'akka_persistence_journal_foo2' journal
+2016-09-23_15:43:36.652  INFO - 24/24 records, previously copied to 'akka_persistence_journal_foo2' journal, were removed from 'akka_persistence_journal' journal
+2016-09-23_15:44:58.090  INFO - 74013/74013 records were inserted into 'akka_persistence_journal_foo3' journal
+2016-09-23_15:45:07.559  INFO - 74013/74013 records, previously copied to 'akka_persistence_journal_foo3' journal, were removed from 'akka_persistence_journal' journal
+2016-09-23_15:45:20.423  INFO - 54845/54845 records were inserted into 'akka_persistence_journal_foo4' journal
+2016-09-23_15:45:25.494  INFO - 54845/54845 records, previously copied to 'akka_persistence_journal_foo4' journal, were removed from 'akka_persistence_journal' journal
+2016-09-23_15:45:25.502  INFO - 76 records were ignored and remain in 'akka_persistence_journal' journal
+2016-09-23_15:45:25.502  INFO - JOURNALS: 128883/128959 records were successfully transfered to suffixed collections
+2016-09-23_15:45:25.502  INFO - JOURNALS: 76/128959 records were ignored and remain in 'akka_persistence_journal' journal
+2016-09-23_15:45:25.502  INFO - JOURNALS: 128883 + 76 = 128959, all records were successfully handled
+2016-09-23_15:45:25.785  INFO - 2/2 records were inserted into 'akka_persistence_snaps_foo4' snapshot
+2016-09-23_15:45:25.788  INFO - 2/2 records, previously copied to 'akka_persistence_snaps_foo4' snapshot, were removed from 'akka_persistence_snaps' snapshot
+2016-09-23_15:45:25.915  INFO - 101/101 records were inserted into 'akka_persistence_snaps_foo3' snapshot
+2016-09-23_15:45:25.931  INFO - 101/101 records, previously copied to 'akka_persistence_snaps_foo3' snapshot, were removed from 'akka_persistence_snaps' snapshot
+2016-09-23_15:45:25.932  INFO - SNAPSHOTS: 103/103 records were successfully transfered to suffixed collections
+2016-09-23_15:45:25.936  INFO - METADATA: 106/106 records were successfully removed from akka_persistence_metadata collection
+2016-09-23_15:45:25.974  INFO - Automatic migration to collections with suffixed names has completed
 ```
-Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` method sometimes returns an empty string. In that case, no information regarding these records is printed in the console above, so don't worry if they do not appear in totals.
+Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` method sometimes returns an empty string. In that case, an information regarding these records is printed in the console above, and a warning is also printed if *migrated* + *ignored* records does not equal *total* records.
 
 Notice that unique collections "akka_persistence_journal" and "akka_persistence_snapshot" remain in the database, even if empty. You should remove them if you want, using mongo shell...
 
