@@ -45,54 +45,50 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
         MongoDBObject("$out" -> temporaryCollectionName) ::
         Nil).results
 
-    // for each retrieved persistenceId, bulk insert corresponding records from unique journal
+    // for each retrieved persistenceId, insert corresponding records from unique journal
     // to appropriate (and newly created) suffixed journal, then remove them from unique journal
     if (temporaryCollection.count() > 0) {
-      temporaryCollection.find().toSeq.groupBy(tempDbObject => getJournalCollectionName(tempDbObject.get("_id").toString)).foldLeft(0) {
+      val totalCount = journal.count()
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getJournalCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L) {
         case (n, (collectionName, tempDbObjects)) => {
           if (!collectionName.equals(settings.JournalCollection)) {
-            val bulkInsert = journal(tempDbObjects.head.get("_id").toString).initializeOrderedBulkOperation
-            tempDbObjects.foldLeft(0) {
-              case (i, tdbo) =>
+            val newCollection = journal(tempDbObjects.head.get("_id").toString)
+            tempDbObjects.foldLeft(0L, 0L) {
+              case ((ok, tot), tdbo) =>
                 val query = pidQuery(tdbo.get("_id").toString)
-                val count = journal.count(query)
-                journal.find(query) foreach bulkInsert.insert
-                i + count
+                val cnt = journal.count(query).toLong
+                journal.find(query).foldLeft(0L) {
+                  case (i, dbo) =>
+                    Try { newCollection.insert(dbo, journalWriteConcern) } map { _ =>
+                      i + 1
+                    } recover {
+                      case _: Throwable =>
+                        logger.warn(s"Errors occurred when trying to insert record in '$collectionName' journal")
+                        i
+                    } getOrElse (i)
+                } match { case ssTotOk => (ok + ssTotOk, tot + cnt) }
             } match {
-              case ssTotalToInsert => {
-                Try { bulkInsert.execute(journalWriteConcern) } map { wr =>
-                  logger.info(s"${wr.getInsertedCount}/$ssTotalToInsert records were inserted into '$collectionName' journal")
-                  tempDbObjects.foldLeft(0) {
-                    case (i, tdbo) =>
-                      val query = pidQuery(tdbo.get("_id").toString)
-                      val count = journal.count(query)
-                      Try { journal.remove(query, journalWriteConcern) } map { r =>
-                        i + count
-                      } recover {
-                        case _: Throwable =>
-                          logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' journal, from '${settings.JournalCollection}' journal")
-                          i
-                      } getOrElse (i)
-                  } match {
-                    case ssTotalToRemove => {
-                      logger.info(s"$ssTotalToRemove records, previously copied to '$collectionName' journal, were removed from '${settings.JournalCollection}' journal")
-                      n + ssTotalToInsert
-                    }
-                  }
-                } recover {
-                  case _: Throwable =>
-                    logger.warn(s"Errors occurred when trying to insert records into '$collectionName' journal")
-                    n
-                } getOrElse (n)
-              }
+              case (inserted, count) =>
+                logger.info(s"$inserted/$count records were inserted into '$collectionName' journal")
+                tempDbObjects.foldLeft(0L) {
+                  case (ok, tdbo) =>
+                    val query = pidQuery(tdbo.get("_id").toString)
+                    Try { journal.remove(query, journalWriteConcern) } map { r =>
+                      ok + r.getN
+                    } recover {
+                      case _: Throwable =>
+                        logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' journal, from '${settings.JournalCollection}' journal")
+                        ok
+                    } getOrElse (ok)
+                } match {
+                  case removed =>
+                    logger.info(s"$removed/$count records, previously copied to '$collectionName' journal, were removed from '${settings.JournalCollection}' journal")
+                    if (removed < inserted) n + removed else n + inserted
+                }
             }
-          } else {
-            n
-          }
+          } else n
         }
-      } match {
-        case total => logger.info(s"JOURNALS: $total records were successfully transfered to suffixed collections")
-      }
+      } match { case totalOk => logger.info(s"JOURNALS: $totalOk/$totalCount records were successfully transfered to suffixed collections") }
     }
 
     // SNAPSHOTS //
@@ -103,55 +99,52 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
         MongoDBObject("$out" -> temporaryCollectionName) ::
         Nil).results
 
-    // for each retrieved persistenceId, bulk insert corresponding records from unique snaps
+    // for each retrieved persistenceId, insert corresponding records from unique snaps
     // to appropriate (and newly created) suffixed snaps, then remove them from unique snaps
     if (temporaryCollection.count() > 0) {
-      temporaryCollection.find().toSeq.groupBy(tempDbObject => getSnapsCollectionName(tempDbObject.get("_id").toString)).foldLeft(0) {
+      val totalCount = snaps.count()
+      temporaryCollection.find().toSeq.groupBy(tempDbObject => getSnapsCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L) {
         case (n, (collectionName, tempDbObjects)) => {
           if (!collectionName.equals(settings.SnapsCollection)) {
-            val bulkInsert = snaps(tempDbObjects.head.get("_id").toString).initializeOrderedBulkOperation
-            tempDbObjects.foldLeft(0) {
-              case (i, tdbo) =>
+            val newCollection = snaps(tempDbObjects.head.get("_id").toString)
+            tempDbObjects.foldLeft(0L, 0L) {
+              case ((ok, tot), tdbo) =>
                 val query = pidQuery(tdbo.get("_id").toString)
-                val count = snaps.count(query)
-                snaps.find(query) foreach bulkInsert.insert
-                i + count
+                val cnt = snaps.count(query).toLong
+                snaps.find(query).foldLeft(0L) {
+                  case (i, dbo) =>
+                    Try { newCollection.insert(dbo, snapsWriteConcern) } map { _ =>
+                      i + 1
+                    } recover {
+                      case _: Throwable =>
+                        logger.warn(s"Errors occurred when trying to insert record in '$collectionName' snapshot")
+                        i
+                    } getOrElse (i)
+                } match { case ssTotOk => (ok + ssTotOk, tot + cnt) }
             } match {
-              case ssTotalToInsert => {
-                Try { bulkInsert.execute(snapsWriteConcern) } map { wr =>
-                  logger.info(s"${wr.getInsertedCount}/$ssTotalToInsert records were inserted into '$collectionName' snapshot")
-                  tempDbObjects.foldLeft(0) {
-                    case (i, tdbo) =>
-                      val query = pidQuery(tdbo.get("_id").toString)
-                      val count = snaps.count(query)
-                      Try { snaps.remove(query, snapsWriteConcern) } map { r =>
-                        i + count
-                      } recover {
-                        case _: Throwable =>
-                          logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' snapshot, from '${settings.SnapsCollection}' snapshot")
-                          i
-                      } getOrElse (i)
-                  } match {
-                    case ssTotalToRemove => {
-                      logger.info(s"$ssTotalToRemove records, previously copied to '$collectionName' snapshot, were removed from '${settings.SnapsCollection}' snapshot")
-                      n + ssTotalToInsert
-                    }
-                  }
-                } recover {
-                  case _: Throwable =>
-                    logger.warn(s"Errors occurred when trying to insert records into '$collectionName' snapshot")
-                    n
-                } getOrElse (n)
-              }
+              case (inserted, count) =>
+                logger.info(s"$inserted/$count records were inserted into '$collectionName' snapshot")
+                tempDbObjects.foldLeft(0L) {
+                  case (ok, tdbo) =>
+                    val query = pidQuery(tdbo.get("_id").toString)
+                    Try { snaps.remove(query, snapsWriteConcern) } map { r =>
+                      ok + r.getN
+                    } recover {
+                      case _: Throwable =>
+                        logger.warn(s"Errors occurred when trying to remove records, previously copied to '$collectionName' snapshot, from '${settings.JournalCollection}' snapshot")
+                        ok
+                    } getOrElse (ok)
+                } match {
+                  case removed =>
+                    logger.info(s"$removed/$count records, previously copied to '$collectionName' snapshot, were removed from '${settings.JournalCollection}' snapshot")
+                    if (removed < inserted) n + removed else n + inserted
+                }
             }
-          } else {
-            n
-          }
+          } else n
         }
-      } match {
-        case total => logger.info(s"SNAPSHOTS: $total records were successfully transfered to suffixed collections")
-      }
+      } match { case totalOk => logger.info(s"SNAPSHOTS: $totalOk/$totalCount records were successfully transfered to suffixed collections") }
     }
+    
 
     // METADATA
 
