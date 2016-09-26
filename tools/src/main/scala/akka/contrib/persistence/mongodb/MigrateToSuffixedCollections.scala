@@ -34,11 +34,11 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
 
     // JOURNALS // 
 
-    handleMigration(journal) //, settings.JournalCollection, journal, getJournalCollectionName, journalWriteConcern, "journals")
+    handleMigration(journal)
 
     // SNAPSHOTS //  
 
-    handleMigration(snaps) //, settings.SnapsCollection, snaps, getSnapsCollectionName, snapsWriteConcern, "snapshots")
+    handleMigration(snaps)
 
     // METADATA //
 
