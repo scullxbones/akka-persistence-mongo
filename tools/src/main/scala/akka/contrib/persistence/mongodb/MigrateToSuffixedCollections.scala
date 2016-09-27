@@ -47,7 +47,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     Try { metadata.remove(MongoDBObject(), metadataWriteConcern) } map {
       r => logger.info(s"METADATA: ${r.getN}/$count records were successfully removed from ${settings.MetadataCollection} collection")
     } recover {
-      case t: Throwable => logger.warn(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
+      case t: Throwable => logger.error(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
     }
 
     // END //
@@ -160,7 +160,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       i + 1
     } recover {
       case _: Throwable =>
-        logger.warn(s"Errors occurred when trying to insert record in '$newCollectionName'")
+        logger.error(s"Errors occurred when trying to insert record in '$newCollectionName'")
         i
     } getOrElse (i)
   }
@@ -174,7 +174,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       i + r.getN
     } recover {
       case _: Throwable =>
-        logger.warn(s"Errors occurred when trying to remove records from '${getOriginCollectionName(originCollection)}'")
+        logger.error(s"Errors occurred when trying to remove records from '${getOriginCollectionName(originCollection)}'")
         i
     } getOrElse (i)
 
