@@ -129,25 +129,19 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
                                    newCollectionName: String,
                                    writeConcern: WriteConcern): Long = {
     // first step: we insert records in new suffixed collection, foldLeft methods are only here for counting
-    tempDbObjects.foldLeft(0L, 0L) {
+    val (inserted, count) = tempDbObjects.foldLeft(0L, 0L) {
       case ((ok, tot), tdbo) =>
         val query = pidQuery(tdbo)
         val cnt = originCollection.count(query).toLong
-        originCollection.find(query).foldLeft(0L) {
-          insertIntoCollection(newCollection, newCollectionName, writeConcern)
-        } match { case ssTotOk => (ok + ssTotOk, tot + cnt) }
-    } match {
-      case (inserted, count) =>
-        logger.info(s"$inserted/$count records were inserted into '$newCollectionName'")
-        // 2nd step: we remove records from unique collection
-        tempDbObjects.foldLeft(0L) {
-          removeFromCollection(originCollection, writeConcern)
-        } match {
-          case removed =>
-            logger.info(s"$removed/$count records, previously copied to '$newCollectionName', were removed from '${getOriginCollectionName(originCollection)}'")
-            if (removed < inserted) removed else inserted
-        }
+        val ssTotOk = originCollection.find(query).foldLeft(0L)(insertIntoCollection(newCollection, newCollectionName, writeConcern))
+        (ok + ssTotOk, tot + cnt)
     }
+    logger.info(s"$inserted/$count records were inserted into '$newCollectionName'")
+    
+    // 2nd step: we remove records from unique collection
+    val removed = tempDbObjects.foldLeft(0L)(removeFromCollection(originCollection, writeConcern))
+    logger.info(s"$removed/$count records, previously copied to '$newCollectionName', were removed from '${getOriginCollectionName(originCollection)}'")
+    if (removed < inserted) removed else inserted
   }
 
   /**
