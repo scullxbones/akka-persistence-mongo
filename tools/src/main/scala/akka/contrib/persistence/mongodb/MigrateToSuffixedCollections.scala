@@ -84,7 +84,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     if (temporaryCollection.count() > 0) {
       val totalCount = originCollection.count()
       // we group by future suffixed collection name, foldLeft methods are only here for counting
-      temporaryCollection.find().toSeq.groupBy(tempDbObject => getNewCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L, 0L) {
+      val (totalOk, totalIgnored) = temporaryCollection.find().toSeq.groupBy(tempDbObject => getNewCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L, 0L) {
         case ((done, ignored), (newCollectionName, tempDbObjects)) => {
           // we create suffixed collection
           val newCollection = makeNewCollection(tempDbObjects.head.get("_id").toString)
@@ -99,17 +99,15 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
             (done, ignored + notMigrated)
           }
         }
-      } match {
-        // logging...
-        case (totalOk, totalIgnored) =>
-          logger.info(s"${summaryTitle.toUpperCase}: $totalOk/$totalCount records were successfully transfered to suffixed collections")
-          if (totalIgnored > 0) {
-            logger.info(s"${summaryTitle.toUpperCase}: $totalIgnored/$totalCount records were ignored and remain in '${getOriginCollectionName(originCollection)}'")
-            if (totalIgnored + totalOk == totalCount)
-              logger.info(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored = $totalCount, all records were successfully handled")
-            else
-              logger.warn(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored does NOT equal $totalCount, check remaining records  in '${getOriginCollectionName(originCollection)}'")
-          }
+      }
+      // logging...
+      logger.info(s"${summaryTitle.toUpperCase}: $totalOk/$totalCount records were successfully transfered to suffixed collections")
+      if (totalIgnored > 0) {
+        logger.info(s"${summaryTitle.toUpperCase}: $totalIgnored/$totalCount records were ignored and remain in '${getOriginCollectionName(originCollection)}'")
+        if (totalIgnored + totalOk == totalCount)
+          logger.info(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored = $totalCount, all records were successfully handled")
+        else
+          logger.warn(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored does NOT equal $totalCount, check remaining records  in '${getOriginCollectionName(originCollection)}'")
       }
     }
 
@@ -137,7 +135,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
         (ok + ssTotOk, tot + cnt)
     }
     logger.info(s"$inserted/$count records were inserted into '$newCollectionName'")
-    
+
     // 2nd step: we remove records from unique collection
     val removed = tempDbObjects.foldLeft(0L)(removeFromCollection(originCollection, writeConcern))
     logger.info(s"$removed/$count records, previously copied to '$newCollectionName', were removed from '${getOriginCollectionName(originCollection)}'")
@@ -179,17 +177,14 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
    */
   private[this] def ignoreRecords(tempDbObjects: Seq[DBObject],
                                   originCollection: MongoCollection): Long = {
-    tempDbObjects.foldLeft(0L) {
+    val ignored = tempDbObjects.foldLeft(0L) {
       case (tot, tdbo) =>
         val query = pidQuery(tdbo)
         val cnt = originCollection.count(query).toLong
         tot + cnt
-    } match {
-      case ignored =>
-        logger.info(s"$ignored records were ignored and remain in '${getOriginCollectionName(originCollection)}'")
-        ignored
     }
-
+    logger.info(s"$ignored records were ignored and remain in '${getOriginCollectionName(originCollection)}'")
+    ignored
   }
 
   /**
