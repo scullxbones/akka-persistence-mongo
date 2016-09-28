@@ -151,8 +151,8 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     Try { newCollection.insert(dbo, writeConcern) } map { _ =>
       i + 1
     } recover {
-      case _: Throwable =>
-        logger.error(s"Errors occurred when trying to insert record in '$newCollectionName'")
+      case t: Throwable =>
+        logger.error(s"Errors occurred when trying to insert record in '$newCollectionName'", t)
         i
     } getOrElse (i)
   }
@@ -165,8 +165,8 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     Try { originCollection.remove(pidQuery(dbo), writeConcern) } map { r =>
       i + r.getN
     } recover {
-      case _: Throwable =>
-        logger.error(s"Errors occurred when trying to remove records from '${getOriginCollectionName(originCollection)}'")
+      case t: Throwable =>
+        logger.error(s"Errors occurred when trying to remove records from '${getOriginCollectionName(originCollection)}'", t)
         i
     } getOrElse (i)
 
