@@ -102,7 +102,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def upgradeJournalIfNeeded(): Unit
 
-  private[mongodb] def upgradeJournalIfNeeded(suffix: String): Unit
+  private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit
 
   /**
    * retrieve suffix from persistenceId
@@ -139,8 +139,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * build name of a collection, index, etc...
-   * by appending separator and suffix to usual name in settings
+   * build name of a collection by appending separator and suffix to usual name in settings
    */
   private[this] def appendSuffixToName(nameInSettings: String)(suffix: String): String = {
     val name =
@@ -156,13 +155,19 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * Convenient methods to retrieve journal name from persistenceId
    */
   private[mongodb] def getJournalCollectionName(persistenceId: String): String =
-    appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
+    persistenceId match {
+      case "" => journalCollectionName
+      case _  => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
+    }
 
   /**
    * Convenient methods to retrieve snapshot name from persistenceId
    */
   private[mongodb] def getSnapsCollectionName(persistenceId: String): String =
-    appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
+    persistenceId match {
+      case "" => snapsCollectionName
+      case _  => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
+    }
 
   /**
    * Convenient methods to retrieve EXISTING journal collection from persistenceId.
@@ -188,6 +193,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       upgradeJournalIfNeeded(persistenceId)
       logger.debug("Journal automatic upgrade process has completed")
     }
+
     val journalCollection = collection(getJournalCollectionName(persistenceId))
 
     indexes.foldLeft(journalCollection) { (acc, index) =>
@@ -200,7 +206,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def snaps(persistenceId: String): C = {
     val snapsCollection = collection(getSnapsCollectionName(persistenceId))
-    ensureIndex(snapsIndexName , unique = true, sparse = false,
+    ensureIndex(snapsIndexName, unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
       TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
@@ -219,7 +225,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)
   }
 
-  // useful in batchAppend methods in each driver
+  // useful in some methods in each driver
   def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined && !suffixBuilderClassOption.get.trim.isEmpty
 
   def databaseName = settings.Database

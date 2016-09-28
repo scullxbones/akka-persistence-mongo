@@ -91,8 +91,18 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
     )
   )
 
+lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
+  .dependsOn(`akka-persistence-mongo-casbah` % "test->test;compile->compile")
+  //.dependsOn(`akka-persistence-mongo-casbah` % "compile->compile")
+  .settings(commonSettings:_*)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.mongodb" %% "casbah" % "3.1.0" % "provided"
+    )
+  )
+  
 lazy val root = (project in file("."))
-  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`)
+  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-tools`)
   .settings(commonSettings:_*)
   .settings(
     packagedArtifacts in file(".") := Map.empty,
