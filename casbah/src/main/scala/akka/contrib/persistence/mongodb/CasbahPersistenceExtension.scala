@@ -126,13 +126,13 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     }
   }
 
-   private[mongodb] def getCollections(collectionName: String): List[C] = {
-    db.collectionNames().filter(_.startsWith(collectionName)).map(collection(_)).toList    
+  private[mongodb] def getCollections(collectionName: String): List[C] = {
+    db.collectionNames().filter(_.startsWith(collectionName)).map(collection(_)).toList
   }
 
-   private[mongodb] def getJournalCollections(): List[C] = getCollections(journalCollectionName)
-   
-   private[mongodb] def getSnapshotCollections(): List[C] = getCollections(snapsCollectionName)
+  private[mongodb] def getJournalCollections(): List[C] = getCollections(journalCollectionName)
+
+  private[mongodb] def getSnapshotCollections(): List[C] = getCollections(snapsCollectionName)
 
 }
 

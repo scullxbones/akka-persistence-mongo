@@ -81,8 +81,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       val fZero = Future[ISeq[Try[Unit]]] { ISeq.empty[Try[Unit]] }
 
       // this should guarantee that futures are performed sequentially...
-      writes.groupBy(_.persistenceId).toList // list of tuples (persistenceId: String, writeSeq: Seq[AtomicWrite])
-        .foldLeft(fZero) { (future, tuple) => future.flatMap { _ => doBatchAppend(tuple._2, driver.journal(tuple._1)) } }
+      writes.groupBy(write => driver.getJournalCollectionName(write.persistenceId))
+        .foldLeft(fZero) { (future, tuple) => future.flatMap { _ => doBatchAppend(tuple._2, driver.journal(tuple._2.head.persistenceId)) } }
 
     } else {
       doBatchAppend(writes, journal)

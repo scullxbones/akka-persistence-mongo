@@ -31,12 +31,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   override def afterAll() = cleanup()
 
   before {
-    //"akka_persistence_realtime" :: "akka_persistence_journal" :: Nil foreach (mongoClient.getDatabase(embedDB).getCollection(_).drop())
     val collIterator = mongoClient.getDatabase(embedDB).listCollectionNames().iterator()
     while (collIterator.hasNext()) {
       val name = collIterator.next
       if (name.startsWith("akka_persistence_journal") || name.startsWith("akka_persistence_realtime"))
-      mongoClient.getDatabase(embedDB).getCollection(name).drop()
+        mongoClient.getDatabase(embedDB).getCollection(name).drop()
     }
   }
 
@@ -59,6 +58,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     |}
     $extendedConfig
     |""".stripMargin).withFallback(ConfigFactory.defaultReference())
+
+  def suffixCollNamesEnabled = config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") != null &&
+    !config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").toString.trim.isEmpty
 
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
 
@@ -170,6 +172,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   it should "support the current persistence ids query with more than 16MB of ids" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
+      assume(!suffixCollNamesEnabled) // no suffixed collection here, as this test uses a hard coded journal name
       import concurrent.duration._
 
       implicit val system = as
