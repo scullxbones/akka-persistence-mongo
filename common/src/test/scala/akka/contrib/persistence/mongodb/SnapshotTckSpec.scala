@@ -29,9 +29,9 @@ object SnapshotTckSpec extends ContainerMongo {
 abstract class SnapshotTckSpec(extensionClass: Class[_], dbName: String, extendedConfig: String = "|")
   extends SnapshotStoreSpec(SnapshotTckSpec.config(extensionClass,dbName,extendedConfig)) with BeforeAndAfterAll {
 
-  override def afterAll() = {
+  override def beforeAll() = {
     SnapshotTckSpec.cleanup(dbName)
-    super.afterAll()
+    super.beforeAll()
   }
 
 }

@@ -8,19 +8,19 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.Props
 import akka.persistence.PersistentActor
-import akka.persistence.query.{ EventEnvelope, PersistenceQuery }
-import akka.stream.scaladsl.{ GraphDSL, Merge, RunnableGraph, Sink }
-import akka.stream.{ ActorMaterializer, ClosedShape }
+import akka.persistence.query.{EventEnvelope, PersistenceQuery}
+import akka.stream.scaladsl.{GraphDSL, Merge, RunnableGraph, Sink}
+import akka.stream.{ActorMaterializer, ClosedShape}
 import akka.testkit._
-import com.mongodb.client.model.{ BulkWriteOptions, InsertOneModel }
+import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.ConfigFactory
 import org.bson.Document
 import org.scalatest.concurrent.Eventually
-import org.scalatest.time._
-import org.scalatest.{ BeforeAndAfter, BeforeAndAfterAll }
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import scala.concurrent.{ Await, Future, Promise }
+import scala.concurrent.{Await, Future, Promise}
 import scala.util.Random
+import scala.collection.JavaConverters._
 
 abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
@@ -32,7 +32,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   before {
     val collIterator = mongoClient.getDatabase(embedDB).listCollectionNames().iterator()
-    while (collIterator.hasNext()) {
+    while (collIterator.hasNext) {
       val name = collIterator.next
       if (name.startsWith("akka_persistence_journal") || name.startsWith("akka_persistence_realtime"))
         mongoClient.getDatabase(embedDB).getCollection(name).drop()
@@ -60,7 +60,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
   def suffixCollNamesEnabled = config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") != null &&
-    !config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").toString.trim.isEmpty
+    !config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").trim.isEmpty
 
   def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
 
@@ -162,6 +162,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
       count shouldBe 5
 
+      mongoClient.getDatabase(embedDB).listCollectionNames().asScala.foreach(cn => println(s"........... @@@@@@ |||| $cn"))
+
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
@@ -176,6 +178,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       import concurrent.duration._
 
       implicit val system = as
+
+      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+
       implicit val ec = as.dispatcher
       implicit val mat = ActorMaterializer()
 
@@ -186,8 +191,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       PID_SIZE * EVENT_COUNT shouldBe >(16 * 1024 * 1024)
 
       def pidGen = (0 to PID_SIZE).map(_ => alphabet.charAt(Random.nextInt(alphabet.length))).mkString
-
-      import collection.JavaConverters._
 
       val journalCollection = mongoClient.getDatabase(embedDB).getCollection("akka_persistence_journal")
       Stream.from(1).takeWhile(_ <= EVENT_COUNT).map { i =>
@@ -204,6 +207,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       mongoClient.getDatabase(embedDB).getCollection("akka_persistence_journal").count() shouldBe EVENT_COUNT
 
+      mongoClient.getDatabase(embedDB).listCollectionNames().asScala.foreach(cn => println(s"........... @@@@@@ |||| $cn"))
+
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
@@ -213,7 +218,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       eventually {
         mongoClient.getDatabase(embedDB).listCollectionNames()
           .into(new java.util.HashSet[String]()).asScala.filter(_.startsWith("persistenceids-")) should have size 0L
-      }(PatienceConfig(timeout = Span(5L, Seconds), interval = Span(500L, Millis)))
+      }
   }
 
   it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -370,7 +375,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       implicit val ec = as.dispatcher
 
-      val done = Future.sequence(promises.toSeq.map(_._1.future))
+      val done = Future.sequence(promises.map(_._1.future))
       Await.result(done, 1.minute.dilated)
 
       probe.receiveN(nrOfActors * nrOfEvents, 1.seconds.dilated)
