@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.3.1
+* PR [#122](https://github.com/scullxbones/akka-persistence-mongo/pull/122)
+ * Build migration tool for suffixed collections.  Thanks @JeanFrancoisGuena! 
+
 ### 1.3.0
 * Issue [#39](https://github.com/scullxbones/akka-persistence-mongo/issues/39)
   * Support for mapping persistenceId to different collections by suffix
