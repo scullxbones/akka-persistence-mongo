@@ -8,6 +8,15 @@ package akka.contrib.persistence.mongodb
 
 class SuffixCollectionNamesTest extends CanSuffixCollectionNames {
   override def getSuffixFromPersistenceId(persistenceId: String): String = s"$persistenceId-test"  
+
+  override def validateMongoCharacters(input: String): String = {
+    // According to mongoDB documentation,
+    // forbidden characters in mongoDB collection names (Unix) are /\. "$
+    // Forbidden characters in mongoDB collection names (Windows) are /\. "$*<>:|?    
+    val forbidden = List('/', '\\', '.', ' ', '\"', '$', '*', '<', '>', ':', '|', '?')
+
+    input.map { c => if (forbidden.contains(c)) '_' else c }
+  }
 }
 
 object SuffixCollectionNamesTest {
