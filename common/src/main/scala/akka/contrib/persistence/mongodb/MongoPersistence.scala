@@ -128,7 +128,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
       val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
       builderIns.validateMongoCharacters(input)
     }
-    case _ => ""
+    case _ => input
   }
 
   /**
