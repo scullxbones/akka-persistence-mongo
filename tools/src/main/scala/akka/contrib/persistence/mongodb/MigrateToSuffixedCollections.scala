@@ -68,6 +68,7 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       case c: MongoCollection if (c == journal) => (makeJournal, getJournalCollectionName(_), journalWriteConcern, "journals")
       case c: MongoCollection if (c == snaps)   => (makeSnaps, getSnapsCollectionName(_), snapsWriteConcern, "snapshots")
     }
+    val originCollectionName = getOriginCollectionName(originCollection)
 
     // create a temporary collection
     val temporaryCollectionName = s"migration2suffix-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
@@ -84,12 +85,20 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
     if (temporaryCollection.count() > 0) {
       val totalCount = originCollection.count()
       // we group by future suffixed collection name, foldLeft methods are only here for counting
-      val (totalOk, totalIgnored) = temporaryCollection.find().toSeq.groupBy(tempDbObject => getNewCollectionName(tempDbObject.get("_id").toString)).foldLeft(0L, 0L) {
+      val (totalOk, totalIgnored) = temporaryCollection.find().toSeq.groupBy { tempDbObject =>
+        tempDbObject.getAs[String]("_id") match {
+          case Some(pid) if (pid != null) => getNewCollectionName(pid)
+          case _                          => originCollectionName
+        }
+      }.foldLeft(0L, 0L) {
         case ((done, ignored), (newCollectionName, tempDbObjects)) => {
           // we create suffixed collection
-          val newCollection = makeNewCollection(tempDbObjects.head.get("_id").toString)
+          val newCollection = tempDbObjects.head.getAs[String]("_id") match {
+            case Some(pid) if (pid != null) => makeNewCollection(pid)
+            case _                          => originCollection
+          }
           // we check new suffixed collection is not origin unique collection
-          if (!newCollectionName.equals(getOriginCollectionName(originCollection))) {
+          if (!newCollectionName.equals(originCollectionName)) {
             // ok, we migrate records
             val migrated = migrateRecords(tempDbObjects, originCollection, newCollection, newCollectionName, writeConcern)
             (done + migrated, ignored)
@@ -103,11 +112,11 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
       // logging...
       logger.info(s"${summaryTitle.toUpperCase}: $totalOk/$totalCount records were successfully transfered to suffixed collections")
       if (totalIgnored > 0) {
-        logger.info(s"${summaryTitle.toUpperCase}: $totalIgnored/$totalCount records were ignored and remain in '${getOriginCollectionName(originCollection)}'")
+        logger.info(s"${summaryTitle.toUpperCase}: $totalIgnored/$totalCount records were ignored and remain in '$originCollectionName'")
         if (totalIgnored + totalOk == totalCount)
           logger.info(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored = $totalCount, all records were successfully handled")
         else
-          logger.warn(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored does NOT equal $totalCount, check remaining records  in '${getOriginCollectionName(originCollection)}'")
+          logger.warn(s"${summaryTitle.toUpperCase}: $totalOk + $totalIgnored does NOT equal $totalCount, check ${totalCount - totalOk - totalIgnored} remaining records  in '$originCollectionName'")
       }
     }
 
@@ -190,7 +199,10 @@ class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends 
   /**
    * Convenient method to generate a simple query widely used in this class
    */
-  private[this] def pidQuery(dbo: DBObject) = (PROCESSOR_ID $eq dbo.get("_id").toString)
+  private[this] def pidQuery(dbo: DBObject) =  dbo.getAs[String]("_id") match {
+    case Some(pid) if (pid != null) => (PROCESSOR_ID $eq pid)
+    case _ => (PROCESSOR_ID $eq Nil)
+  }
 
   /**
    * Convenient method to retrieve origin collection name
