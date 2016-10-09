@@ -1,5 +1,9 @@
 ## Changelog for 1.x major version
 
+### 1.3.2
+* PR [#124](https://github.com/scullxbones/akka-persistence-mongo/pull/124)
+ * Refinements to suffixed collection migration tool.  Thanks @JeanFrancoisGuena! 
+
 ### 1.3.1
 * PR [#122](https://github.com/scullxbones/akka-persistence-mongo/pull/122)
  * Build migration tool for suffixed collections.  Thanks @JeanFrancoisGuena! 
