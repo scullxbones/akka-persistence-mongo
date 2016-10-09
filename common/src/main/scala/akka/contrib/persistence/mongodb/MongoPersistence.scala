@@ -53,6 +53,7 @@ trait CanDeserializeJournal[D] {
 
 trait CanSuffixCollectionNames {
   def getSuffixFromPersistenceId(persistenceId: String): String
+  def validateMongoCharacters(input: String): String
 }
 
 trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJournal[D]
@@ -118,24 +119,25 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
+   * validate characters in collection name
+   */
+  private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
+    case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
+      val builderClass = Class.forName(suffixBuilderClass)
+      val builderCons = builderClass.getConstructor()
+      val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
+      builderIns.validateMongoCharacters(input)
+    }
+    case _ => input
+  }
+
+  /**
    * retrieve collection from persistenceId
    */
   private[this] def getSuffixedCollection(persistenceId: String)(build: String => String): C = {
     val name = build(getSuffixFromPersistenceId(persistenceId))
     logger.debug(s"Name used to build collection is $name")
     collection(name)
-  }
-
-  /**
-   * validate collection name by replacing each mongoDB forbidden characters by underscore character
-   */
-  private[this] def validateMongoCharacters(str: String): String = {
-    // According to mongoDB documentation,
-    // forbidden characters in mongoDB collection names (Unix) are /\. "$
-    // Forbidden characters in mongoDB collection names (Windows) are /\. "$*<>:|?    
-    val forbidden = List('/', '\\', '.', ' ', '\"', '$', '*', '<', '>', ':', '|', '?')
-
-    str.map { c => if (forbidden.contains(c)) '_' else c }
   }
 
   /**

@@ -410,10 +410,13 @@ As described in issue [#39](https://github.com/scullxbones/akka-persistence-mong
 
 The main idea here is to create as many journal and snapshot collections as needed, which names are built from default (or [configured](#mongocollection)) names, *suffixed* by a separator, followed by some information "picked" from `persistenceId`.
 
-Additionally, we provide a trait called `CanSuffixCollectionNames` that should be extended / mixed in some class, leading to override a function allowing to "pick" relevant information from `persistenceId`:
+Additionally, we provide a trait called `CanSuffixCollectionNames` that should be extended / mixed in some class, leading to override:
+* a `getSuffixfromPersistenceId` function allowing to "pick" relevant information from `persistenceId`
+* a `validateMongoCharacters` function allowing to replace any [MongoDB forbidden character](https://docs.mongodb.com/manual/reference/limits/#naming-restrictions) (including the separator)
 
 ```scala 
 def getSuffixfromPersistenceId(persistenceId: String): String
+def validateMongoCharacters(input: String): String
 ```
 
 For example, say that:
@@ -437,9 +440,9 @@ akka.contrib.persistence.mongodb.mongo.suffix-builder.separator = "_"
 akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "com.mycompany.myproject.SuffixCollectionNames"
 ```
 
-Nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method returns an empty string.
+Nothing happens as long as you do not provide a class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait, nor if its `getSuffixfromPersistenceId` method **always** returns an empty string.
 
-First line defines a separator as a `String`, but only its first character will be used as a separator (keep in mind that mongoDB does not allow collection names longer than 64 characters) By default, this property is set to an underscore character "_".
+First line defines a separator as a `String`, but only its first character will be used as a separator (keep in mind that mongoDB collection names are limited in size) By default, this property is set to an underscore character "_".
 
 Second line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below).
 
@@ -459,10 +462,25 @@ class SuffixCollectionNames extends CanSuffixCollectionNames {
       // otherwise, we do not suffix our collection
       case _ => ""
     }
+  
+  override def validateMongoCharacters(input: String): String = {
+    // According to mongoDB documentation,
+    // forbidden characters in mongoDB collection names (Unix) are /\. "$
+    // Forbidden characters in mongoDB collection names (Windows) are /\. "$*<>:|? 
+    // in this example, we replace each forbidden character with an underscore character   
+    val forbidden = List('/', '\\', '.', ' ', '\"', '$', '*', '<', '>', ':', '|', '?')
+
+    input.map { c => if (forbidden.contains(c)) '_' else c }
+  }
 }
 ```
 
 Remember that **always** returning an empty `String` will *not* suffix any collection name, even if some separator is defined in the configuration file.
+
+##### Important note:
+Keep in mind, while designing `getSuffixfromPersistenceId` and `validateMongoCharacters` methods, that there are [limitations regarding collection names in MongoDB](https://docs.mongodb.com/manual/reference/limits/#naming-restrictions). It is the responsability of the developer to ensure that his `getSuffixfromPersistenceId` and `validateMongoCharacters` methods take these constraints into account.
+
+**Pay particularly attention to collection and index name length**. For example, with default database, journals, snapshots and their respective indexes names, your suffix, obtained through `getSuffixfromPersistenceId` and `validateMongoCharacters` methods, should not exceed 53 characters long.
 
 <a name="suffixdetail"/>
 #### Details
@@ -507,10 +525,10 @@ From now on, we refer to unique journal as "akka_persistence_journal" and unique
 
 First of all, **backup your database and stop your application**.
 
-Using the *suffixed collection names* migration tool is a matter of configuration and a little code writing, and the first thing you should do is enable the *suffixed collection names* feature as explained in [*suffixed collection names* usage](#suffixusage). From now on, we consider that you have provided appropriate properties in your `application.conf` file and written your `getSuffixfromPersistenceId` method that do not **always** return an empty string (if it does, nothing will be migrated)
+Using the *suffixed collection names* migration tool is a matter of configuration and a little code writing, and the first thing you should do is enable the *suffixed collection names* feature as explained in [*suffixed collection names* usage](#suffixusage). From now on, we consider that you have provided appropriate properties in your `application.conf` file and written your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods that do not **always** return an empty string (if they do, nothing will be migrated)
 
 ###### Important note
-Design your `getSuffixfromPersistenceId` method **carefully**, as this migration process **does not work** from suffixed collections depending on some `getSuffixfromPersistenceId` method to *new* suffixed collections depending on some *modified* `getSuffixfromPersistenceId` method !
+Design your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods **carefully**, as this migration process **does not work** from suffixed collections depending on some `getSuffixfromPersistenceId` and `validateMongoCharacters` methods to *new* suffixed collections depending on some *modified* `getSuffixfromPersistenceId` and `validateMongoCharacters` methods !
 
 Of course, once this is done, you should **not** start your application, unless you want to run some tests on some dummy database !
 
@@ -589,12 +607,12 @@ This may take a while...
 2016-09-23_15:45:25.936  INFO - METADATA: 106/106 records were successfully removed from akka_persistence_metadata collection
 2016-09-23_15:45:25.974  INFO - Automatic migration to collections with suffixed names has completed
 ```
-Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` method sometimes returns an empty string. In that case, an information regarding these records is printed in the console above, and a warning is also printed if *migrated* + *ignored* records does not equal *total* records.
+Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods sometimes return an empty string. In that case, an information regarding these records is printed in the console above, and a warning is also printed if *migrated* + *ignored* records does not equal *total* records.
 
 Notice that unique collections "akka_persistence_journal" and "akka_persistence_snapshot" remain in the database, even if empty. You should remove them if you want, using mongo shell...
 
 ###### What's next ?
-**Keep *suffixed collection names* feature enabled** as explained in [*suffixed collection names* usage](#suffixusage), and of course, **do not modify** your `getSuffixfromPersistenceId` method.
+**Keep *suffixed collection names* feature enabled** as explained in [*suffixed collection names* usage](#suffixusage), and of course, **do not modify** your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods.
 
 Keep your database safe, **avoid running again the migration process**, so:
 * remove migration code (in our example, we remove our `Migrate` object)
