@@ -8,4 +8,4 @@ package akka.contrib.persistence.mongodb
 
 class CasbahJournalLoadSpec extends JournalLoadSpec(classOf[CasbahPersistenceExtension],"casbah")
 
-class CasbahSuffixJournalLoadSpec extends JournalLoadSpec(classOf[CasbahPersistenceExtension],"casbah", SuffixCollectionNamesTest.extendedConfig)
+//class CasbahSuffixJournalLoadSpec extends JournalLoadSpec(classOf[CasbahPersistenceExtension],"casbah", SuffixCollectionNamesTest.extendedConfig)

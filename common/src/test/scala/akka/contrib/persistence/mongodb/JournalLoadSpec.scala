@@ -9,6 +9,7 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor._
+import akka.testkit._
 import akka.persistence.PersistentActor
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -133,7 +134,8 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
   "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
-    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds)
+    implicit val system = as
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
@@ -141,7 +143,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     val start = System.currentTimeMillis
     (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
 
-    val total = Try(Await.result(result.future, 60.seconds))
+    val total = Try(Await.result(result.future, 60.seconds.dilated))
 
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
@@ -164,13 +166,18 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
   }
 
   it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
+    implicit val system = as
     val start = System.currentTimeMillis
-    val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds)
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
 
-    val total = Try(Await.result(result.future, 60.seconds)).getOrElse(0L)
+    val total = Try(Await.result(result.future, 60.seconds.dilated)).recoverWith {
+      case t: Throwable =>
+        t.printStackTrace()
+        scala.util.Failure(t)
+    }.getOrElse(0L)
 
     val time = System.currentTimeMillis - start
 

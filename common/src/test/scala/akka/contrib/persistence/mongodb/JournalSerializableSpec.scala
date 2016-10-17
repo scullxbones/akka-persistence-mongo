@@ -80,7 +80,7 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
 
   "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
     implicit val system = as
-    val defaultPatience = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+    implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
     val pa = as.actorOf(OrderIdActor.props)
     pa ! Increment
@@ -89,16 +89,16 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
     pa ! Increment
     whenReady((pa ? Increment)(5.second.dilated)) {
       _ shouldBe 5
-    }(defaultPatience)
+    }
   }
 
   it should "support restoring serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
     implicit val system = as
-    val defaultPatience = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+    implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
     val pa = as.actorOf(OrderIdActor.props)
     whenReady((pa ? Get)(5.second.dilated)) {
       _ shouldBe 5
-    }(defaultPatience)
+    }
   }
 }

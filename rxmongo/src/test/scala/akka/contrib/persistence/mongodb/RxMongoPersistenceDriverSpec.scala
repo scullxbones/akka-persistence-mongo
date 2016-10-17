@@ -1,15 +1,15 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.contrib.persistence.mongodb.ConfigLoanFixture._
 import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
-import scala.concurrent._
-import duration._
-import ExecutionContext.Implicits.global
 
-import ConfigLoanFixture._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
+import scala.concurrent.duration._
 
 @RunWith(classOf[JUnitRunner])
 class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
@@ -27,7 +27,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMo
       """.stripMargin)
 
   class MockRxMongoPersistenceDriver(actorSystem:ActorSystem) extends RxMongoDriver(actorSystem, ConfigFactory.empty()) {
-    def showCollections = db.collectionNames
+    def showCollections = db.flatMap(_.collectionNames)
   }
 
 
@@ -73,7 +73,7 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo 
 
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"akka-contrib-mongodb-persistence-journal","authentication-config") { case (actorSystem, config) =>
     val underTest = new RxMongoDriver(actorSystem, config)
-    val collections = Await.result(underTest.db.collectionNames,3.seconds)
+    val collections = Await.result(underTest.db.flatMap(_.collectionNames),3.seconds)
     collections should contain ("system.users")
     ()
   }

@@ -4,7 +4,7 @@ val scalaV = "2.11.7"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.4.7"
+val AkkaV = "2.4.10"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
@@ -19,15 +19,13 @@ val commonDeps = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.5"     % "test",
-  "org.scalatest"             %% "scalatest"                % "2.1.7"   % "test",
+  "org.scalatest"             %% "scalatest"                % "2.2.6"   % "test",
   "junit"                     % "junit"                     % "4.11"    % "test",
   "org.mockito"               % "mockito-all"               % "1.9.5"   % "test",
-  "de.flapdoodle.embed"       % "de.flapdoodle.embed.mongo" % "1.50.2"  % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % AkkaV     % "test",
   "com.typesafe.akka"         %% "akka-testkit"             % AkkaV     % "test",
   "com.typesafe.akka"         %% "akka-persistence-tck"     % AkkaV     % "test",
-  "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test",
-  "com.typesafe.scala-logging"  %% "scala-logging"  % "3.1.0"     % "test"
+  "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test"
 )
 
 val commonSettings = Seq(
@@ -86,7 +84,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.11.9" % "provided")
+      ("org.reactivemongo" %% "reactivemongo" % "0.11.14" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
     )
   )
@@ -101,7 +99,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
     )
   )
   
-lazy val root = (project in file("."))
+lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-tools`)
   .settings(commonSettings:_*)
   .settings(

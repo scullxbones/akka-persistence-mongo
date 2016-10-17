@@ -9,14 +9,14 @@ package akka.contrib.persistence.mongodb
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.stream.actor.ActorPublisher
-import akka.{ Done => ADone }
+import akka.{Done => ADone}
 import play.api.libs.iteratee._
 import reactivemongo.api.QueryOpts
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson._
 
-import scala.concurrent.{ ExecutionContext, Future }
-import scala.util.Random
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Random, Success}
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
@@ -143,32 +143,43 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   import context.dispatcher
   import reactivemongo.bson._
 
-  val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
-  val temporaryCollection = driver.collection(temporaryCollectionName)
+  val temporaryCollectionName = {
+    val name = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+    println(s"\n~~~~~~~~ >>>>> Using temporary collection name $name\n")
+    name
+  }
+  def temporaryCollection = driver.collection(temporaryCollectionName)
+
+  override def postStop() = {
+    driver.db.flatMap(_.collectionNames).andThen {
+      case Success(names) if names.contains(temporaryCollectionName) =>
+        cleanup()
+    }
+    ()
+  }
 
   override def cleanup() = {
-    import reactivemongo.api.commands.bson.DefaultBSONCommandError
-    temporaryCollection.drop().recover {
-      // we ignore the "ns not found" error which is NOT filtered out by ReactiveMongo when trying to drop a non existing collection
-      // see https://github.com/ReactiveMongo/ReactiveMongo/issues/205
-      case commandError: DefaultBSONCommandError if commandError.errmsg.contains("ns not found") => ()
-    }.map(_ => ADone)
+    for {
+      tc <- temporaryCollection
+      dropped  <- tc.drop(failIfNotFound = false)
+    } yield {
+      println(s"\n!!!!!!!!!! --------- >>>>>>>>> Attempt to drop $temporaryCollectionName succeeded = $dropped\n")
+      ADone
+    }
   }
 
   private val flattened = Enumeratee.mapConcat[BSONDocument](_.getAs[String]("_id").toSeq)
 
-  import driver.journal.BatchCommands.AggregationFramework.{ Group, Out, Project }
   private val flattenCollection: Enumeratee[BSONCollection, BSONDocument] = Enumeratee.mapFlatten[BSONCollection] { journal =>
+    import journal.BatchCommands.AggregationFramework.{ Group, Out, Project }
+
     val enumerator = for {
       _ <- journal.aggregate(Project(BSONDocument(PROCESSOR_ID -> 1)),
         List(
           Group(BSONString(s"$$$PROCESSOR_ID"))(),
           Out(temporaryCollectionName)))
-      results <- Future.successful(temporaryCollection
-        .find(BSONDocument())
-        .cursor[BSONDocument]()
-        .enumerate())
-    } yield results
+      tc <- temporaryCollection
+    } yield tc.find(BSONDocument()).cursor[BSONDocument]().enumerate()
 
     Enumerator.flatten(enumerator)
   }
@@ -202,7 +213,7 @@ class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: Str
     e.sn >= fromSeq && e.sn <= toSeq
   }
 
-  override def initial = {
+  override def initial = Enumerator.flatten {
 
     val q = BSONDocument(
       PROCESSOR_ID -> persistenceId,
@@ -210,13 +221,13 @@ class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: Str
       FROM -> BSONDocument("$lte" -> toSeq))
 
     driver.getJournal(persistenceId)
-      .find(q)
-      .sort(BSONDocument(TO -> 1))
-      .projection(BSONDocument(EVENTS -> 1))
-      .cursor[BSONDocument]()
-      .enumerate()
-      .through(flatten)
-      .through(filter)
+      .map(_.find(q)
+            .sort(BSONDocument(TO -> 1))
+            .projection(BSONDocument(EVENTS -> 1))
+            .cursor[BSONDocument]()
+            .enumerate()
+            .through(flatten)
+            .through(filter))
   }
 }
 
@@ -225,7 +236,15 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerat
 
   implicit val ec = driver.querySideDispatcher
 
-  override def cursor() = driver.realtime.find(BSONDocument.empty).options(QueryOpts().tailable.awaitData).cursor[BSONDocument]().enumerate()
+  override def cursor() =
+    Enumerator.flatten(
+      driver.realtime.map(rt =>
+        rt.find(BSONDocument.empty)
+          .options(QueryOpts().tailable.awaitData)
+          .cursor[BSONDocument]()
+          .enumerate()
+      )
+    )
 
   private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
     Enumerator(

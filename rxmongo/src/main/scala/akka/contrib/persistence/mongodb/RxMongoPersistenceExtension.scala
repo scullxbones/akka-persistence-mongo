@@ -9,19 +9,20 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
-import com.typesafe.config.{ Config, ConfigFactory }  
+import akka.util.Timeout
+import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee._
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands._
-import reactivemongo.api.indexes.{ Index, IndexType }
+import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
-import scala.concurrent.duration.{ Duration, FiniteDuration }
-import scala.concurrent.{ Awaitable, ExecutionContext, Future, Promise }
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.language.implicitConversions
-import scala.util.{ Failure, Success }
+import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
   import MongoPersistenceDriver._
@@ -49,7 +50,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   import concurrent.duration._
 
   // Collection type
-  type C = BSONCollection
+  type C = Future[BSONCollection]
 
   type D = BSONDocument
 
@@ -83,7 +84,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
-  def walk(collection: BSONCollection)(previous: Seq[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Future[Seq[WriteResult]] = {
+  def walk(collection: Future[BSONCollection])(previous: Seq[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Future[Seq[WriteResult]] = {
     import DefaultBSONHandlers._
     import Producer._
     import RxMongoSerializers._
@@ -95,9 +96,9 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     val q = BSONDocument("_id" -> id)
 
     val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))
-    val results = collection.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
+    val results = collection.flatMap(_.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
       previous :+ wr
-    }
+    })
     results.onComplete {
       case Success(s) => logger.debug(s"update completed ... ${s.size - 1} so far")
       case Failure(t) => logger.error(s"update failure", t)
@@ -123,29 +124,30 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     def traverse(count: Int): Future[Seq[WriteResult]] = {
       logger.info(s"Journal automatic upgrade found $count records needing upgrade")
       if (count > 0) {
-        j.find(q)
-          .cursor[BSONDocument]()
-          .enumerate()
-          .run(Iteratee.foldM(empty)(walker))
+        j.flatMap(_.find(q)
+                    .cursor[BSONDocument]()
+                    .enumerate()
+                    .run(Iteratee.foldM(empty)(walker)))
       } else Future.successful(empty)
     }
 
     val eventuallyUpgrade = for {
-      _ <- j.remove(BSONDocument(PROCESSOR_ID -> BSONRegex("^/user/sharding/[^/]+Coordinator/singleton/coordinator", "")))
+      journal <- j
+      _ <- journal.remove(BSONDocument(PROCESSOR_ID -> BSONRegex("^/user/sharding/[^/]+Coordinator/singleton/coordinator", "")))
         .map(wr => logger.info(s"Successfully removed ${wr.n} legacy cluster sharding records"))
         .recover { case t => logger.error(s"Error while removing legacy cluster sharding records", t) }
-      indices <- j.indexesManager.list()
+      indices <- journal.indexesManager.list()
       _ <- indices
         .find(_.key.sortBy(_._1) == Seq(DELETED -> IndexType.Ascending, PROCESSOR_ID -> IndexType.Ascending, SEQUENCE_NUMBER -> IndexType.Ascending))
         .map(_.eventualName)
-        .map(n => j.indexesManager.drop(n).transform(
+        .map(n => journal.indexesManager.drop(n).transform(
           _ => logger.info("Successfully dropped legacy index"),
           { t =>
             logger.error("Error received while dropping legacy index", t)
             t
           }))
         .getOrElse(Future.successful(()))
-      count <- j.count(Option(q))
+      count <- journal.count(Option(q))
       wr <- traverse(count)
     } yield wr
 
@@ -170,7 +172,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     ()
   }
 
-  private[mongodb] def closeConnections(): Unit = driver.close()
+  private[mongodb] def closeConnections(): Unit = {
+    import system.dispatcher
+    implicit val to = Timeout(5.seconds)
+    val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
+    Await.ready(closed, to.duration + 1.second)
+  }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
   private[mongodb] def failoverStrategy: FailoverStrategy = {
@@ -180,42 +187,40 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
-  private[mongodb] def db: DefaultDB = connection(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
+  private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
-  private[mongodb] override def collection(name: String) = db[BSONCollection](name)
+  private[mongodb] override def collection(name: String) = db.map(_[BSONCollection](name))(system.dispatcher)
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
 
   private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { collection =>
     val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-    collection.indexesManager.ensure(new Index(
+    collection.flatMap(c => c.indexesManager.ensure(Index(
       key = ky,
       background = true,
       unique = unique,
       sparse = sparse,
-      name = Some(indexName)))
-    collection
+      name = Some(indexName))).map(_ => c))
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
-    val collection = db[BSONCollection](name)
-    collection.stats().flatMap {
-      case stats if !stats.capped =>
-        collection.convertToCapped(realtimeCollectionSize, None)
-    }.recoverWith {
-      case _ =>
-        collection.createCapped(realtimeCollectionSize, None)
+    collection(name).flatMap { cc =>
+      cc.stats().flatMap { s =>
+        if (!s.capped) cc.convertToCapped(realtimeCollectionSize, None)
+        else Future.successful(())
+      }.recoverWith {
+        case _ => cc.createCapped(realtimeCollectionSize, None)
+      }.map(_ => cc)
     }
-    collection
   }
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
     val fut = for {
-      names <- db.collectionNames
-      list = names.filter(_.startsWith(collectionName)).map(collection(_))
-      enumerator = Enumerator(list: _*)
-    } yield enumerator
+      database <- db
+      names <- database.collectionNames
+      list <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
+    } yield Enumerator(list: _*)
     Enumerator.flatten(fut)
   }
 
