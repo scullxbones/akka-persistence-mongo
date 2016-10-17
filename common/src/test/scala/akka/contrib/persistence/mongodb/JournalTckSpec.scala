@@ -32,8 +32,8 @@ abstract class JournalTckSpec(extensionClass: Class[_], dbName: String, extended
 
   override def supportsRejectingNonSerializableObjects = CapabilityFlag.on()
 
-  override def afterAll() = {
+  override def beforeAll() = {
     JournalTckSpec.cleanup(dbName)
-    super.afterAll()
+    super.beforeAll()
   }
 }

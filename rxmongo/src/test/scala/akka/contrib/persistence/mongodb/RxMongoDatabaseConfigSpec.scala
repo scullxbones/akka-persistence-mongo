@@ -4,6 +4,7 @@ import akka.contrib.persistence.mongodb.ConfigLoanFixture._
 import com.typesafe.config.ConfigFactory
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.junit.JUnitRunner
 
 /**
@@ -13,7 +14,7 @@ import org.scalatest.junit.JUnitRunner
   * @version 1.0
   */
 @RunWith(classOf[JUnitRunner])
-class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
+class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
   override def afterAll(): Unit = {
     cleanup()
@@ -30,7 +31,7 @@ class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with Be
 
   "Persistence store database config" should "be User-Specified-Database" in withConfig(config, "akka-contrib-mongodb-persistence-journal") { case (actorSystem, c) =>
     val underTest = new RxMongoDriver(actorSystem, c)
-    assertResult("User-Specified-Database")(underTest.db.name)
+    assertResult("User-Specified-Database")(underTest.db.futureValue.name)
     ()
   }
 }

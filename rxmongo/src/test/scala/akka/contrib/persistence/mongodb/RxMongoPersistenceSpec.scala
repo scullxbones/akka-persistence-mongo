@@ -8,10 +8,11 @@ package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
-import com.typesafe.config.{ ConfigFactory, ConfigValueFactory }
+import akka.testkit._
+import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.bson.BSONDocument
 import play.api.libs.iteratee._
+import reactivemongo.api.FailoverStrategy
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -49,24 +50,32 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   lazy val extendedSpecDb = extendedDriver.db
 
   def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
-    val collection = specDb[BSONCollection](name)
-    try {
-      testCode(collection)
-      ()
-    } finally {
-      Await.ready(collection.drop(), 3.seconds)
-      ()
+    for {
+      db <- specDb
+      c = db.apply[BSONCollection](name, FailoverStrategy.default)
+    } yield {
+      try {
+        testCode(c)
+        ()
+      } finally {
+        Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
+        ()
+      }
     }
   }
 
   def withSuffixedCollection(name: String)(testCode: BSONCollection => Any): Unit = {
-    val collection = extendedSpecDb[BSONCollection](name)
-    try {
-      testCode(collection)
-      ()
-    } finally {
-      Await.ready(collection.drop(), 3.seconds)
-      ()
+    for {
+      db <- extendedSpecDb
+      c = db[BSONCollection](name)
+    } yield {
+      try {
+        testCode(c)
+        ()
+      } finally {
+        Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
+        ()
+      }
     }
   }
 
@@ -75,7 +84,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       testCode(extendedDriver)
       ()
     } finally {
-      extendedDriver.getJournalCollections().through(Enumeratee.mapM(coll => coll.drop)).run(Iteratee.foreach { _ => () })
+      extendedDriver.getJournalCollections().through(Enumeratee.mapM(coll => coll.drop(failIfNotFound = false))).run(Iteratee.foreach { _ => () })
       ()
     }
   }
@@ -85,13 +94,13 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       testCode(extendedDriver)
       ()
     } finally {
-      extendedDriver.getSnapshotCollections().through(Enumeratee.mapM(coll => coll.drop)).run(Iteratee.foreach { _ => () })
+      extendedDriver.getSnapshotCollections().through(Enumeratee.mapM(coll => coll.drop(failIfNotFound = false))).run(Iteratee.foreach { _ => () })
       ()
     }
   }
 
   def withEmptyJournal(testCode: BSONCollection => Any) = withCollection(driver.journalCollectionName) { coll =>
-    Await.result(coll.remove(BSONDocument.empty), 3.seconds)
+    Await.result(coll.drop(failIfNotFound = false), 3.seconds.dilated)
     testCode(coll)
   }
 

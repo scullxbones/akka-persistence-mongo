@@ -1,10 +1,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.Matchers
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.FlatSpecLike
+import org.scalatest.mockito.MockitoSugar
 
 import scala.concurrent.Await
 import scala.util.Try
