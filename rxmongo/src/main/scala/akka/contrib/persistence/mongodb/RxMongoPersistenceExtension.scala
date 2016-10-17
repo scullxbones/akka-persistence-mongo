@@ -9,19 +9,20 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
-import com.typesafe.config.{ Config, ConfigFactory }
+import akka.util.Timeout
+import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee._
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands._
-import reactivemongo.api.indexes.{ Index, IndexType }
+import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
-import scala.concurrent.duration.{ Duration, FiniteDuration }
-import scala.concurrent.{ Awaitable, ExecutionContext, Future }
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.language.implicitConversions
-import scala.util.{ Failure, Success }
+import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
   import MongoPersistenceDriver._
@@ -171,7 +172,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     ()
   }
 
-  private[mongodb] def closeConnections(): Unit = driver.close(5.seconds)
+  private[mongodb] def closeConnections(): Unit = {
+    import system.dispatcher
+    implicit val to = Timeout(5.seconds)
+    val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
+    Await.ready(closed, to.duration + 1.second)
+  }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
   private[mongodb] def failoverStrategy: FailoverStrategy = {

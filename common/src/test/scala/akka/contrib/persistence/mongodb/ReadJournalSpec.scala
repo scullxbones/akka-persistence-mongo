@@ -162,8 +162,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
       count shouldBe 5
 
-      mongoClient.getDatabase(embedDB).listCollectionNames().asScala.foreach(cn => println(s"........... @@@@@@ |||| $cn"))
-
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
@@ -206,8 +204,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       }
 
       mongoClient.getDatabase(embedDB).getCollection("akka_persistence_journal").count() shouldBe EVENT_COUNT
-
-      mongoClient.getDatabase(embedDB).listCollectionNames().asScala.foreach(cn => println(s"........... @@@@@@ |||| $cn"))
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
