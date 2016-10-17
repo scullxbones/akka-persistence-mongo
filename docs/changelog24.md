@@ -1,8 +1,11 @@
 ## Changelog for 1.x major version
 
-### 1.3.3
+### 1.3.4
 * PR [#123](https://github.com/scullxbones/akka-persistence-mongo/pull/123)
   * Updates to support rxmongo `0.11.14`
+
+### 1.3.3
+* Screwed it up - no significant differences from `1.3.2`
 
 ### 1.3.2
 * PR [#124](https://github.com/scullxbones/akka-persistence-mongo/pull/124)
