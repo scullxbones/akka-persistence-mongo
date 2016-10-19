@@ -12,6 +12,7 @@ import play.api.libs.iteratee.{ Enumeratee, Enumerator, Iteratee }
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
+import reactivemongo.play.iteratees.cursorProducer
 
 import scala.collection.immutable.{ Seq => ISeq }
 import scala.concurrent._
@@ -45,7 +46,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       .sort(BSONDocument(TO -> 1))
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
-      .enumerate(maxDocs = max)
+      .enumerator(maxDocs = max)
       .flatMap(d => Enumerator(
         d.as[BSONArray](EVENTS).values.collect {
           case d: BSONDocument => driver.deserializeJournal(d)

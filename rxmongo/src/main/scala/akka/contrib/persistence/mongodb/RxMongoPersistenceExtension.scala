@@ -18,10 +18,11 @@ import reactivemongo.api.commands._
 import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
+import reactivemongo.play.iteratees.cursorProducer
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Awaitable, ExecutionContext, Future}
-import scala.language.implicitConversions
+//import scala.language.implicitConversions
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
@@ -126,7 +127,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       if (count > 0) {
         j.flatMap(_.find(q)
                     .cursor[BSONDocument]()
-                    .enumerate()
+                    .enumerator()
                     .run(Iteratee.foldM(empty)(walker)))
       } else Future.successful(empty)
     }
@@ -177,6 +178,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     implicit val to = Timeout(5.seconds)
     val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
     Await.ready(closed, to.duration + 1.second)
+    ()
   }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
@@ -220,7 +222,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       database <- db
       names <- database.collectionNames
       list <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
-    } yield Enumerator(list: _*)
+    } yield Enumerator(list: _*)    
     Enumerator.flatten(fut)
   }
 
