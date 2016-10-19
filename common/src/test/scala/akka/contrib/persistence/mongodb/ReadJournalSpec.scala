@@ -145,6 +145,46 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
   }
 
+  it should "support the current all events query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
+    case (as, _) =>
+      import concurrent.duration._
+      implicit val system = as
+      implicit val mat = ActorMaterializer()
+
+      val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
+      
+      val events = "this" :: "is" :: "just" :: "a" :: "test" :: Nil      
+      val allEvents = promises.map {case (id, _) => id -> events.map(event => s"$event$id")}
+      
+      allEvents foreach {case (id, evs) => 
+        promises collect {
+          case (i,p) if (i == id) =>
+            val ar = as.actorOf(props(i, p), s"current-all-events-$i")
+            evs map Append.apply foreach (ar ! _)
+            ar ! Append("END")
+        }
+      }
+
+      implicit val ec = as.dispatcher
+      val futures = promises.map { case (_, p) => p.future }
+      val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
+      count shouldBe 5
+
+      val readJournal =
+        PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+        
+      val expectedEvents = allEvents flatMap {case (_, evs) => evs}
+
+      val fut = readJournal.currentAllEvents().runFold(expectedEvents.toSet) { (received, ee) =>
+        val asAppend = ee.event.asInstanceOf[String]
+        if (!asAppend.equals("END"))
+          expectedEvents should contain(asAppend)
+        received - asAppend
+      }
+
+      Await.result(fut, 15.seconds.dilated).size shouldBe 0
+  }
+
   it should "support the current persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
