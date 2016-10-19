@@ -9,14 +9,15 @@ package akka.contrib.persistence.mongodb
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.stream.actor.ActorPublisher
-import akka.{Done => ADone}
+import akka.{ Done => ADone }
 import play.api.libs.iteratee._
 import reactivemongo.api.QueryOpts
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson._
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Random, Success}
+import scala.concurrent.{ ExecutionContext, Future }
+
+import reactivemongo.play.iteratees.cursorProducer
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
@@ -123,7 +124,8 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
     journal.find(BSONDocument())
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
-      .enumerate()
+      .enumerator()
+      .map(doc => doc) // this is needed for suffix collections
   }
 
   override def initial: Enumerator[Event] = {
@@ -143,52 +145,25 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   import context.dispatcher
   import reactivemongo.bson._
 
-  val temporaryCollectionName = {
-    val name = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
-    println(s"\n~~~~~~~~ >>>>> Using temporary collection name $name\n")
-    name
-  }
-  def temporaryCollection = driver.collection(temporaryCollectionName)
+  private val flattenCollection: Enumeratee[BSONCollection, String] = Enumeratee.mapFlatten[BSONCollection] { journal =>
 
-  override def postStop() = {
-    driver.db.flatMap(_.collectionNames).andThen {
-      case Success(names) if names.contains(temporaryCollectionName) =>
-        cleanup()
-    }
-    ()
-  }
+    var retrievedPids: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
 
-  override def cleanup() = {
-    for {
-      tc <- temporaryCollection
-      dropped  <- tc.drop(failIfNotFound = false)
-    } yield {
-      println(s"\n!!!!!!!!!! --------- >>>>>>>>> Attempt to drop $temporaryCollectionName succeeded = $dropped\n")
-      ADone
-    }
-  }
+    journal.find(BSONDocument())
+      .projection(BSONDocument(PROCESSOR_ID -> 1))
+      .cursor[BSONDocument]()
+      .enumerator()
+      .map(_.getAs[String](PROCESSOR_ID) match {
+        case Some(pid) if (pid != null && !pid.trim.isEmpty && !retrievedPids.contains(pid.trim)) =>
+          retrievedPids += pid.trim
+          pid
+      })
 
-  private val flattened = Enumeratee.mapConcat[BSONDocument](_.getAs[String]("_id").toSeq)
-
-  private val flattenCollection: Enumeratee[BSONCollection, BSONDocument] = Enumeratee.mapFlatten[BSONCollection] { journal =>
-    import journal.BatchCommands.AggregationFramework.{ Group, Out, Project }
-
-    val enumerator = for {
-      _ <- journal.aggregate(Project(BSONDocument(PROCESSOR_ID -> 1)),
-        List(
-          Group(BSONString(s"$$$PROCESSOR_ID"))(),
-          Out(temporaryCollectionName)))
-      tc <- temporaryCollection
-    } yield tc.find(BSONDocument()).cursor[BSONDocument]().enumerate()
-
-    Enumerator.flatten(enumerator)
   }
 
   override def initial: Enumerator[String] = {
-
     driver.getJournalCollections()
       .through(flattenCollection)
-      .through(flattened)
   }
 }
 
@@ -222,12 +197,12 @@ class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: Str
 
     driver.getJournal(persistenceId)
       .map(_.find(q)
-            .sort(BSONDocument(TO -> 1))
-            .projection(BSONDocument(EVENTS -> 1))
-            .cursor[BSONDocument]()
-            .enumerate()
-            .through(flatten)
-            .through(filter))
+        .sort(BSONDocument(TO -> 1))
+        .projection(BSONDocument(EVENTS -> 1))
+        .cursor[BSONDocument]()
+        .enumerator()
+        .through(flatten)
+        .through(filter))
   }
 }
 
@@ -242,9 +217,8 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerat
         rt.find(BSONDocument.empty)
           .options(QueryOpts().tailable.awaitData)
           .cursor[BSONDocument]()
-          .enumerate()
-      )
-    )
+          .enumerator()
+          ))
 
   private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
     Enumerator(
