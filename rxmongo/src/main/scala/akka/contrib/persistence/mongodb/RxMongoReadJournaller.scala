@@ -18,6 +18,9 @@ import reactivemongo.bson._
 import scala.concurrent.{ ExecutionContext, Future }
 
 import reactivemongo.play.iteratees.cursorProducer
+import scala.util.Success
+import scala.util.Random
+
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
@@ -145,25 +148,52 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   import context.dispatcher
   import reactivemongo.bson._
 
-  private val flattenCollection: Enumeratee[BSONCollection, String] = Enumeratee.mapFlatten[BSONCollection] { journal =>
+    val temporaryCollectionName = {
+    val name = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+    name
+  }
+  def temporaryCollection = driver.collection(temporaryCollectionName)
 
-    var retrievedPids: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
+  override def postStop() = {
+    driver.db.flatMap(_.collectionNames).andThen {
+      case Success(names) if names.contains(temporaryCollectionName) =>
+        cleanup()
+    }
+    ()
+  }
 
-    journal.find(BSONDocument())
-      .projection(BSONDocument(PROCESSOR_ID -> 1))
-      .cursor[BSONDocument]()
-      .enumerator()
-      .map(_.getAs[String](PROCESSOR_ID) match {
-        case Some(pid) if (pid != null && !pid.trim.isEmpty && !retrievedPids.contains(pid.trim)) =>
-          retrievedPids += pid.trim
-          pid
-      })
+  override def cleanup() = {
+    for {
+      tc <- temporaryCollection
+      dropped  <- tc.drop(failIfNotFound = false)
+    } yield {
+      ADone
+    }
+  }
 
+  private val flattened = Enumeratee.mapConcat[BSONDocument](_.getAs[String]("_id").toSeq)
+
+  private val flattenCollection: Enumeratee[BSONCollection, BSONDocument] = Enumeratee.mapFlatten[BSONCollection] { journal =>
+    import journal.BatchCommands.AggregationFramework.{ Group, Out, Project }
+
+    val enumerator = for {
+      _ <- journal.aggregate(Project(BSONDocument(PROCESSOR_ID -> 1)),
+        List(
+          Group(BSONString(s"$$$PROCESSOR_ID"))(),
+          Out(temporaryCollectionName)))
+      tc <- temporaryCollection
+    } yield tc.find(BSONDocument())
+            .cursor[BSONDocument]()
+            .enumerator()
+            .map(doc => doc) // this is needed for suffix collections
+
+    Enumerator.flatten(enumerator)
   }
 
   override def initial: Enumerator[String] = {
     driver.getJournalCollections()
       .through(flattenCollection)
+      .through(flattened)
   }
 }
 
