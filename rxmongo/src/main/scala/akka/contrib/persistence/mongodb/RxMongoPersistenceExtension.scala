@@ -18,7 +18,6 @@ import reactivemongo.api.commands._
 import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
-import reactivemongo.play.iteratees.cursorProducer
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Awaitable, ExecutionContext, Future}
@@ -127,7 +126,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       if (count > 0) {
         j.flatMap(_.find(q)
                     .cursor[BSONDocument]()
-                    .enumerator()
+                    .enumerate()
                     .run(Iteratee.foldM(empty)(walker)))
       } else Future.successful(empty)
     }

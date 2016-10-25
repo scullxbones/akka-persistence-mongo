@@ -17,7 +17,6 @@ import reactivemongo.bson._
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-import reactivemongo.play.iteratees.cursorProducer
 import scala.util.Success
 import scala.util.Random
 
@@ -127,8 +126,7 @@ class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher
     journal.find(BSONDocument())
       .projection(BSONDocument(EVENTS -> 1))
       .cursor[BSONDocument]()
-      .enumerator()
-      .map(doc => doc) // this is needed for suffix collections
+      .enumerate()
   }
 
   override def initial: Enumerator[Event] = {
@@ -184,8 +182,7 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
       tc <- temporaryCollection
     } yield tc.find(BSONDocument())
             .cursor[BSONDocument]()
-            .enumerator()
-            .map(doc => doc) // this is needed for suffix collections
+            .enumerate()
 
     Enumerator.flatten(enumerator)
   }
@@ -230,7 +227,7 @@ class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: Str
         .sort(BSONDocument(TO -> 1))
         .projection(BSONDocument(EVENTS -> 1))
         .cursor[BSONDocument]()
-        .enumerator()
+        .enumerate()
         .through(flatten)
         .through(filter))
   }
@@ -247,7 +244,7 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerat
         rt.find(BSONDocument.empty)
           .options(QueryOpts().tailable.awaitData)
           .cursor[BSONDocument]()
-          .enumerator()
+          .enumerate()
           ))
 
   private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
