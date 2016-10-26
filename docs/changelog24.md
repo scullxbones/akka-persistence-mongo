@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.3.5
+* PR [#129](https://github.com/scullxbones/akka-persistence-mongo/pull/129)
+  * Thanks @JeanFrancoisGuena!
+  * Improve reliability of a few tests
+  * Get rid of some println spam
+
 ### 1.3.4
 * PR [#123](https://github.com/scullxbones/akka-persistence-mongo/pull/123)
   * Updates to support rxmongo `0.11.14`
