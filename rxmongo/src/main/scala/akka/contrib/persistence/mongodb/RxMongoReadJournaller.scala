@@ -9,14 +9,17 @@ package akka.contrib.persistence.mongodb
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.stream.actor.ActorPublisher
-import akka.{Done => ADone}
+import akka.{ Done => ADone }
 import play.api.libs.iteratee._
 import reactivemongo.api.QueryOpts
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson._
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Random, Success}
+import scala.concurrent.{ ExecutionContext, Future }
+
+import scala.util.Success
+import scala.util.Random
+
 
 trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
@@ -143,9 +146,8 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
   import context.dispatcher
   import reactivemongo.bson._
 
-  val temporaryCollectionName = {
+    val temporaryCollectionName = {
     val name = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
-    println(s"\n~~~~~~~~ >>>>> Using temporary collection name $name\n")
     name
   }
   def temporaryCollection = driver.collection(temporaryCollectionName)
@@ -163,7 +165,6 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
       tc <- temporaryCollection
       dropped  <- tc.drop(failIfNotFound = false)
     } yield {
-      println(s"\n!!!!!!!!!! --------- >>>>>>>>> Attempt to drop $temporaryCollectionName succeeded = $dropped\n")
       ADone
     }
   }
@@ -179,13 +180,14 @@ class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorP
           Group(BSONString(s"$$$PROCESSOR_ID"))(),
           Out(temporaryCollectionName)))
       tc <- temporaryCollection
-    } yield tc.find(BSONDocument()).cursor[BSONDocument]().enumerate()
+    } yield tc.find(BSONDocument())
+            .cursor[BSONDocument]()
+            .enumerate()
 
     Enumerator.flatten(enumerator)
   }
 
   override def initial: Enumerator[String] = {
-
     driver.getJournalCollections()
       .through(flattenCollection)
       .through(flattened)
@@ -222,12 +224,12 @@ class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: Str
 
     driver.getJournal(persistenceId)
       .map(_.find(q)
-            .sort(BSONDocument(TO -> 1))
-            .projection(BSONDocument(EVENTS -> 1))
-            .cursor[BSONDocument]()
-            .enumerate()
-            .through(flatten)
-            .through(filter))
+        .sort(BSONDocument(TO -> 1))
+        .projection(BSONDocument(EVENTS -> 1))
+        .cursor[BSONDocument]()
+        .enumerate()
+        .through(flatten)
+        .through(filter))
   }
 }
 
@@ -243,8 +245,7 @@ class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerat
           .options(QueryOpts().tailable.awaitData)
           .cursor[BSONDocument]()
           .enumerate()
-      )
-    )
+          ))
 
   private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
     Enumerator(

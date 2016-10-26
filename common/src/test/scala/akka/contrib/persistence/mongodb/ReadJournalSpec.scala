@@ -145,11 +145,53 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
   }
 
+  it should "support the current all events query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
+    case (as, _) =>
+      import concurrent.duration._
+      implicit val system = as
+      implicit val mat = ActorMaterializer()
+
+      val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
+      
+      val events = "this" :: "is" :: "just" :: "a" :: "test" :: Nil      
+      val allEvents = promises.map {case (id, _) => id -> events.map(event => s"$event$id")}
+      
+      allEvents foreach {case (id, evs) => 
+        promises collect {
+          case (i,p) if (i == id) =>
+            val ar = as.actorOf(props(i, p), s"current-all-events-$i")
+            evs map Append.apply foreach (ar ! _)
+            ar ! Append("END")
+        }
+      }
+
+      implicit val ec = as.dispatcher
+      val futures = promises.map { case (_, p) => p.future }
+      val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
+      count shouldBe 5
+
+      val readJournal =
+        PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+        
+      val expectedEvents = allEvents flatMap {case (_, evs) => evs}
+
+      val fut = readJournal.currentAllEvents().runFold(expectedEvents.toSet) { (received, ee) =>
+        val asAppend = ee.event.asInstanceOf[String]
+        if (!asAppend.equals("END"))
+          expectedEvents should contain(asAppend)
+        received - asAppend
+      }
+
+      Await.result(fut, 15.seconds.dilated).size shouldBe 0
+  }
+
   it should "support the current persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
       implicit val system = as
       implicit val mat = ActorMaterializer()
+      
+      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       val ars = promises.map { case (id, p) => as.actorOf(props(id, p), s"current-persistenceId-$id") }
@@ -167,7 +209,12 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val fut = readJournal.currentPersistenceIds().runFold(Seq.empty[String])(_ :+ _)
 
-      Await.result(fut, 10.seconds.dilated) should contain allOf ("1", "2", "3", "4", "5")
+      Await.result(fut, 20.seconds.dilated) should contain allOf ("1", "2", "3", "4", "5")
+
+      eventually {
+        mongoClient.getDatabase(embedDB).listCollectionNames()
+          .into(new java.util.HashSet[String]()).asScala.filter(_.startsWith("persistenceids-")) should have size 0L
+      }
   }
 
   it should "support the current persistence ids query with more than 16MB of ids" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -209,7 +256,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
       val fut = readJournal.currentPersistenceIds().runFold(0) { case (inc, _) => inc + 1 }
-      Await.result(fut, 10.seconds.dilated) shouldBe EVENT_COUNT
+      Await.result(fut, 20.seconds.dilated) shouldBe EVENT_COUNT
 
       eventually {
         mongoClient.getDatabase(embedDB).listCollectionNames()
@@ -222,6 +269,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       import concurrent.duration._
       implicit val system = as
       implicit val mat = ActorMaterializer()
+      
+      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       val ars = promises.map { case (id, p) => as.actorOf(props(id, p)) }
@@ -247,6 +296,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       }
 
       probe.receiveN(ars.size, 10.seconds.dilated).collect { case x: String => x } should contain allOf ("1", "2", "3", "4", "5")
+
+      eventually {
+        mongoClient.getDatabase(embedDB).listCollectionNames()
+          .into(new java.util.HashSet[String]()).asScala.filter(_.startsWith("persistenceids-")) should have size 0L
+      }
   }
 
   it should "support the current events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
