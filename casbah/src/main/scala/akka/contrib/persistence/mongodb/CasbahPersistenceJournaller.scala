@@ -105,6 +105,8 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     journal.update(query, update, upsert = false, multi = true, writeConcern)
     maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
     journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
+    if (driver.useSuffixedCollectionNames && journal.count() == 0)
+      journal.dropCollection()
     ()
   }
 

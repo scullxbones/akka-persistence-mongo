@@ -26,9 +26,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       snaps(pid).flatMap(_.find(
         BSONDocument(PROCESSOR_ID -> pid,
           SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-          TIMESTAMP -> BSONDocument("$lte" -> maxTs)
-        )
-      ).sort(BSONDocument(SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
+          TIMESTAMP -> BSONDocument("$lte" -> maxTs))).sort(BSONDocument(SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
         .one[SelectedSnapshot])
     selected
   }
@@ -37,8 +35,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     val query = BSONDocument(
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
-      TIMESTAMP -> snapshot.metadata.timestamp
-    )
+      TIMESTAMP -> snapshot.metadata.timestamp)
     snaps(snapshot.metadata.persistenceId).flatMap(_.update(query, snapshot, writeConcern, upsert = true, multi = false)).map(_ => ())
   }
 
@@ -46,14 +43,38 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     val criteria =
       Seq[Producer[BSONElement]](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
         Option[Producer[BSONElement]](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
-    snaps(pid).flatMap(_.remove(BSONDocument(criteria : _*), writeConcern)).map(_ => ())
+
+    for {
+      s <- snaps(pid)
+      wr <- s.remove(BSONDocument(criteria: _*), writeConcern)
+    } yield {
+      if (driver.useSuffixedCollectionNames && wr.ok)
+        for {
+          n <- s.count()
+          if (n == 0)
+          _ <- s.drop(failIfNotFound = false)
+        } yield ()
+      ()
+    }
   }
 
-  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
-    snaps(pid).flatMap(_.remove(BSONDocument(PROCESSOR_ID -> pid,
-                              SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-                              TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
-                              writeConcern)).map(_ => ())
+  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+    for {
+      s <- snaps(pid)
+      wr <- s.remove(BSONDocument(PROCESSOR_ID -> pid,
+        SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
+        TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
+        writeConcern)
+    } yield {
+      if (driver.useSuffixedCollectionNames && wr.ok)
+        for {
+          n <- s.count()
+          if (n == 0)
+          _ <- s.drop(failIfNotFound = false)
+        } yield ()
+      ()
+    }
+  }
 
   private[this] def snaps(suffix: String)(implicit ec: ExecutionContext) = {
     val snaps = driver.getSnaps(suffix)

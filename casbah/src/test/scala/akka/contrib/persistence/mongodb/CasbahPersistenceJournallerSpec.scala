@@ -149,7 +149,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         // should 'retrieve' (and not 'build') the suffixed journal 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         journal.size should be(1)
 
@@ -196,7 +196,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         journal.size should be(1)
         val recone = journal.head
@@ -205,6 +205,20 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         recone(TO) should be(3)
         val events = recone.as[MongoDBList](EVENTS)
         events should have size 1
+      }
+    }
+    ()
+  }
+
+  it should "drop suffixed journal when empty" in {
+    new Fixture {
+      withAutoSuffixedJournal { drv =>
+        underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
+
+        underExtendedTest.deleteFrom("unit-test", 3L)
+
+        val journalName = drv.getJournalCollectionName("unit-test")
+        drv.db.collectionExists(journalName) should be(false)
       }
     }
     ()
@@ -231,7 +245,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -263,7 +277,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -296,7 +310,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("three-atoms")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 2, 3, 10)(replay(buf)).value.get.get
@@ -330,7 +344,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("three-atoms")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 5, 8, 10)(replay(buf)).value.get.get
@@ -364,7 +378,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("three-atoms")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 3, 8, 10)(replay(buf)).value.get.get
@@ -415,7 +429,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val result = underExtendedTest.maxSequenceNr("unit-test", 2).value.get.get
         result should be(3)
@@ -453,7 +467,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val results = journal.find().limit(1)
           .one()
@@ -506,7 +520,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -550,7 +564,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -586,7 +600,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         val journalName = drv.getJournalCollectionName("unit-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get

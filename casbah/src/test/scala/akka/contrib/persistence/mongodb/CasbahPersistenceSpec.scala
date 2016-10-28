@@ -23,11 +23,8 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
     override lazy val db = mongoDB
   }
 
-  override val extendedDriver = {
-    val extendedConfig = ConfigFactory.empty()
-    .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.class",
-        ConfigValueFactory.fromAnyRef("akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"))
-    .withValue("akka.contrib.persistence.mongodb.mongo.suffix-builder.separator", ConfigValueFactory.fromAnyRef("_"))
+  override val extendedDriver = {    
+    val extendedConfig = ConfigFactory.parseString(SuffixCollectionNamesTest.extendedConfig)
         
     new CasbahMongoDriver(system, extendedConfig) {
       override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
@@ -51,6 +48,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
       ()
     } finally {
       extendedDriver.getJournalCollections().foreach(_.dropCollection())
+      extendedDriver.metadata.dropCollection()
     }
   }
 
