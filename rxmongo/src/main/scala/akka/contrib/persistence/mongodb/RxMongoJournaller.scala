@@ -137,7 +137,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       _ <- ms.fold(Future.successful(()))(setMaxSequenceMetadata(persistenceId, _))
       wr <- j.remove(remove, writeConcern)
     } yield {
-      if (driver.useSuffixedCollectionNames && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- j.count()
           if (n == 0)

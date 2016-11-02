@@ -48,7 +48,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       s <- snaps(pid)
       wr <- s.remove(BSONDocument(criteria: _*), writeConcern)
     } yield {
-      if (driver.useSuffixedCollectionNames && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- s.count()
           if (n == 0)
@@ -66,7 +66,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
         TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
         writeConcern)
     } yield {
-      if (driver.useSuffixedCollectionNames && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- s.count()
           if (n == 0)
