@@ -27,7 +27,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
   implicit val serializer = new RxMongoSnapshotSerialization()
   implicit val as = system
 
-  val suffix = "unit-test"
+  val pid = "unit-test"
 
   "A rxmongo snapshotter" should "support legacy snapshots" in {
     withSnapshot { ss =>
@@ -47,7 +47,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
   }
 
   it should "support legacy snapshots in suffixed snapshot collection" in {
-    withSuffixedSnapshot(suffix) { ss =>
+    withSuffixedSnapshot(pid) { ss =>
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-1", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
@@ -56,7 +56,8 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
 
       // should 'retrieve' (and not 'build') the suffixed snapshot 
-      val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+      val snapsName = extendedDriver.getSnapsCollectionName(pid)
+      snapsName should be("akka_persistence_snaps_unit-test-test")
       val collections = Await.result(extendedDriver.db.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
 
@@ -89,7 +90,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
   }
 
   it should "support mixed snapshots in suffixed snapshot collection" in {
-    withSuffixedSnapshot(suffix) { ss =>
+    withSuffixedSnapshot(pid) { ss =>
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-1", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
@@ -98,7 +99,8 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       Await.result(ss.bulkInsert((legacyDocs ++ newDocs).toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
        
-      val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+      val snapsName = extendedDriver.getSnapsCollectionName(pid)
+      snapsName should be("akka_persistence_snaps_unit-test-test")
       val collections = Await.result(extendedDriver.db.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
       
@@ -118,18 +120,19 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val underExtendedTest = new RxMongoSnapshotter(drv)
       
       // should 'build' the suffixed snapshot
-      Await.ready(new RxMongoSnapshotter(drv).saveSnapshot(SelectedSnapshot(SnapshotMetadata(suffix, 4, 1000), "snapshot-payload")), 3.seconds)
+      Await.ready(new RxMongoSnapshotter(drv).saveSnapshot(SelectedSnapshot(SnapshotMetadata(pid, 4, 1000), "snapshot-payload")), 3.seconds)
 
       // should 'retrieve' (and not 'build') the suffixed snapshot 
-      val snapsName = drv.getSnapsCollectionName(suffix)
+      val snapsName = drv.getSnapsCollectionName(pid)
+      snapsName should be("akka_persistence_snaps_unit-test-test")
       val collections = Await.result(drv.db.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
-      val ss = drv.getSnaps(suffix)
+      val ss = drv.getSnaps(pid)
 
       val extracted = ss.flatMap(_.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true))
       val result = Await.result(extracted, 3.seconds.dilated)
       result.size should be(1)
-      result.head.metadata.persistenceId should be(suffix)
+      result.head.metadata.persistenceId should be(pid)
       ()
     }
   }

@@ -22,7 +22,8 @@ class SuffixCollectionNamesTest extends CanSuffixCollectionNames {
 object SuffixCollectionNamesTest {
   val extendedConfig = """
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
-    |""".stripMargin
+    |akka.contrib.persistence.mongodb.mongo.suffix-drop-empty-collections = true
+    |""".stripMargin    
     
   val rxMongoExtendedConfig = """
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
@@ -30,5 +31,10 @@ object SuffixCollectionNamesTest {
     |akka.contrib.persistence.mongodb.rxmongo.failover.retries = 10
     |akka.contrib.persistence.mongodb.rxmongo.failover.growth = con
     |akka.contrib.persistence.mongodb.rxmongo.failover.factor = 1
+    |""".stripMargin
+       
+  val overriddenConfig = """
+    |overrides.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
+    |overrides.suffix-drop-empty-collections = true
     |""".stripMargin
 }

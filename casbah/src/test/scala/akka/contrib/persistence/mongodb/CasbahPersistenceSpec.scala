@@ -8,7 +8,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
 import akka.testkit.TestKit
-import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
+import com.typesafe.config.{ ConfigFactory, ConfigValueFactory }
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.mongodb.casbah.{ MongoClient, MongoCollection }
@@ -23,14 +23,10 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
     override lazy val db = mongoDB
   }
 
-  override val extendedDriver = {    
-    val extendedConfig = ConfigFactory.parseString(SuffixCollectionNamesTest.extendedConfig)
-        
-    new CasbahMongoDriver(system, extendedConfig) {
-      override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
-      override def collection(name: String) = mongoDB(name)
-      override lazy val db = mongoDB
-    }
+  override val extendedDriver = new CasbahMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig)) {
+    override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10 seconds, 10 seconds)
+    override def collection(name: String) = mongoDB(name)
+    override lazy val db = mongoDB
   }
 
   override def withCollection(name: String)(testCode: MongoCollection => Any) = {
@@ -64,8 +60,8 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
   override def withJournal(testCode: MongoCollection => Any) =
     withCollection(driver.journalCollectionName)(testCode)
 
-  override def withSuffixedJournal(suffix: String)(testCode: MongoCollection => Any) =
-    withCollection(extendedDriver.getJournalCollectionName(suffix))(testCode)
+  override def withSuffixedJournal(pid: String)(testCode: MongoCollection => Any) =
+    withCollection(extendedDriver.getJournalCollectionName(pid))(testCode)
 
   override def withAutoSuffixedJournal(testCode: CasbahMongoDriver => Any) =
     withJournalCollections(testCode)
@@ -73,8 +69,8 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
   override def withSnapshot(testCode: MongoCollection => Any) =
     withCollection(driver.snapsCollectionName)(testCode)
 
-  override def withSuffixedSnapshot(suffix: String)(testCode: MongoCollection => Any) =
-    withCollection(extendedDriver.getSnapsCollectionName(suffix))(testCode)
+  override def withSuffixedSnapshot(pid: String)(testCode: MongoCollection => Any) =
+    withCollection(extendedDriver.getSnapsCollectionName(pid))(testCode)
 
   override def withAutoSuffixedSnapshot(testCode: CasbahMongoDriver => Any) =
     withSnapshotCollections(testCode)

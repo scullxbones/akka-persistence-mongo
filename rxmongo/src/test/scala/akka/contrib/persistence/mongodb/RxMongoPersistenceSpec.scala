@@ -19,13 +19,13 @@ import scala.concurrent.duration._
 
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
-  class SpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(RxMongoConfigTest.rxMongoConfig)) {
+  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
-  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.rxMongoExtendedConfig)) {
+  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig)) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
@@ -96,8 +96,8 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   def withJournal(testCode: BSONCollection => Any) =
     withCollection(driver.journalCollectionName)(testCode)
 
-  def withSuffixedJournal(suffix: String)(testCode: BSONCollection => Any) =
-    withSuffixedCollection(extendedDriver.getJournalCollectionName(suffix))(testCode)
+  def withSuffixedJournal(pid: String)(testCode: BSONCollection => Any) =
+    withSuffixedCollection(extendedDriver.getJournalCollectionName(pid))(testCode)
 
   def withAutoSuffixedJournal(testCode: RxMongoDriver => Any) =
     withJournalCollections(testCode)
@@ -105,8 +105,8 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   def withSnapshot(testCode: BSONCollection => Any) =
     withCollection(driver.snapsCollectionName)(testCode)
 
-  def withSuffixedSnapshot(suffix: String)(testCode: BSONCollection => Any) =
-    withSuffixedCollection(extendedDriver.getSnapsCollectionName(suffix))(testCode)
+  def withSuffixedSnapshot(pid: String)(testCode: BSONCollection => Any) =
+    withSuffixedCollection(extendedDriver.getSnapsCollectionName(pid))(testCode)
 
   def withAutoSuffixedSnapshot(testCode: RxMongoDriver => Any) =
     withSnapshotCollections(testCode)

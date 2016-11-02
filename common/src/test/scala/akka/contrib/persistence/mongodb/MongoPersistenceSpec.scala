@@ -32,13 +32,13 @@ trait MongoPersistenceSpec[D,C] extends BaseUnitTest with ContainerMongo with Be
 
   def withJournal(testCode: C => Any):Any
   
-  def withSuffixedJournal(suffix: String)(testCode: C => Any):Any
+  def withSuffixedJournal(pid: String)(testCode: C => Any):Any
   
   def withAutoSuffixedJournal(testCode: D => Any):Any
 
   def withSnapshot(testCode: C => Any):Any
   
-  def withSuffixedSnapshot(suffix: String)(testCode: C => Any):Any
+  def withSuffixedSnapshot(pid: String)(testCode: C => Any):Any
   
   def withAutoSuffixedSnapshot(testCode: D => Any):Any
 }
