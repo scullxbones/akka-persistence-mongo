@@ -446,6 +446,11 @@ First line defines a separator as a `String`, but only its first character will 
 
 Second line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below).
 
+Optionally, you can choose to drop empty suffixed collections once they are empty, in order, for example, not to fill your database with a great number of useless collections. Be aware, however, that the underlying process is built upon MongoDB **non atomic** `count` and `drop` operations that *may* lead to race conditions. To enable this feature, just add the following line to your `application.conf` file:
+```
+akka.contrib.persistence.mongodb.mongo.suffix-drop-empty-collections = true
+```
+
 ##### Code
 Add some `com.mycompany.myproject.SuffixCollectionNames` class in your code, extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait:
 
