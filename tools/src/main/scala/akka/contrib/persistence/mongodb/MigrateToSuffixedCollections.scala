@@ -7,14 +7,15 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
-import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
 
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 
 import scala.util.Try
 import scala.util.Random
+import com.typesafe.config.ConfigFactory
 
-class MigrateToSuffixedCollections(system: ActorSystem, config: Config) extends CasbahMongoDriver(system, config) {
+class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDriver(system, ConfigFactory.empty()) {
 
   def migrateToSuffixCollections(): Unit = {
 

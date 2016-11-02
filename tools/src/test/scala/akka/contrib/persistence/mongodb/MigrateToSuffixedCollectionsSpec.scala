@@ -90,7 +90,7 @@ class MigrateToSuffixedCollectionsSpec extends BaseUnitTest with ContainerMongo 
     implicit val mat2 = ActorMaterializer()(system2)
     val ec2 = system2.dispatcher   
 
-    val migrate = new MigrateToSuffixedCollections(system2, config(configExtension))    
+    val migrate = new MigrateToSuffixedCollections(system2)    
     Await.ready(Future(migrate.migrateToSuffixCollections)(ec2), 10.seconds.dilated(system2))
     
     system2.terminate()
