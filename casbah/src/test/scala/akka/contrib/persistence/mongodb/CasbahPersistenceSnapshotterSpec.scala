@@ -31,7 +31,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
       SelectedSnapshot(SnapshotMetadata("unit-test", sq, 10L * sq), "snapshot-data")
     } :+ SelectedSnapshot(SnapshotMetadata("unit-test", 30L, 10000L), "snapshot-data")
 
-    val suffix = "unit-test"
+    val pid = "unit-test"
   }
 
   "A mongo snapshot implementation" should "serialize and deserialize snapshots" in {
@@ -65,11 +65,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "create an appropriate suffixed index" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
-        extendedDriver.snaps(suffix)
+      withSuffixedSnapshot(pid) { snapshot =>
+        extendedDriver.snaps(pid)
 
         // should 'retrieve' (and not 'build') the suffixed snapshot 
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         val idx = snapshot.getIndexInfo.filter(obj => obj("name").equals(driver.snapsIndexName)).head
@@ -93,10 +94,11 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "find nothing by sequence where time is earlier than first suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         snapshot.insert(records: _*)
 
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         underExtendedTest.findYoungestSnapshotByMaxSequence("unit-test", 10, 10).value.get.get shouldBe None
@@ -119,10 +121,11 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "find a prior sequence where time is earlier than first suffixed snapshot for the max sequence" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         snapshot.insert(records: _*)
 
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         underExtendedTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 250).value.get.get shouldBe
@@ -146,10 +149,11 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "find the first snapshot by sequence where time is between the first and second suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         snapshot.insert(records: _*)
 
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         underExtendedTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 350).value.get.get shouldBe
@@ -173,10 +177,11 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "find the last snapshot by sequence where time is after the second suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         snapshot.insert(records: _*)
 
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         underExtendedTest.findYoungestSnapshotByMaxSequence("unit-test", 30, 25000).value.get.get shouldBe
@@ -208,6 +213,7 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
         underExtendedTest.saveSnapshot(SelectedSnapshot(SnapshotMetadata("unit-test", 4, 1000), "snapshot-payload"))
         
         val snapsName = drv.getSnapsCollectionName("unit-test")
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         drv.db.collectionExists(snapsName) should be(true)
         val snapshot = drv.collection(snapsName)
 
@@ -237,11 +243,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "not delete non-existent suffixed snapshots" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
 
         snapshot.insert(records: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         snapshot.size should be(4)
@@ -272,11 +279,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "only delete the specified suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
 
         snapshot.insert(records: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
 
         snapshot.size should be(4)
@@ -306,11 +314,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "delete nothing if nothing matches the criteria in suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
 
         snapshot.insert(records: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
         
         snapshot.size should be(4)
@@ -342,11 +351,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "delete only what matches the criteria in suffixed snapshot" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
 
         snapshot.insert(records: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
         
         snapshot.size should be(4)
@@ -378,11 +388,12 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "read legacy suffixed snapshot formats" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         val legacies = records.map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
         snapshot.insert(legacies: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
         
         snapshot.size should be(4)
@@ -413,12 +424,13 @@ class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test"))
 
   it should "read mixed suffixed snapshot formats" in {
     new Fixture {
-      withSuffixedSnapshot(suffix) { snapshot =>
+      withSuffixedSnapshot(pid) { snapshot =>
         val legacies = records.take(2).map(CasbahPersistenceSnapshotter.legacySerializeSnapshot)
         val newVersions = records.drop(2).map(CasbahPersistenceSnapshotter.serializeSnapshot)
         snapshot.insert(legacies ++ newVersions: _*)
         
-        val snapsName = extendedDriver.getSnapsCollectionName(suffix)
+        val snapsName = extendedDriver.getSnapsCollectionName(pid)
+        snapsName should be("akka_persistence_snaps_unit-test-test")
         extendedDriver.db.collectionExists(snapsName) should be(true)
         
         snapshot.size should be(4)

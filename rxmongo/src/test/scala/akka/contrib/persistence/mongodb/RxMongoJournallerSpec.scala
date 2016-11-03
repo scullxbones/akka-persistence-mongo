@@ -71,15 +71,14 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     new Fixture {
       withAutoSuffixedJournal { drv =>        
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           // should 'build' the journal suffixed by persistenceId: "unit-test"
           inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
           
           // should 'retrieve' (and not 'build') the suffixed journal
-          db <- drv.db
-          collections <- db.collectionNames
-          journal <- drv.collection(collections.filter(_.equals(journalName)).head)
+          journal <- drv.getJournal("unit-test")
 
           range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
           head <- journal.find(BSONDocument()).cursor().headOption
@@ -130,12 +129,11 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     new Fixture {
       withAutoSuffixedJournal { drv =>
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(documents)))
-          db <- drv.db
-          collections <- db.collectionNames
-          journal <- drv.collection(collections.filter(_.equals(journalName)).head)
+          journal <- drv.getJournal("unit-test")
           range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
           head <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)

@@ -93,7 +93,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   }
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
-    def performAggregation(j: BSONCollection):Future[Option[Long]] = {
+    def performAggregation(j: BSONCollection): Future[Option[Long]] = {
       import j.BatchCommands.AggregationFramework.{ GroupField, Match, Max }
 
       j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
@@ -131,12 +131,20 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
         BSONDocument(EVENTS -> BSONDocument("$size" -> 0))))
     for {
       ms <- findMaxSequence(persistenceId, toSequenceNr)
-      j  <- journal
-      wr <- j.update(query, update, writeConcern, upsert = false, multi = true)
-      if wr.ok
+      j <- journal
+      wrUpdate <- j.update(query, update, writeConcern, upsert = false, multi = true)
+      if wrUpdate.ok
       _ <- ms.fold(Future.successful(()))(setMaxSequenceMetadata(persistenceId, _))
-      _ <- j.remove(remove, writeConcern)
-    } yield ()
+      wr <- j.remove(remove, writeConcern)
+    } yield {
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+        for {
+          n <- j.count()
+          if (n == 0)
+          _ <- j.drop(failIfNotFound = false)
+        } yield ()
+      ()
+    }
   }
 
   private[this] def maxSequenceFromMetadata(pid: String)(previous: Option[Long])(implicit ec: ExecutionContext): Future[Option[Long]] = {

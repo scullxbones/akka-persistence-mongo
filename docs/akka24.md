@@ -446,6 +446,11 @@ First line defines a separator as a `String`, but only its first character will 
 
 Second line contains the entire package+name of the user class extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait (see below).
 
+Optionally, you can choose to drop empty suffixed collections once they are empty, in order, for example, not to fill your database with a great number of useless collections. Be aware, however, that the underlying process is built upon MongoDB **non atomic** `count` and `drop` operations that *may* lead to race conditions. To enable this feature, just add the following line to your `application.conf` file:
+```
+akka.contrib.persistence.mongodb.mongo.suffix-drop-empty-collections = true
+```
+
 ##### Code
 Add some `com.mycompany.myproject.SuffixCollectionNames` class in your code, extending or mixing in `akka.contrib.persistence.mongodb.CanSuffixCollectionNames` trait:
 
@@ -549,18 +554,16 @@ Additionally, you may configure your logging system with **INFO** level for `Mig
 ```
 
 ###### Code
-Provide an `ActorSystem` and its `Config` object (based on your `application.conf` file of course) then instantiate a `MigrateToSuffixedCollections` class and call its `migrateToSuffixCollections` method as shown in the following example:
+Provide an `ActorSystem`, instantiate a `MigrateToSuffixedCollections` class and call its `migrateToSuffixCollections` method as shown in the following example:
 ```scala
 package com.mycompany.myproject.myapplication.main
 
 object Migrate extends App {
-    import com.typesafe.config.Config
     import akka.actor.ActorSystem
-    val config: Config = ???
-    val system: ActorSystem = ActorSystem("my system name", config)
+    val system: ActorSystem = ActorSystem("my system name", myConfig)
 
     import akka.contrib.persistence.mongodb.MigrateToSuffixedCollections
-    val migration = new MigrateToSuffixedCollections(system, config)
+    val migration = new MigrateToSuffixedCollections(system)
     try {
         migration.migrateToSuffixCollections()
     } catch {
@@ -571,7 +574,7 @@ object Migrate extends App {
     }
 }
 ```
-Providing an `ActorSystem` and its `Config` object depends on the manner your application is designed and is beyond the scope of this documentation.
+Providing an `ActorSystem` depends on the manner your application is designed and is beyond the scope of this documentation.
 
 As the process **must** be performed offline, its a good idea to use an object (we call it "Migrate" in our example) extending the `scala.App` trait and run it through the `sbt run` command that allows us to choose which one to run:
 
