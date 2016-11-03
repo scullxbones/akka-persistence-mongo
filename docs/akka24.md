@@ -410,19 +410,19 @@ akka.contrib.persistence.mongodb.casbah{
   minpoolsize = 0
   maxpoolsize = 100
   waitqueuemultiple = 5
-  serverselectiontimeoutms = 30000
-  waitqueuetimeoutms = 120000
-  maxidletimems = 0
-  maxlifetimems = 0
-  connecttimeoutms = 10000
-  sockettimeoutms = 0
+  serverselectiontimeout = 30seconds
+  waitqueuetimeout = 2minutes
+  maxidletime = 0
+  maxlifetime = 0
+  connecttimeout = 10seconds
+  sockettimeout = 0seconds
   socketkeepalive = false
   ssl = false
   sslinvalidhostnameallowed = false
-  heartbeatfrequencyms = 10000
-  minheartbeatfrequencyms = 500
-  heartbeatconnecttimeoutms = 20000
-  heartbeatsockettimeoutms = 20000
+  heartbeatfrequency = 10seconds
+  minheartbeatfrequency = 500ms
+  heartbeatconnecttimeout = 20seconds
+  heartbeatsockettimeout = 20seconds
 } 
 ```
 
