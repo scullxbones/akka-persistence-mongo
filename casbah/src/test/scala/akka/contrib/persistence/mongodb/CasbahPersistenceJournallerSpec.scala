@@ -44,15 +44,16 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       override def driverName = "casbah"
     }
     
-    val underExtendedTest = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
+    val underExtendedTest = new CasbahPersistenceJournaller(extendedDriver) with MongoPersistenceJournalMetrics {
       override def driverName = "casbah"
     }
+    
     val records: List[PersistentRepr] = List(1L, 2L, 3L).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test", manifest = "M") }
 
     val threeAtoms: List[AtomicWrite] = ((1L to 9L) grouped 3 toList).map(block =>
       AtomicWrite(ISeq(block.map(sn => PersistentRepr(persistenceId = "three-atoms", sequenceNr = sn, payload = "payload")): _*)))
 
-    val suffix = "suffix-test"
+    val pid = "unit-test"
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in {
@@ -98,18 +99,19 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
   it should "create an appropriate suffixed index" in {
     new Fixture {
-      withSuffixedJournal(suffix) { journal =>
-        extendedDriver.journal(suffix)
+      withSuffixedJournal(pid) { journal =>
+        extendedDriver.journal(pid)
 
         // should 'retrieve' (and not 'build') the suffixed journal 
-        val journalName = extendedDriver.getJournalCollectionName(suffix)
+        val journalName = extendedDriver.getJournalCollectionName(pid)
+        journalName should be("akka_persistence_journal_unit-test-test")
         extendedDriver.db.collectionExists(journalName) should be(true)
 
-        val idx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalIndexName)).head
+        val idx = journal.getIndexInfo.filter(obj => obj("name").equals(extendedDriver.journalIndexName)).head
         idx("unique") should ===(true)
         idx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, FROM -> 1, TO -> 1))
 
-        val seqNumIdx = journal.getIndexInfo.filter(obj => obj("name").equals(driver.journalSeqNrIndexName)).head
+        val seqNumIdx = journal.getIndexInfo.filter(obj => obj("name").equals(extendedDriver.journalSeqNrIndexName)).head
         seqNumIdx.getAs[Boolean]("unique") shouldBe None
         seqNumIdx("key") should be(MongoDBObject(PROCESSOR_ID -> 1, TO -> -1))
       }
@@ -148,8 +150,9 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
         // should 'retrieve' (and not 'build') the suffixed journal 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         journal.size should be(1)
 
@@ -195,8 +198,9 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.deleteFrom("unit-test", 2L)
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         journal.size should be(1)
         val recone = journal.head
@@ -205,6 +209,20 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         recone(TO) should be(3)
         val events = recone.as[MongoDBList](EVENTS)
         events should have size 1
+      }
+    }
+    ()
+  }
+
+  it should "drop suffixed journal when empty" in {
+    new Fixture {
+      withAutoSuffixedJournal { drv =>
+        underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
+
+        underExtendedTest.deleteFrom("unit-test", 3L)
+
+        val journalName = drv.getJournalCollectionName("unit-test")
+        drv.db.collectionExists(journalName) should be(false)
       }
     }
     ()
@@ -230,8 +248,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -262,8 +280,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         records.foreach(r => underExtendedTest.batchAppend(ISeq(AtomicWrite(r))))
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -295,8 +313,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(threeAtoms: _*))
 
         val journalName = drv.getJournalCollectionName("three-atoms")
+        journalName should be("akka_persistence_journal_three-atoms-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 2, 3, 10)(replay(buf)).value.get.get
@@ -329,8 +347,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(threeAtoms: _*))
 
         val journalName = drv.getJournalCollectionName("three-atoms")
+        journalName should be("akka_persistence_journal_three-atoms-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 5, 8, 10)(replay(buf)).value.get.get
@@ -363,8 +381,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(threeAtoms: _*))
 
         val journalName = drv.getJournalCollectionName("three-atoms")
+        journalName should be("akka_persistence_journal_three-atoms-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("three-atoms", 3, 8, 10)(replay(buf)).value.get.get
@@ -389,6 +407,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   it should "have a default sequence nr when suffixed journal is empty" in {
     new Fixture {
       withSuffixedJournal("unit-test") { journal =>
+        journal.name should be("akka_persistence_journal_unit-test-test")
         val result = underExtendedTest.maxSequenceNr("unit-test", 5).value.get.get
         result should be(0)
       }
@@ -414,8 +433,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val result = underExtendedTest.maxSequenceNr("unit-test", 2).value.get.get
         result should be(3)
@@ -452,8 +471,9 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(AtomicWrite(documents)))
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
+        val journal = drv.getJournal("unit-test")
 
         val results = journal.find().limit(1)
           .one()
@@ -505,8 +525,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         writeResult.foreach(wr => wr shouldBe 'success)
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -549,8 +569,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         writeResult.foreach(wr => wr shouldBe 'success)
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
@@ -585,8 +605,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
 
         val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
         drv.db.collectionExists(journalName) should be(true)
-        val journal = drv.collection(journalName)
 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get

@@ -228,7 +228,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   // useful in some methods in each driver
-  def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined && !suffixBuilderClassOption.get.trim.isEmpty
+  def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined
 
   def databaseName = settings.Database
   def snapsCollectionName = settings.SnapsCollection
@@ -254,6 +254,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
     case _                   => "_"
   }
+  def suffixDropEmpty = settings.SuffixDropEmptyCollections
 
   implicit def serialization = SerializationExtension(actorSystem)
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)(serialization, actorSystem)

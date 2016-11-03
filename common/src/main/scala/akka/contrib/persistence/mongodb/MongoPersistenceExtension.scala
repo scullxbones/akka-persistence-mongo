@@ -114,5 +114,6 @@ class MongoSettings(val config: Config) {
   
   val SuffixBuilderClass = config.getString("suffix-builder.class")
   val SuffixSeparator = config.getString("suffix-builder.separator")
+  val SuffixDropEmptyCollections = config.getBoolean("suffix-drop-empty-collections")
   
 }
