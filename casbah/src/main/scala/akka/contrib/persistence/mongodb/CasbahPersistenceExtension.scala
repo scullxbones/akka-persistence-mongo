@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{ BasicDBObjectBuilder, MongoCommandException, WriteConcern }
+import com.mongodb.{ BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI }
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
@@ -89,7 +89,12 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     }
   }
 
-  private[this] val url = MongoClientURI(mongoUri)
+  private[this] val casbahSettings = CasbahDriverSettings(system.settings)
+
+  private[this] val url = {
+    val underlying =  new JavaMongoClientURI(mongoUri,casbahSettings.mongoClientOptionsBuilder)
+    MongoClientURI(underlying)
+  }
 
   private[mongodb] lazy val client = MongoClient(url)
 
