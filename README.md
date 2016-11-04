@@ -13,7 +13,7 @@
 * Backward incompatible to 0.x series - details in docs
 * Compiled for 2.11 - Java 8 targeted
 * Active development
-* Latest release - `1.3.5` ~ compatible with Akka 2.4 (2.4.2+ for read journals)
+* Latest release - `1.3.6` ~ compatible with Akka 2.4 (2.4.2+ for read journals)
 
 ### Using Akka 2.3? Use 0.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka23)](https://travis-ci.org/scullxbones/akka-persistence-mongo)

@@ -1,5 +1,13 @@
 ## Changelog for 1.x major version
 
+### 1.3.6
+* Fix [#131](https://github.com/scullxbones/akka-persistence-mongo/issues/131)
+  * Support casbah options when constructing driver (e.g. socket keep alive for firewalls)
+  * Thanks @dpfeiffer!
+* PR [#130](https://github.com/scullxbones/akka-persistence-mongo/pull/130)
+  * Support optional cleaning up empty collections
+  * Thanks @JeanFrancoisGuena!
+
 ### 1.3.5
 * PR [#129](https://github.com/scullxbones/akka-persistence-mongo/pull/129)
   * Thanks @JeanFrancoisGuena!

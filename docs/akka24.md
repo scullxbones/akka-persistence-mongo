@@ -22,12 +22,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.3.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.3.6"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.11` series, with a minimum version number of `0.11.14`
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.3.5"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.3.6"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -570,7 +570,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.5",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.6",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
@@ -649,7 +649,7 @@ Notice that unique collections "akka_persistence_journal" and "akka_persistence_
 
 Keep your database safe, **avoid running again the migration process**, so:
 * remove migration code (in our example, we remove our `Migrate` object)
-* remove `"com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.5"` dependency from your `build.sbt` file
+* remove `"com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.6"` dependency from your `build.sbt` file
 
 That's it, you should **start your application** and enjoy *suffixed collection names* feature.
 
