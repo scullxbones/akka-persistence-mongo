@@ -53,6 +53,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Legacy Serialization](#legacyser)
    * [Metrics](#metrics)
    * [Multiple plugins](#multiplugin)
+   * [Casbah Client Settings](#casbahsettings)
 1. [Suffixed collection names](#suffixcollection)
    * [Overview](#suffixoverview)
    * [Usage](#suffixusage)
@@ -398,6 +399,35 @@ Given the above configuration, all `PersistentActor`s will default to the "defau
 In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persistence-journal-other" and use the "host1 special" pair.
 
 Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
+
+<a name="casbahsettings"/>
+##### Casbah Client Settings
+The Java MongoDB Driver, Casbah is based on, supports various connection related settings, which can be overriden in 
+`application.conf`:
+
+```
+akka.contrib.persistence.mongodb.casbah{
+  minpoolsize = 0
+  maxpoolsize = 100
+  waitqueuemultiple = 5
+  serverselectiontimeout = 30seconds
+  waitqueuetimeout = 2minutes
+  maxidletime = 0
+  maxlifetime = 0
+  connecttimeout = 10seconds
+  sockettimeout = 0seconds
+  socketkeepalive = false
+  ssl = false
+  sslinvalidhostnameallowed = false
+  heartbeatfrequency = 10seconds
+  minheartbeatfrequency = 500ms
+  heartbeatconnecttimeout = 20seconds
+  heartbeatsockettimeout = 20seconds
+} 
+```
+
+Be aware that some of them can be set via the MongoURI as well, in that case settings from MongoURI override the explicit
+settings.
 
 <a name="suffixcollection"/>
 ### Suffixed collection names

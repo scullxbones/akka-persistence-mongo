@@ -268,10 +268,7 @@ class RxMongoDriverSettings(val config: Config) {
   config.checkValid(config, "failover")
 
   private val failover = config.getConfig("failover")
-  def InitialDelay = {
-    val configured = failover.getDuration("initialDelay")
-    FiniteDuration(configured.toMillis, TimeUnit.MILLISECONDS)
-  }
+  def InitialDelay = failover.getFiniteDuration("initialDelay")
   def Retries = failover.getInt("retries")
   def Growth = failover.getString("growth")
   def ConstantGrowth = Growth == "con"

@@ -1,5 +1,11 @@
 package akka.contrib.persistence
 
+import java.util.concurrent.TimeUnit
+
+import com.typesafe.config.Config
+
+import scala.concurrent.duration.FiniteDuration
+
 package object mongodb {
 
   implicit class NonWrappingLongToInt(val pimped: Long) extends AnyVal {
@@ -9,6 +15,13 @@ package object mongodb {
       } else {
         pimped.intValue
       }
+    }
+  }
+
+  implicit class ConfigWithFiniteDuration(val config: Config) extends AnyVal{
+    def getFiniteDuration(path: String): FiniteDuration = {
+      val d = config.getDuration(path)
+      FiniteDuration(d.toMillis, TimeUnit.MILLISECONDS)
     }
   }
 
