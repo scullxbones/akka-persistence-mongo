@@ -4,12 +4,17 @@ import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.Matchers
 import org.scalatest.FlatSpecLike
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.mockito.MockitoSugar
 
 import scala.concurrent.Await
 import scala.util.Try
 
-trait BaseUnitTest extends FlatSpecLike with MockitoSugar with Matchers
+trait BaseUnitTest extends FlatSpecLike with MockitoSugar with Matchers with PatienceConfiguration {
+
+  override lazy val spanScaleFactor: Double = ConfigFactory.load().getDouble("akka.test.timefactor")
+
+}
 
 object ConfigLoanFixture {
   import concurrent.duration._
