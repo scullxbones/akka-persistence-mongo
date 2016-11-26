@@ -71,7 +71,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     val pastSource = Source.actorPublisher[Event](impl.currentAllEvents).mapMaterializedValue(_ => ())
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
-    val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
+    val removeDuplicatedEventsByPersistenceId = Flow[Event].via(new RemoveDuplicatedEventsByPersistenceId)
     (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedEventsByPersistenceId).toEventEnvelopes
   }
 
@@ -85,7 +85,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
       .filter(_.pid == persistenceId)
       .filter(_.sn >= fromSequenceNr)
       .via(new StopAtSeq(toSequenceNr))
-      .transform[Event](() => new RemoveDuplicatedEvents)
+      .via(new RemoveDuplicatedEventsByPersistenceId)
 
     (pastSource concat realtimeSource).via(stages).toEventEnvelopes
   }
@@ -95,9 +95,9 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .map(_.pid).mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
-    val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
+    val removeDuplicatedPersistenceIds = Flow[String].via(new RemoveDuplicates)
 
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedpersistenceIds)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedPersistenceIds)
   }
 }
 
@@ -151,55 +151,63 @@ class StopAtSeq(to: Long) extends GraphStage[FlowShape[Event, Event]] {
   }
 }
 
-class RemoveDuplicatedEvents extends PushStage[Event, Event] {
-  var lastSequenceNr: Option[Long] = None
+class RemoveDuplicatedEventsByPersistenceId extends GraphStage[FlowShape[Event, Event]] {
 
-  override def onPush(elem: Event, ctx: Context[Event]) = {
-    lastSequenceNr match {
-      case Some(sequenceNr) =>
-        if (elem.sn > sequenceNr) {
-          lastSequenceNr = Some(elem.sn)
-          ctx.push(elem)
-        } else {
-          ctx.pull()
-        }
-      case None =>
-        lastSequenceNr = Some(elem.sn)
-        ctx.push(elem)
+  private val in: Inlet[Event] = Inlet("in")
+  private val out: Outlet[Event] = Outlet("out")
+
+  override val shape: FlowShape[Event, Event] = FlowShape(in, out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) with InHandler with OutHandler {
+
+    private val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+
+    override def onPush(): Unit = {
+      val event = grab(in)
+      lastSequenceNrByPersistenceId.get(event.pid) match {
+        case Some(sn) if event.sn > sn =>
+          push(out, event)
+          lastSequenceNrByPersistenceId.update(event.pid, event.sn)
+        case None =>
+          push(out, event)
+          lastSequenceNrByPersistenceId.update(event.pid, event.sn)
+        case _ =>
+          pull(in)
+      }
     }
+    override def onPull(): Unit = pull(in)
+
+    setHandlers(in, out, this)
   }
+
 }
 
-class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event] {
-  val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+class RemoveDuplicates[T] extends GraphStage[FlowShape[T, T]] {
 
-  override def onPush(elem: Event, ctx: Context[Event]) = {
-    lastSequenceNrByPersistenceId get elem.pid match {
-      case Some(sequenceNr) =>
-        if (elem.sn > sequenceNr) {
-          lastSequenceNrByPersistenceId remove elem.pid
-          lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
-          ctx.push(elem)
-        } else {
-          ctx.pull()
-        }
-      case None =>
-        lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
-        ctx.push(elem)
+  private val in: Inlet[T] = Inlet("in")
+  private val out: Outlet[T] = Outlet("out")
+
+  override val shape: FlowShape[T, T] = FlowShape(in, out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) with InHandler with OutHandler {
+
+    private val processed = mutable.HashSet.empty[T]
+
+    override def onPush(): Unit = {
+      val element = grab(in)
+      if(processed(element)) {
+        pull(in)
+      } else {
+        processed.add(element)
+        push(out, element)
+      }
     }
-  }
-}
 
-class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
-  val persistenceIds = mutable.HashSet.empty[String]
+    override def onPull(): Unit = pull(in)
 
-  override def onPush(elem: String, ctx: Context[String]): SyncDirective = {
-    if (persistenceIds(elem)) ctx.pull()
-    else {
-      persistenceIds += elem
-      ctx push elem
-    }
+    setHandlers(in, out, this)
   }
+
 }
 
 trait MongoPersistenceReadJournallingApi {
