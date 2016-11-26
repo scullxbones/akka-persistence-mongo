@@ -1,15 +1,15 @@
 package akka.contrib.persistence.mongodb
 
 import akka.NotUsed
-import akka.actor.{Actor, ActorRef, ExtendedActorSystem, Props, ActorLogging}
+import akka.actor.{Actor, ActorLogging, ActorRef, ExtendedActorSystem, Props}
 import akka.persistence.query._
 import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
 import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
+import akka.stream.{FlowShape, Inlet, Outlet, OverflowStrategy, Attributes}
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.stream.javadsl.{Source => JSource}
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.scaladsl._
 import akka.stream.stage._
-import akka.stream.{javadsl => _, scaladsl => _, _}
 import com.typesafe.config.Config
 
 import scala.collection.mutable
@@ -27,16 +27,33 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
   override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl))
 }
 
+object ScalaDslMongoReadJournal {
+
+  val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] = {
+    // TODO Use zipWithIndex in akka 2.4.14
+    Flow[Event].zip(Source.unfold(0L)(s => Some((s + 1, s)))).map { case (event, offset) => event.toEnvelope(offset) }
+  }
+
+  implicit class RichFlow[Mat](source: Source[Event, Mat]) {
+
+    def toEventEnvelopes: Source[EventEnvelope, Mat] =
+      source.via(eventToEventEnvelope)
+  }
+}
+
 class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
-    extends scaladsl.ReadJournal
+  extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
     with AllPersistenceIdsQuery
-    with EventsByPersistenceIdQuery{
+    with EventsByPersistenceIdQuery {
+
+  import ScalaDslMongoReadJournal._
 
   def currentAllEvents(): Source[EventEnvelope, NotUsed] =
     Source.actorPublisher[Event](impl.currentAllEvents)
-      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => NotUsed)
+      .toEventEnvelopes
+      .mapMaterializedValue(_ => NotUsed)
 
   override def currentPersistenceIds(): Source[String, NotUsed] =
     Source.actorPublisher[String](impl.currentPersistenceIds)
@@ -45,7 +62,8 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
     Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
-      .via(Flow[Event].transform(() => new EventEnvelopeConverter)).mapMaterializedValue(_ => NotUsed)
+      .toEventEnvelopes
+      .mapMaterializedValue(_ => NotUsed)
   }
 
   def allEvents(): Source[EventEnvelope, NotUsed] = {
@@ -54,8 +72,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
     val removeDuplicatedEventsByPersistenceId = Flow[Event].transform(() => new RemoveDuplicatedEventsByPersistenceId)
-    val eventEnvelopeConverter = Flow[Event].transform(() => new EventEnvelopeConverter)
-    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedEventsByPersistenceId).via(eventEnvelopeConverter)
+    (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedEventsByPersistenceId).toEventEnvelopes
   }
 
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
@@ -63,29 +80,30 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)
     val pastSource = Source.actorPublisher[Event](impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr))
       .mapMaterializedValue(_ => NotUsed)
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
-      .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
-    val stages = Flow[Event].filter(_.pid == persistenceId)
-                            .filter(_.sn >= fromSequenceNr)
-                            .via(new StopAtSeq(toSequenceNr))
-                            .transform[Event](() => new RemoveDuplicatedEvents)
-                            .transform[EventEnvelope](() => new EventEnvelopeConverter)
+      .mapMaterializedValue { actor => impl.subscribeJournalEvents(actor); NotUsed }
+    val stages = Flow[Event]
+      .filter(_.pid == persistenceId)
+      .filter(_.sn >= fromSequenceNr)
+      .via(new StopAtSeq(toSequenceNr))
+      .transform[Event](() => new RemoveDuplicatedEvents)
 
-    (pastSource concat realtimeSource).via(stages)
+    (pastSource concat realtimeSource).via(stages).toEventEnvelopes
   }
 
   override def allPersistenceIds(): Source[String, NotUsed] = {
 
-      val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
-      val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
-        .map(_.pid).mapMaterializedValue( actor => impl.subscribeJournalEvents(actor))
-      val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
+    val pastSource = Source.actorPublisher[String](impl.currentPersistenceIds)
+    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
+      .map(_.pid).mapMaterializedValue(actor => impl.subscribeJournalEvents(actor))
+    val removeDuplicatedpersistenceIds = Flow[String].transform(() => new RemoveDuplicatedPersistenceId)
 
     (pastSource ++ realtimeSource).mapMaterializedValue(_ => NotUsed).via(removeDuplicatedpersistenceIds)
   }
 }
 
-class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ{
+class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ {
   def currentAllEvents(): JSource[EventEnvelope, NotUsed] = rj.currentAllEvents().asJava
+
   def allEvents(): JSource[EventEnvelope, NotUsed] = rj.allEvents().asJava
 
   override def currentPersistenceIds(): JSource[String, NotUsed] = rj.currentPersistenceIds().asJava
@@ -94,6 +112,7 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
     require(persistenceId != null, "PersistenceId must not be null")
     rj.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
+
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long) = {
     require(persistenceId != null, "PersistenceId must not be null")
     rj.eventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
@@ -105,6 +124,7 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
 
 trait JournalStream[Cursor] {
   def cursor(): Cursor
+
   def publishEvents(): Unit
 }
 
@@ -131,15 +151,16 @@ class StopAtSeq(to: Long) extends GraphStage[FlowShape[Event, Event]] {
   }
 }
 
-class RemoveDuplicatedEvents extends PushStage[Event, Event]{
+class RemoveDuplicatedEvents extends PushStage[Event, Event] {
   var lastSequenceNr: Option[Long] = None
+
   override def onPush(elem: Event, ctx: Context[Event]) = {
     lastSequenceNr match {
       case Some(sequenceNr) =>
         if (elem.sn > sequenceNr) {
           lastSequenceNr = Some(elem.sn)
           ctx.push(elem)
-        }else{
+        } else {
           ctx.pull()
         }
       case None =>
@@ -149,8 +170,9 @@ class RemoveDuplicatedEvents extends PushStage[Event, Event]{
   }
 }
 
-class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event]{
+class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event] {
   val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+
   override def onPush(elem: Event, ctx: Context[Event]) = {
     lastSequenceNrByPersistenceId get elem.pid match {
       case Some(sequenceNr) =>
@@ -158,7 +180,7 @@ class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event]{
           lastSequenceNrByPersistenceId remove elem.pid
           lastSequenceNrByPersistenceId += (elem.pid -> elem.sn)
           ctx.push(elem)
-        }else{
+        } else {
           ctx.pull()
         }
       case None =>
@@ -170,6 +192,7 @@ class RemoveDuplicatedEventsByPersistenceId extends PushStage[Event, Event]{
 
 class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
   val persistenceIds = mutable.HashSet.empty[String]
+
   override def onPush(elem: String, ctx: Context[String]): SyncDirective = {
     if (persistenceIds(elem)) ctx.pull()
     else {
@@ -179,22 +202,18 @@ class RemoveDuplicatedPersistenceId extends PushStage[String, String] {
   }
 }
 
-class EventEnvelopeConverter extends PushStage[Event, EventEnvelope] {
-  var offset = -1L
-  override def onPush(elem: Event, ctx: Context[EventEnvelope]) = {
-    offset += 1L
-    ctx.push(elem.toEnvelope(offset))
-  }
-}
-
 trait MongoPersistenceReadJournallingApi {
   def currentAllEvents: Props
+
   def currentPersistenceIds: Props
+
   def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props
+
   def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
-trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] with ActorLogging {
+trait SyncActorPublisher[A, Cursor] extends ActorPublisher[A] with ActorLogging {
+
   import ActorPublisherMessage._
 
   override def preStart() = {
@@ -219,7 +238,7 @@ trait SyncActorPublisher[A,Cursor] extends ActorPublisher[A] with ActorLogging {
       discard(cursor)
       context.stop(self)
     case Request(_) =>
-      val (filled,remaining) = next(cursor, totalDemand)
+      val (filled, remaining) = next(cursor, totalDemand)
       filled foreach onNext
       if (isCompleted(remaining)) {
         onCompleteThenStop()
