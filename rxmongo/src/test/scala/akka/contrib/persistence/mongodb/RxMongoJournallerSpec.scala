@@ -7,14 +7,17 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.persistence.{ AtomicWrite, PersistentRepr }
+import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
 import akka.testkit._
 import reactivemongo.bson._
-import scala.collection.immutable.{ Seq => ISeq }
+
+import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
 import play.api.libs.iteratee.Iteratee
+
+import scala.util.Random
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
   import JournallingFieldNames._
@@ -125,15 +128,47 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     ()
   }
 
+  it should "insert records with serializer id" in {
+    new Fixture {
+      withJournal { journal =>
+
+        val ar = system.deadLetters
+        val msg = akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionRegistered(ar)
+        val withSerializedObjects = records.map(_.withPayload(msg))
+        val serializer = serialization.serializerFor(msg.getClass)
+
+        val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
+          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
+          head <- journal.find(BSONDocument()).cursor().headOption
+        } yield (range, head)
+        val (range, head) = await(inserted)
+        range should have size 1
+
+        val allDocuments = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+          case e: BSONDocument => e
+        })
+
+        allDocuments.map(_.getAs[Int](SER_ID).get).toList should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
+        ()
+      }
+    }
+    ()
+  }
+
   it should "insert records with documents as payload in suffixed journal collection" in {
     new Fixture {
       withAutoSuffixedJournal { drv =>
-        val journalName = drv.getJournalCollectionName("unit-test")
-        journalName should be("akka_persistence_journal_unit-test-test")
+
+        val persistenceId = math.abs(Random.nextInt(Int.MaxValue)).toString
+
+        val journalName = drv.getJournalCollectionName(persistenceId)
+        journalName should be(s"akka_persistence_journal_${persistenceId}-test")
+        val events = documents.map(_.update(persistenceId = persistenceId))
         
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
-          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(documents)))
-          journal <- drv.getJournal("unit-test")
+          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
+          journal <- drv.getJournal(persistenceId)
           range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
           head <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
@@ -143,10 +178,41 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         }).head
-        recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
+        recone.getAs[String](PROCESSOR_ID) shouldBe Some(persistenceId)
         recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
         recone.getAs[String](TYPE) shouldBe Some("bson")
         recone.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
+        ()
+      }
+    }
+    ()
+  }
+
+  it should "insert records with serializer id in suffixed journal collection" in {
+    new Fixture {
+      withAutoSuffixedJournal { drv =>
+
+        val persistenceId = math.abs(Random.nextInt(Int.MaxValue)).toString
+
+        val ar = system.deadLetters
+        val msg = akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionRegistered(ar)
+        val events = records.map(_.update(persistenceId = persistenceId).withPayload(msg))
+        val serializer = serialization.serializerFor(msg.getClass)
+
+        val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
+          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
+          journal <- drv.getJournal(persistenceId)
+          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
+          head <- journal.find(BSONDocument()).cursor().headOption
+        } yield (range, head)
+        val (range, head) = await(inserted)
+        range should have size 1
+
+        val allDocuments = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+          case e: BSONDocument => e
+        })
+
+        allDocuments.map(_.getAs[Int](SER_ID).get).toList should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
         ()
       }
     }

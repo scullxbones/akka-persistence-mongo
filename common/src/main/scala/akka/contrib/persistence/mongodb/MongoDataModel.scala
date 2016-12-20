@@ -23,15 +23,19 @@ case class Bson[D: DocumentType](content: D) extends Payload {
   val hint = "bson"
 }
 
-case class Serialized[C <: AnyRef](bytes: Array[Byte], clazz: Class[C], serializedManifest: Option[String])(implicit ser: Serialization) extends Payload {
+case class Serialized[C <: AnyRef](bytes: Array[Byte], clazz: Class[C], serializerId: Option[Int], serializedManifest: Option[String])(implicit ser: Serialization) extends Payload {
   type Content = C
 
   val hint = "ser"
   lazy val content = {
-    val tried = ser.serializerFor(clazz) match {
+
+    val resolvedSerializer = serializerId.map(ser.serializerByIdentity).getOrElse(ser.serializerFor(clazz))
+
+    val tried = resolvedSerializer match {
       case s:SerializerWithStringManifest =>
-        ser.deserialize(bytes,s.identifier,serializedManifest.getOrElse(clazz.getName))
-      case s => ser.deserialize(bytes, clazz).asInstanceOf[Try[AnyRef]]
+        ser.deserialize(bytes, s.identifier, serializedManifest.getOrElse(clazz.getName))
+
+      case s => ser.deserialize(bytes, s.identifier, Some(clazz)).asInstanceOf[Try[AnyRef]]
     }
 
     tried match {
@@ -46,9 +50,9 @@ object Serialized {
     val clazz = any.getClass
     ser.findSerializerFor(any) match {
       case s:SerializerWithStringManifest =>
-        new Serialized(s.toBinary(any), clazz, Option(s.manifest(any)))
+        new Serialized(s.toBinary(any), clazz, Some(s.identifier), Option(s.manifest(any)))
       case s =>
-        new Serialized(s.toBinary(any), clazz, None)
+        new Serialized(s.toBinary(any), clazz, Some(s.identifier), None)
     }
   }
 }
@@ -129,11 +133,13 @@ object Payload {
     (Option(Thread.currentThread().getContextClassLoader) getOrElse getClass.getClassLoader).loadClass(byName).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
   }
 
-  def apply[D](hint: String, any: Any, clazzName: Option[String], serManifest: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
+  def apply[D](hint: String, any: Any, clazzName: Option[String], serId: Option[Int], serManifest: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
     case ("repr",repr:Array[Byte]) => Legacy(repr)
+    case ("ser",ser:Array[Byte]) if serId.isDefined =>
+      Serialized(ser, classOf[AnyRef], serId, serManifest)
     case ("ser",ser:Array[Byte]) if clazzName.isDefined =>
       val clazz = loadClass(clazzName.get)
-      Serialized(ser, clazz, serManifest)
+      Serialized(ser, clazz, serId, serManifest)
     case ("bson",d:D) => Bson(d)
     case ("bin",b:Array[Byte]) => Bin(b)
     case ("s",s:String) => StringPayload(s)

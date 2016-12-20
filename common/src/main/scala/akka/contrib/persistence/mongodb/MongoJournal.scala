@@ -141,6 +141,7 @@ trait JournallingFieldNames {
   final val TYPE = "_t"
   final val HINT = "_h"
   final val SER_MANIFEST = "_sm"
+  final val SER_ID = "_si"
 }
 object JournallingFieldNames extends JournallingFieldNames
 
