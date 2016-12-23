@@ -94,16 +94,18 @@ object RxMongoSerializers {
       Event(
         pid = d.as[String](PROCESSOR_ID),
         sn = d.as[Long](SEQUENCE_NUMBER),
-        payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT),d.getAs[String](SER_MANIFEST)),
+        payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT),d.getAs[Int](SER_ID),d.getAs[String](SER_MANIFEST)),
         sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
         manifest = d.getAs[String](MANIFEST),
         writerUuid = d.getAs[String](WRITER_UUID)
       )
 
-    private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String], serializedManifest: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
+    private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String], serializerId: Option[Int], serializedManifest: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
+      case ("ser",BSONBinary(bfr, _)) if serializerId.isDefined =>
+        Serialized(bfr.readArray(bfr.size), classOf[AnyRef], serializerId, serializedManifest)
       case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
         val clazz = Class.forName(clazzName.get).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
-        Serialized(bfr.readArray(bfr.size), clazz, serializedManifest)
+        Serialized(bfr.readArray(bfr.size), clazz, serializerId, serializedManifest)
       case ("bson",d:BSONDocument) => Bson(d)
       case ("bin",BSONBinary(bfr, _)) => Bin(bfr.readArray(bfr.size))
       case ("repr",BSONBinary(bfr, _)) => Legacy(bfr.readArray(bfr.size))
@@ -173,6 +175,7 @@ object RxMongoSerializers {
         case s: Serialized[_] =>
           BSONDocument(PayloadKey -> BSON.write(s.bytes),
                        HINT -> s.clazz.getName,
+                       SER_ID -> s.serializerId,
                        SER_MANIFEST -> s.serializedManifest)
         case StringPayload(str) => BSONDocument(PayloadKey -> str)
         case FloatingPointPayload(dbl) => BSONDocument(PayloadKey -> dbl)

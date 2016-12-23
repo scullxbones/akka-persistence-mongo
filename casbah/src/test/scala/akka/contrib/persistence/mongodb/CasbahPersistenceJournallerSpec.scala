@@ -582,6 +582,33 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     ()
   }
 
+  it should "write serializer id in suffixed journal" in {
+    new Fixture {
+      withAutoSuffixedJournal { drv =>
+        val ar = system.deadLetters
+        val msg = akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionRegistered(ar)
+        val withSerializedObjects = records.map(_.withPayload(msg))
+        val serializer = serialization.serializerFor(msg.getClass)
+
+        val result = underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+
+        val writeResult = Await.result(result, 5.seconds.dilated)
+        writeResult.foreach(wr => wr shouldBe 'success)
+
+        val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
+        drv.db.collectionExists(journalName) should be(true)
+
+        val allSerIds = drv.db(journalName).find().flatMap { dbo =>
+          dbo.as[MongoDBList](EVENTS).map(_.asInstanceOf[DBObject])
+        }.map(_.as[Int](SER_ID))
+
+        allSerIds.toList should contain theSameElementsInOrderAs records.map(_ => serializer.identifier)
+      }
+    }
+    ()
+  }
+
   it should "record metrics" in {
     new Fixture {
       withJournal { journal =>
