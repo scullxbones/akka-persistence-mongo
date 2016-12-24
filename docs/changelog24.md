@@ -1,5 +1,12 @@
 ## Changelog for 1.x major version
 
+### 1.3.7
+* Thanks for both of these @filosganga!
+* Fix [#137](https://github.com/scullxbones/akka-persistence-mongo/issues/137)
+  * Support use of serializer identifer for schema evolution of binary payloads
+* Fix [#103](https://github.com/scullxbones/akka-persistence-mongo/issues/103)
+  * Fix for old deprecated custom stage APIs
+
 ### 1.3.6
 * Fix [#131](https://github.com/scullxbones/akka-persistence-mongo/issues/131)
   * Support casbah options when constructing driver (e.g. socket keep alive for firewalls)
