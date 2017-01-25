@@ -1,25 +1,31 @@
-val releaseV = "1.3.7"
+val releaseV = "1.3.8"
 
-val scalaV = "2.11.7"
+val scalaV = "2.11.8"
 
 scalaVersion := scalaV
 
-val AkkaV = "2.4.10"
+crossScalaVersions := Seq("2.11.8", "2.12.1")
 
-val commonDeps = Seq(
+val AkkaV = "2.4.16"
+
+def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  ("nl.grons"           %% "metrics-scala" % "3.5.1_a2.3")
-    .exclude("com.typesafe.akka", "akka-actor_2.11"),
+  (sv match {
+    case "2.11" => "nl.grons"           %% "metrics-scala" % "3.5.5_a2.3"
+    case "2.12" => "nl.grons"           %% "metrics-scala" % "3.5.5_a2.4"
+  })
+    .exclude("com.typesafe.akka", "akka-actor_2.11")
+    .exclude("com.typesafe.akka", "akka-actor_2.12"),
   "com.typesafe.akka"   %% "akka-persistence-query-experimental" % AkkaV % "provided",
 
-  "org.mongodb"               % "mongo-java-driver"         % "3.2.1"   % "test",
+  "org.mongodb"               % "mongo-java-driver"         % "3.4.1"   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.12"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.5"     % "test",
-  "org.scalatest"             %% "scalatest"                % "2.2.6"   % "test",
+  "org.scalatest"             %% "scalatest"                % "3.0.1"   % "test",
   "junit"                     % "junit"                     % "4.11"    % "test",
   "org.mockito"               % "mockito-all"               % "1.9.5"   % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % AkkaV     % "test",
@@ -30,7 +36,7 @@ val commonDeps = Seq(
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
-  libraryDependencies ++= commonDeps,
+  libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   version := releaseV,
   organization := "com.github.scullxbones",
   scalacOptions ++= Seq(
@@ -74,7 +80,7 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.0" % "provided"
+      "org.mongodb" %% "casbah" % "3.1.1" % "provided"
     )
   )
 
@@ -84,9 +90,11 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.11.14" % "provided")
+      ("org.reactivemongo" % "reactivemongo_2.11" % "0.11.14" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
-    )
+    ),
+    crossScalaVersions := Seq("2.11.8"),
+    scalaVersion := "2.11.8"
   )
 
 lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
@@ -95,7 +103,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.0" % "provided"
+      "org.mongodb" %% "casbah" % "3.1.1" % "provided"
     )
   )
   
