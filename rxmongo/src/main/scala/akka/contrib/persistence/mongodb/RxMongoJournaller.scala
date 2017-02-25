@@ -7,23 +7,23 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
-import org.slf4j.LoggerFactory
-import play.api.libs.iteratee.{ Enumeratee, Enumerator, Iteratee }
+import org.slf4j.{Logger, LoggerFactory}
+import play.api.libs.iteratee.{Enumeratee, Enumerator, Iteratee}
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
 
-import scala.collection.immutable.{ Seq => ISeq }
+import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.util.control.NoStackTrace
-import scala.util.{ Failure, Success, Try }
+import scala.util.{Failure, Success, Try}
 
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import JournallingFieldNames._
   import RxMongoSerializers._
 
-  protected val logger = LoggerFactory.getLogger(getClass)
+  protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
@@ -55,7 +55,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
     if (wr.ok) Success(())
-    else throw new Exception(wr.errmsg.getOrElse(s"${wr.message} - [${wr.code.fold("N/A")(_.toString)}]")) with NoStackTrace
+    else throw new Exception(wr.writeErrors.map(e => s"${e.errmsg} - [${e.code}]").mkString(",")) with NoStackTrace
   }
 
   private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: Future[BSONCollection])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
@@ -78,15 +78,18 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       val fZero = Future.successful(ISeq.empty[Try[Unit]])
 
       // this should guarantee that futures are performed sequentially...
-      writes.groupBy(write => driver.getJournalCollectionName(write.persistenceId))
-        .foldLeft(fZero) { case (future, (_, hunk)) => future.flatMap(seq => doBatchAppend(hunk, driver.journal(hunk.head.persistenceId)).map(seq ++ _)) }
+      writes
+        .groupBy(write => driver.getJournalCollectionName(write.persistenceId))
+        .foldLeft(fZero) { case (future, (_, hunk)) =>
+          future.flatMap(seq => doBatchAppend(hunk, driver.journal(hunk.head.persistenceId)).map(seq ++ _))
+        }
 
     } else {
       doBatchAppend(writes, journal)
     }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.andThen { case x => doBatchAppend(writes, realtime) }
+      batchFuture.andThen { case _ => doBatchAppend(writes, realtime) }
     else
       batchFuture
 
@@ -94,10 +97,10 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
-      import j.BatchCommands.AggregationFramework.{ GroupField, Match, Max }
+      import j.BatchCommands.AggregationFramework.{ GroupField, Match, MaxField }
 
       j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
-        otherOperators = GroupField(PROCESSOR_ID)("max" -> Max(TO)) :: Nil).map(
+        otherOperators = GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil).map(
           rez => rez.head.flatMap(_.getAs[Long]("max")).headOption)
     }
 
@@ -140,7 +143,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- j.count()
-          if (n == 0)
+          if n == 0
           _ <- j.drop(failIfNotFound = false)
         } yield ()
       ()

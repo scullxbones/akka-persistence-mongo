@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor._
 import akka.testkit._
-import akka.persistence.PersistentActor
+import akka.persistence.{PersistentActor, Recovery}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 
@@ -73,6 +73,12 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
     override def receiveRecover: Receive = {
       case x:Int => (1 to x).foreach(_ => state.event(IncEvent))
+    }
+
+    override def onRecoveryFailure(cause: Throwable, event: Option[Any]): Unit = {
+      log.error(cause,s"FAILED TO RECOVER during load test due to event of type ${event.map(_.getClass)}: $event")
+
+      super.onRecoveryFailure(cause, event)
     }
 
     private def eventHandler(int: Int): Unit = {

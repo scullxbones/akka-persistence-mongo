@@ -16,6 +16,7 @@ import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
 import play.api.libs.iteratee.Iteratee
+import reactivemongo.api.Cursor
 
 import scala.util.Random
 
@@ -138,18 +139,20 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val serializer = serialization.serializerFor(msg.getClass)
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
-          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          _     <- underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        val allDocuments = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
-          case e: BSONDocument => e
-        })
+        val allDocuments = for {
+            h   <- head.toList
+            ev  <- h.getAs[BSONArray](EVENTS).toList
+            doc <-  ev.values.collect { case e: BSONDocument => e }
+        } yield doc
 
-        allDocuments.map(_.getAs[Int](SER_ID).get).toList should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
+        allDocuments.map(_.getAs[Int](SER_ID).get) should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
         ()
       }
     }
