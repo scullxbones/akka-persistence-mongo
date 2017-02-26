@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
 trait MongoPersistenceSpec[D,C] extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll { self: TestKit =>
 
   implicit val callerRuns = new ExecutionContext {
-    def reportFailure(t: Throwable): Unit = { t.printStackTrace() }
+    def reportFailure(t: Throwable): Unit = { throw t }
     def execute(runnable: Runnable): Unit = { runnable.run() }
   }
 

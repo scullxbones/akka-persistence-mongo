@@ -7,8 +7,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import org.slf4j.{Logger, LoggerFactory}
-import play.api.libs.iteratee.{Enumeratee, Enumerator, Iteratee}
+import reactivemongo.akkastream.cursorProducer
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
@@ -39,18 +41,29 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     TO -> BSONDocument("$gte" -> from),
     FROM -> BSONDocument("$lte" -> to))
 
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = Enumerator.flatten {
+  private[this] implicit val system = driver.actorSystem
+  private[this] implicit val materializer = ActorMaterializer()
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = {   //Enumerator.flatten
     val journal = driver.getJournal(pid)
-    journal.map(_.find(journalRangeQuery(pid, from, to))
-      .sort(BSONDocument(TO -> 1))
-      .projection(BSONDocument(EVENTS -> 1))
-      .cursor[BSONDocument]()
-      .enumerate(maxDocs = max)
-      .flatMap(d => Enumerator(
-        d.as[BSONArray](EVENTS).values.collect {
-          case d: BSONDocument => driver.deserializeJournal(d)
-        }: _*))
-      .through(Enumeratee.filter[Event](ev => ev.sn >= from && ev.sn <= to)))
+    val source =
+      Source
+        .fromFuture(journal)
+        .flatMapConcat(
+          _.find(journalRangeQuery(pid, from, to))
+            .sort(BSONDocument(TO -> 1))
+            .projection(BSONDocument(EVENTS -> 1))
+            .cursor[BSONDocument]()
+            .documentSource(maxDocs = max)
+        )
+
+    val flow = Flow[BSONDocument]
+      .mapConcat(_.getAs[BSONArray](EVENTS).map(_.values.collect{
+        case d: BSONDocument => driver.deserializeJournal(d)
+      }).getOrElse(Stream.empty[Event]))
+      .filter(_.sn >= from)
+      .filter(_.sn <= to )
+
+    source.via(flow)
   }
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
@@ -81,7 +94,10 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
       writes
         .groupBy(write => driver.getJournalCollectionName(write.persistenceId))
         .foldLeft(fZero) { case (future, (_, hunk)) =>
-          future.flatMap(seq => doBatchAppend(hunk, driver.journal(hunk.head.persistenceId)).map(seq ++ _))
+          for {
+            prev <- future
+            next <- doBatchAppend(hunk, driver.journal(hunk.head.persistenceId))
+          } yield prev ++ next
         }
 
     } else {
@@ -97,7 +113,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
-      import j.BatchCommands.AggregationFramework.{ GroupField, Match, MaxField }
+      import j.BatchCommands.AggregationFramework.{GroupField, Match, MaxField}
 
       j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
         otherOperators = GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil).map(
@@ -175,9 +191,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     if (max == 0L) Future.successful(())
     else {
       val maxInt = max.toIntWithoutWrapping
-      (journalRange(pid, from, to, maxInt).map(_.toRepr) through Enumeratee.take(maxInt)).run(Iteratee.foreach {
-        replayCallback
-      })
+      journalRange(pid, from, to, maxInt).map(_.toRepr).runWith(Sink.foreach[PersistentRepr](replayCallback)).map(_ => ())
     }
 
 }

@@ -9,15 +9,14 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.SerializationExtension
+import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit._
+import reactivemongo.api.Cursor
 import reactivemongo.bson._
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
 import scala.concurrent.duration._
-import play.api.libs.iteratee.Iteratee
-import reactivemongo.api.Cursor
-
 import scala.util.Random
 
 class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMongoPersistenceSpec {
@@ -26,9 +25,10 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
   override def embedDB = "persistence-journaller-rxmongo"
 
   implicit val serialization = SerializationExtension(system)
-  implicit val as = system
+  implicit val as: ActorSystem = system
+  implicit val am: Materializer = ActorMaterializer()
 
-  def await[T](block: Future[T])(implicit ec: ExecutionContext) = {
+  def await[T](block: Future[T])(implicit ec: ExecutionContext): T = {
     Await.result(block, 3.seconds.dilated)
   }
 
@@ -49,14 +49,14 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     new Fixture {
       withJournal { journal =>
         val inserted = for {
-          inserted <- underTest.batchAppend(ISeq(AtomicWrite(records)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          _     <- underTest.batchAppend(ISeq(AtomicWrite(records)))
+          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        underTest.journalRange("unit-test", 1, 3, Int.MaxValue).run(Iteratee.getChunks[Event]) onFailure {
+        underTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _) onFailure {
           case t => t.printStackTrace()
         }
 
@@ -79,18 +79,18 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           // should 'build' the journal suffixed by persistenceId: "unit-test"
-          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
+          _       <- underExtendedTest.batchAppend(ISeq(AtomicWrite(records)))
           
           // should 'retrieve' (and not 'build') the suffixed journal
           journal <- drv.getJournal("unit-test")
 
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        underExtendedTest.journalRange("unit-test", 1, 3, Int.MaxValue).run(Iteratee.getChunks[Event]) onFailure {
+        underExtendedTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _) onFailure {
           case t => t.printStackTrace()
         }
 
@@ -109,9 +109,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
     new Fixture {
       withJournal { journal =>
         val inserted = for {
-          inserted <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          _     <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
+          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
@@ -139,7 +139,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val serializer = serialization.serializerFor(msg.getClass)
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
-          _     <- underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+          _     <- underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
           range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
           head  <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
@@ -166,14 +166,14 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val persistenceId = math.abs(Random.nextInt(Int.MaxValue)).toString
 
         val journalName = drv.getJournalCollectionName(persistenceId)
-        journalName should be(s"akka_persistence_journal_${persistenceId}-test")
+        journalName should be(s"akka_persistence_journal_$persistenceId-test")
         val events = documents.map(_.update(persistenceId = persistenceId))
         
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
-          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
+          _       <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
           journal <- drv.getJournal(persistenceId)
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
@@ -203,10 +203,10 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val serializer = serialization.serializerFor(msg.getClass)
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
-          inserted <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
+          _       <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
           journal <- drv.getJournal(persistenceId)
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List]()
-          head <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument()).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
