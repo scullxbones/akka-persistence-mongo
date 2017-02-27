@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.ConfigLoanFixture._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
@@ -14,11 +14,11 @@ import scala.concurrent.duration._
 @RunWith(classOf[JUnitRunner])
 class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
-  override def afterAll() = cleanup()
+  override def afterAll(): Unit = cleanup()
 
   override def embedDB = "rxmongo-shutdown"
 
-  val shutdownConfig = ConfigFactory.parseString(
+  val shutdownConfig: Config = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
         | mongouri = "mongodb://$host:$noAuthPort/$embedDB"
@@ -26,8 +26,8 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMo
         |}
       """.stripMargin)
 
-  class MockRxMongoPersistenceDriver(actorSystem:ActorSystem) extends RxMongoDriver(actorSystem, ConfigFactory.empty()) {
-    def showCollections = db.flatMap(_.collectionNames)
+  class MockRxMongoPersistenceDriver(actorSystem:ActorSystem) extends RxMongoDriver(actorSystem, ConfigFactory.empty(), new RxMongoDriverProvider(actorSystem)) {
+    def showCollections: Future[List[String]] = db.flatMap(_.collectionNames)
   }
 
 
@@ -62,9 +62,9 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMo
 @RunWith(classOf[JUnitRunner])
 class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
-  val authMode = if( "3.0" :: "3.2" :: "3.4" :: Nil exists envMongoVersion.contains) "?authMode=scram-sha1" else "?authMode=mongocr"
+  val authMode: String = if( "3.0" :: "3.2" :: "3.4" :: Nil exists envMongoVersion.contains) "?authMode=scram-sha1" else "?authMode=mongocr"
 
-  val authConfig = ConfigFactory.parseString(
+  val authConfig: Config = ConfigFactory.parseString(
     s"""
         |akka.contrib.persistence.mongodb.mongo {
         | mongouri = "mongodb://admin:password@$host:$authPort/admin$authMode"
@@ -72,7 +72,7 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo 
       """.stripMargin)
 
   "A secured mongodb instance" should "be connectable via user and pass" in withConfig(authConfig,"akka-contrib-mongodb-persistence-journal","authentication-config") { case (actorSystem, config) =>
-    val underTest = new RxMongoDriver(actorSystem, config)
+    val underTest = new RxMongoDriver(actorSystem, config, new RxMongoDriverProvider(actorSystem))
     val collections = Await.result(underTest.db.flatMap(_.collectionNames),3.seconds)
     collections should contain ("system.users")
     ()

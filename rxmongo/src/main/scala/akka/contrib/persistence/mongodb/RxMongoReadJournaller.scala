@@ -10,9 +10,8 @@ import akka.NotUsed
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.RxMongoSerializers._
-import akka.stream.Materializer
-import akka.stream.scaladsl.{Sink, Source}
-import play.api.libs.iteratee._
+import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.{KillSwitches, Materializer}
 import reactivemongo.akkastream.cursorProducer
 import reactivemongo.api.QueryOpts
 import reactivemongo.bson._
@@ -103,6 +102,8 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 
+  private val killSwitch = KillSwitches.shared("realtimeKillSwitch")
+
   override def cursor(): Source[Event,NotUsed] =
     Source.fromFuture(driver.realtime)
       .flatMapConcat {rt =>
@@ -110,25 +111,21 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
           .options(QueryOpts().tailable.awaitData)
           .cursor[BSONDocument]()
           .documentSource()
+          .via(killSwitch.flow)
           .map ( _.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
               case d: BSONDocument => driver.deserializeJournal(d)
           }).getOrElse(Nil)
           )
-          .mapConcat(identity _)
+          .mapConcat(identity)
       }
-
-  private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
-    Enumerator(
-      doc.as[BSONArray](EVENTS).values.collect {
-        case d: BSONDocument => driver.deserializeJournal(d)
-      }: _*)
-  }
 
   override def publishEvents(): Unit = {
     val sink = Sink.foreach[Event](driver.actorSystem.eventStream.publish)
     cursor().runWith(sink)
     ()
   }
+
+  def stopAllStreams(): Unit = killSwitch.shutdown()
 }
 
 class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
@@ -136,6 +133,7 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
   val journalStream: RxMongoJournalStream = {
     val stream = new RxMongoJournalStream(driver)(m)
     stream.publishEvents()
+    driver.actorSystem.registerOnTermination(stream.stopAllStreams())
     stream
   }
 

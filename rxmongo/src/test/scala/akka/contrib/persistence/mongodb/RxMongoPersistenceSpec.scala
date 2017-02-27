@@ -7,11 +7,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
-import akka.testkit.TestKit
-import akka.testkit._
+import akka.testkit.{TestKit, _}
 import com.typesafe.config.ConfigFactory
-import reactivemongo.api.collections.bson.BSONCollection
 import play.api.libs.iteratee._
+import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.{DefaultDB, FailoverStrategy}
 
 import scala.concurrent._
@@ -19,13 +18,15 @@ import scala.concurrent.duration._
 
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
-  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
+  val provider = new RxMongoDriverProvider(system)
+
+  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty(), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
-  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig)) {
+  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
@@ -44,6 +45,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     } {
       try {
         testCode(c)
+        ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
       }
@@ -57,6 +59,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     } {
       try {
         testCode(c)
+        ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
       }

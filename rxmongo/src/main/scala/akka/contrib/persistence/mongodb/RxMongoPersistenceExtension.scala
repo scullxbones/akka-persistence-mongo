@@ -37,11 +37,15 @@ object RxMongoPersistenceDriver {
   }
 }
 
-class RxMongoDriverProvider {
-  val driver = MongoDriver()
+class RxMongoDriverProvider(actorSystem: ActorSystem) {
+  val driver: MongoDriver = {
+    val md = MongoDriver()
+    actorSystem.registerOnTermination(driver.close())
+    md
+  }
 }
 
-class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
+class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
 
   // Collection type
@@ -238,7 +242,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
 
-  val driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider
+  val driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider(actorSystem)
 
   override def configured(config: Config): Configured = Configured(config)
 

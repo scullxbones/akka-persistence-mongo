@@ -9,8 +9,8 @@ package akka.contrib.persistence.mongodb
 import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
+import akka.stream.{ActorMaterializer, KillSwitches}
+import akka.stream.scaladsl.{Keep, Sink}
 import akka.testkit._
 import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.{Config, ConfigFactory}
@@ -115,7 +115,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val am = ActorMaterializer()
 
       val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
 
@@ -131,12 +131,17 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val probe = TestProbe()
 
-      readJournal.allEvents().runWith(Sink.actorRef[EventEnvelope](probe.ref, 'complete))
+      val ks =
+        readJournal.allEvents()
+          .viaMat(KillSwitches.single)(Keep.right)
+          .toMat(Sink.actorRef[EventEnvelope](probe.ref, 'complete))(Keep.left)
+          .run()
 
       events slice (3, 6) foreach (ar2 ! _)
       implicit val ec = as.dispatcher
 
       probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
+      ks.shutdown()
   }
 
   it should "support the current all events query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -281,9 +286,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       Await.ready(Future.sequence(promises.slice(0,3).map(_._2.future)), 5.seconds.dilated)
 
-      readJournal.allPersistenceIds().runForeach { pid =>
-        probe.ref ! pid
-      }
+      val ks =
+        readJournal.allPersistenceIds()
+          .viaMat(KillSwitches.single)(Keep.right)
+          .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+          .run()
 
       ars slice (3, 5) foreach { ar =>
         events foreach (ar ! _)
@@ -291,6 +298,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       probe.receiveN(ars.size, 10.seconds.dilated)
         .collect { case x: String => x } should contain allOf ("1", "2", "3", "4", "5")
+
+      ks.shutdown()
 
       eventually {
         mongoClient.getDatabase(embedDB).listCollectionNames()
@@ -341,7 +350,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val probe = TestProbe()
 
-      readJournal.eventsByPersistenceId("foo-live", 2L, 3L).runWith(Sink.actorRef(probe.ref, 'complete))
+      val ks = readJournal
+        .eventsByPersistenceId("foo-live", 2L, 3L)
+        .viaMat(KillSwitches.single)(Keep.right)
+        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .run()
 
       events foreach (ar ! _)
 
@@ -349,6 +362,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         .collect { case msg: EventEnvelope => msg }
         .toList
         .map(_.event) should contain inOrderOnly("bar", "bar2")
+
+      ks.shutdown()
   }
 
   it should "support the events by id query with multiple persistent actors" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -370,7 +385,12 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val probe = TestProbe()
 
-      readJournal.eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue).take(events2.size.toLong).runForeach(probe.ref ! _)
+      val ks = readJournal
+        .eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue)
+        .viaMat(KillSwitches.single)(Keep.right)
+        .take(events2.size.toLong)
+        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .run()
 
       events foreach (ar ! _)
       events2 foreach (ar2 ! _)
@@ -379,6 +399,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         .collect { case msg: EventEnvelope => msg }
         .toList
         .map(_.event) should be(events2.map(_.s))
+
+      ks.shutdown()
   }
 
   it should "support read 1k events from journal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -404,7 +426,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val sink = Sink.actorRef(probe.ref, "complete")
 
-      sources.reduce(_ merge _).runWith(sink)
+      val ks = sources.reduce(_ merge _).viaMat(KillSwitches.single)(Keep.right).toMat(sink)(Keep.left).run()
 
       secondHalf foreach(ev => ars foreach (_ ! ev) )
 
@@ -414,6 +436,6 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       Await.result(done, 10.seconds.dilated)
 
       probe.receiveN(nrOfActors * nrOfEvents, 10.seconds.dilated) should have size (nrOfActors.toLong * nrOfEvents)
-      ()
+      ks.shutdown()
   }
 }

@@ -30,7 +30,7 @@ class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with Be
   override def embedDB = "admin"
 
   "Persistence store database config" should "be User-Specified-Database" in withConfig(config, "akka-contrib-mongodb-persistence-journal") { case (actorSystem, c) =>
-    val underTest = new RxMongoDriver(actorSystem, c)
+    val underTest = new RxMongoDriver(actorSystem, c, new RxMongoDriverProvider(actorSystem))
     assertResult("User-Specified-Database")(underTest.db.futureValue.name)
     ()
   }
