@@ -1,5 +1,16 @@
 ## Changelog for 1.x major version
 
+### 1.4.0
+* Update Reactive Mongo driver to 0.12 series
+* Update Casbah driver to one that supports 2.11, 2.12
+* Add cross-compilation to scala 2.12
+* Supporting PRs:
+  - [#139](https://github.com/scullxbones/akka-persistence-mongo/pull/139) thanks @marekzebrowski!
+  - [#143](https://github.com/scullxbones/akka-persistence-mongo/pull/143)
+* Fixed issues:
+  - [#128](https://github.com/scullxbones/akka-persistence-mongo/issues/128)
+  - [#133](https://github.com/scullxbones/akka-persistence-mongo/issues/133)
+
 ### 1.3.7
 * Thanks for both of these @filosganga!
 * Fix [#137](https://github.com/scullxbones/akka-persistence-mongo/issues/137)

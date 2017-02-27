@@ -5,12 +5,13 @@
    * casbah provides an implementation against the casbah driver
    * rxmongo provides an implementation against the ReactiveMongo driver
  * The tests expect two mongods running, with and without authentication.  A utility script will boot these as docker containers.
-   * A `CONTAINER_HOST` environment variable must be set with the docker host endpoint.
-   * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
+   * A `CONTAINER_HOST` environment variable must be set with the docker host endpoint. The default is `localhost`
+     * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
+     * If using `dlite`, `export CONTAINER_HOST=docker.local` should set the variable correctly
  * Supports Akka 2.4 series
  * Supports MongoDB major versions 2.6, 3.0, 3.2
- * Compiled against scala `2.11`.  When `2.12` is released, will cross compile.  Waiting on dependent libraries to catch up.
- * Be aware that there is a `16MB` limit on snapshot and journal size.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
+ * Cross-compiled against scala `2.11` and `2.12`
+ * Be aware that there is a `16MB` payload size limit on snapshots and journal events.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
 
 ### Change log is [here](changelog24.md)
 
@@ -22,12 +23,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.3.7"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "1.4.0"
 ```
 (Reactive Mongo)
-##### Please note: Supported versions of reactive mongo require the `0.11` series, with a minimum version number of `0.11.14`
+##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.0`
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.3.7"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "1.4.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -124,7 +125,7 @@ Similarly there is a JavaDsl version.
 1. `currentAllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
 1. `allEvents` (driver specific) - Provides a live version of currentAllEvents
 * I'll look for community feedback about what driver-specific queries might be useful as well
-* The live queries use capped collection to stream events. If you not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
+* The live queries use capped collection to stream events. If you do not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
 
 <a name="miscchanges"/>
 #### Miscellaneous Other Changes
@@ -132,7 +133,7 @@ Similarly there is a JavaDsl version.
 * The `CircuitBreaker` implementation operates a little differently:
   * Writes operate as before
   * Reads (think replays) do not contribute to timeouts or errors, but if the `CircuitBreaker` is in `Open` state, replays will fail fast.
-* Travis now verifies builds and tests run against all supported Mongo versions
+* Travis now verifies builds and tests run against all supported Mongo versions as well as Scala cross compile versions
 * Several metrics were no longer relevant due to journal changes in 2.4
 
 <a name="config"/>
@@ -244,7 +245,7 @@ akka.contrib.persistence.mongodb.rxmongo.failover {
 }
 ```
 
-See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.11/documentation/advanced-topics/failoverstrategy.html) for more information.
+See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.12/documentation/advanced-topics/failoverstrategy.html) for more information.
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used
@@ -649,7 +650,7 @@ Notice that unique collections "akka_persistence_journal" and "akka_persistence_
 
 Keep your database safe, **avoid running again the migration process**, so:
 * remove migration code (in our example, we remove our `Migrate` object)
-* remove `"com.github.scullxbones" %% "akka-persistence-mongo-tools" % "1.3.7"` dependency from your `build.sbt` file
+* remove `akka-persistence-mongo-tools` dependency from your `build.sbt` file
 
 That's it, you should **start your application** and enjoy *suffixed collection names* feature.
 
