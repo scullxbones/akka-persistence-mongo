@@ -90,9 +90,11 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(
     libraryDependencies ++= Seq(
       ("org.reactivemongo" %% "reactivemongo" % "0.12.1" % "provided")
-        .exclude("com.typesafe.akka","akka-actor_2.11"),
+        .exclude("com.typesafe.akka","akka-actor_2.11")
+        .exclude("com.typesafe.akka","akka-actor_2.12"),
       ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.1" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
+        .exclude("com.typesafe.akka","akka-actor_2.12")
     ),
     crossScalaVersions := Seq("2.11.8"),
     scalaVersion := "2.11.8"

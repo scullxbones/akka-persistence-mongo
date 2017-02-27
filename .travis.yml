@@ -4,6 +4,7 @@ services:
 language: scala
 scala:
    - 2.11.8
+   - 2.12.1
 env:
   matrix:
     - MONGODB_VERSION=2.6
