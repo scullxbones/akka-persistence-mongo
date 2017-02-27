@@ -1,4 +1,4 @@
-val releaseV = "1.3.8"
+val releaseV = "1.4.0"
 
 val scalaV = "2.11.8"
 
@@ -6,7 +6,7 @@ scalaVersion := scalaV
 
 crossScalaVersions := Seq("2.11.8", "2.12.1")
 
-val AkkaV = "2.4.16"
+val AkkaV = "2.4.17"
 
 def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
@@ -89,7 +89,9 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" % "reactivemongo_2.11" % "0.11.14" % "provided")
+      ("org.reactivemongo" %% "reactivemongo" % "0.12.1" % "provided")
+        .exclude("com.typesafe.akka","akka-actor_2.11"),
+      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.1" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
     ),
     crossScalaVersions := Seq("2.11.8"),

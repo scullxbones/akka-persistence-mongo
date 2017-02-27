@@ -6,9 +6,12 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ ActorRef, Props }
+import akka.NotUsed
+import akka.actor.{ActorRef, Props}
+import akka.stream.Materializer
+import akka.stream.scaladsl.Source
 import com.mongodb.casbah.Imports._
-import com.mongodb.{ Bytes, DBObject }
+import com.mongodb.{Bytes, DBObject}
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -107,13 +110,14 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
 class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection] {
   import CasbahSerializers._
 
-  override def cursor() = {
+  override def cursor(): MongoCollection = {
     val c = driver.realtime
     c.addOption(Bytes.QUERYOPTION_TAILABLE)
     c.addOption(Bytes.QUERYOPTION_AWAITDATA)
     c
   }
-    override def publishEvents() = {
+
+  override def publishEvents(): Unit = {
     implicit val ec = driver.querySideDispatcher
     Future {
       cursor().foreach { next =>
@@ -128,6 +132,7 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
 }
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
+  import CasbahSerializers._
 
   private val journalStreaming = {
     val stream = new CasbahMongoJournalStream(driver)
@@ -135,12 +140,14 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
     stream
   }
 
-  override def currentAllEvents: Props = CurrentAllEvents.props(driver)
+  override def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed] =
+    Source.actorPublisher[Event](CurrentAllEvents.props(driver)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentPersistenceIds: Props = CurrentAllPersistenceIds.props(driver)
+  override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
+    Source.actorPublisher[String](CurrentAllPersistenceIds.props(driver)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
+    Source.actorPublisher[Event](CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)).mapMaterializedValue(_ => NotUsed)
 
   override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
     driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])

@@ -6,4 +6,9 @@
 
 package akka.contrib.persistence.mongodb
 
-class RxMongoJournalUpgradeSpec extends JournalUpgradeSpec(classOf[RxMongoPersistenceExtension], "rxmongo", new RxMongoDriver(_,_), RxMongoConfigTest.rxMongoConfig)
+class RxMongoJournalUpgradeSpec
+  extends JournalUpgradeSpec(
+    classOf[RxMongoPersistenceExtension],
+    "rxmongo",
+    (sys,cfg) => new RxMongoDriver(sys,cfg,new RxMongoDriverProvider(sys)),
+    RxMongoConfigTest.rxMongoConfig)

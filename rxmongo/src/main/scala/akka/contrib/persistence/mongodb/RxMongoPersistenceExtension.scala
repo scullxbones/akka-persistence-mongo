@@ -6,9 +6,8 @@
 
 package akka.contrib.persistence.mongodb
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee._
@@ -19,9 +18,8 @@ import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.concurrent.{Awaitable, ExecutionContext, Future}
-//import scala.language.implicitConversions
+import scala.concurrent._
+import duration._
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
@@ -39,15 +37,16 @@ object RxMongoPersistenceDriver {
   }
 }
 
-class RxMongoDriverProvider {
-  val driver = MongoDriver()
+class RxMongoDriverProvider(actorSystem: ActorSystem) {
+  val driver: MongoDriver = {
+    val md = MongoDriver()
+    actorSystem.registerOnTermination(driver.close())
+    md
+  }
 }
 
-class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
+class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
-
-  import concurrent.Await
-  import concurrent.duration._
 
   // Collection type
   type C = Future[BSONCollection]
@@ -61,7 +60,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     case Failure(throwable) => throw throwable
   }
 
-  implicit val waitFor = 4.seconds
+  implicit val waitFor: FiniteDuration = 10.seconds
 
   private[this] lazy val unauthenticatedConnection: MongoConnection = wait {
     // create unauthenticated connection, there is no direct way to wait for authentication this way
@@ -111,7 +110,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   override private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit = {
     import JournallingFieldNames._
 
-    import concurrent.ExecutionContext.Implicits.global
+    import scala.concurrent.ExecutionContext.Implicits.global
 
     val j = getJournal(persistenceId)
     val walker = walk(j) _
@@ -152,12 +151,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     } yield wr
 
     eventuallyUpgrade.onComplete {
-      case Success(wrs) if wrs.exists(w => w.inError || w.hasErrors) =>
-        val errors = wrs.filter(_.inError).map(r => s"${r.code} - ${r.message}").mkString("\n")
+      case Success(wrs) if wrs.exists(w => w.writeErrors.nonEmpty || w.writeConcernError.nonEmpty) =>
+        val errors = wrs.flatMap(_.writeConcernError).map(r => s"${r.code} - ${r.errmsg}").mkString("\n")
         logger.error("Upgrade did not complete successfully")
         logger.error(s"Errors during journal auto-upgrade:\n$errors")
-        val writeErrors = wrs.filter(_.hasErrors).flatMap(_.writeErrors).map(we => s"${we.code} - ${we.errmsg}").mkString("\n")
-        logger.error(s"Received ${wrs.count(_.hasErrors)} write errors during journal auto-upgrade:\n$writeErrors")
+        val writeErrors = wrs.flatMap(_.writeErrors).map(we => s"${we.code} - ${we.errmsg}").mkString("\n")
+        logger.error(s"Received ${wrs.count(_.writeErrors.nonEmpty)} write errors during journal auto-upgrade:\n$writeErrors")
       case Success(wrs) =>
         val successCount = wrs.foldLeft(0)((sum, wr) => sum + wr.n)
         logger.info(s"Successfully upgraded $successCount records")
@@ -218,14 +217,24 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
     val fut = for {
-      database <- db
-      names <- database.collectionNames
-      list <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
+      database  <- db
+      names     <- database.collectionNames
+      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
     } yield Enumerator(list: _*)    
     Enumerator.flatten(fut)
   }
 
+  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
+    for {
+      database  <- db
+      names     <- database.collectionNames
+      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
+    } yield list
+  }
+
   private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) = getCollections(journalCollectionName)
+
+  private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
   
   private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollections(snapsCollectionName)
   
@@ -233,7 +242,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
 
-  val driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider
+  val driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider(actorSystem)
 
   override def configured(config: Config): Configured = Configured(config)
 
@@ -249,13 +258,13 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
     override lazy val snapshotter = new RxMongoSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
       override private[mongodb] val breaker = driver.breaker
     }
-    override lazy val readJournal = new RxMongoReadJournaller(driver)
+    override lazy val readJournal = new RxMongoReadJournaller(driver, ActorMaterializer()(actorSystem))
   }
 
 }
 
 object RxMongoDriverSettings {
-  def apply(systemSettings: ActorSystem.Settings) = {
+  def apply(systemSettings: ActorSystem.Settings): RxMongoDriverSettings = {
     val fullName = s"${getClass.getPackage.getName}.rxmongo"
     val systemConfig = systemSettings.config
     systemConfig.checkValid(ConfigFactory.defaultReference(), fullName)
@@ -268,13 +277,13 @@ class RxMongoDriverSettings(val config: Config) {
   config.checkValid(config, "failover")
 
   private val failover = config.getConfig("failover")
-  def InitialDelay = failover.getFiniteDuration("initialDelay")
-  def Retries = failover.getInt("retries")
-  def Growth = failover.getString("growth")
-  def ConstantGrowth = Growth == "con"
-  def LinearGrowth = Growth == "lin"
-  def ExponentialGrowth = Growth == "exp"
-  def Factor = failover.getDouble("factor")
+  def InitialDelay: FiniteDuration = failover.getFiniteDuration("initialDelay")
+  def Retries: Int = failover.getInt("retries")
+  def Growth: String = failover.getString("growth")
+  def ConstantGrowth: Boolean = Growth == "con"
+  def LinearGrowth: Boolean = Growth == "lin"
+  def ExponentialGrowth: Boolean = Growth == "exp"
+  def Factor: Double = failover.getDouble("factor")
 
   def GrowthFunction: Int => Double = Growth match {
     case "con" => (i: Int) => Factor
