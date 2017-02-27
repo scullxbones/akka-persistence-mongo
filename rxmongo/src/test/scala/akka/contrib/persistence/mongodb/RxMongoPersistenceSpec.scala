@@ -7,47 +7,47 @@
 package akka.contrib.persistence.mongodb
 
 import akka.pattern.CircuitBreaker
-import akka.testkit.TestKit
-import akka.testkit._
-import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
-import reactivemongo.api.collections.bson.BSONCollection
+import akka.testkit.{TestKit, _}
+import com.typesafe.config.ConfigFactory
 import play.api.libs.iteratee._
-import reactivemongo.api.FailoverStrategy
+import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.{DefaultDB, FailoverStrategy}
 
 import scala.concurrent._
 import scala.concurrent.duration._
 
 trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCollection] { self: TestKit =>
 
-  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty()) {
+  val provider = new RxMongoDriverProvider(system)
+
+  class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty(), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
-  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig)) {
+  class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
 
     override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
   val driver = new SpecDriver
-  lazy val specDb = driver.db
+  lazy val specDb: Future[DefaultDB] = driver.db
 
   val extendedDriver = new ExtendedSpecDriver
-  lazy val extendedSpecDb = extendedDriver.db
+  lazy val extendedSpecDb: Future[DefaultDB] = extendedDriver.db
 
   def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
     for {
       db <- specDb
       c = db.apply[BSONCollection](name, FailoverStrategy.default)
-    } yield {
+    } {
       try {
         testCode(c)
         ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
-        ()
       }
     }
   }
@@ -56,13 +56,12 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     for {
       db <- extendedSpecDb
       c = db[BSONCollection](name)
-    } yield {
+    } {
       try {
         testCode(c)
         ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
-        ()
       }
     }
   }
@@ -88,27 +87,27 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
     }
   }
 
-  def withEmptyJournal(testCode: BSONCollection => Any) = withCollection(driver.journalCollectionName) { coll =>
+  def withEmptyJournal(testCode: BSONCollection => Any): Unit = withCollection(driver.journalCollectionName) { coll =>
     Await.result(coll.drop(failIfNotFound = false), 3.seconds.dilated)
     testCode(coll)
   }
 
-  def withJournal(testCode: BSONCollection => Any) =
+  def withJournal(testCode: BSONCollection => Any): Unit =
     withCollection(driver.journalCollectionName)(testCode)
 
-  def withSuffixedJournal(pid: String)(testCode: BSONCollection => Any) =
+  def withSuffixedJournal(pid: String)(testCode: BSONCollection => Any): Unit =
     withSuffixedCollection(extendedDriver.getJournalCollectionName(pid))(testCode)
 
-  def withAutoSuffixedJournal(testCode: RxMongoDriver => Any) =
+  def withAutoSuffixedJournal(testCode: RxMongoDriver => Any): Unit =
     withJournalCollections(testCode)
 
-  def withSnapshot(testCode: BSONCollection => Any) =
+  def withSnapshot(testCode: BSONCollection => Any): Unit =
     withCollection(driver.snapsCollectionName)(testCode)
 
-  def withSuffixedSnapshot(pid: String)(testCode: BSONCollection => Any) =
+  def withSuffixedSnapshot(pid: String)(testCode: BSONCollection => Any): Unit =
     withSuffixedCollection(extendedDriver.getSnapsCollectionName(pid))(testCode)
 
-  def withAutoSuffixedSnapshot(testCode: RxMongoDriver => Any) =
+  def withAutoSuffixedSnapshot(testCode: RxMongoDriver => Any): Unit =
     withSnapshotCollections(testCode)
 
 }
