@@ -70,7 +70,7 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   import CasbahPersistenceSnapshotter._
   import SnapshottingFieldNames._
 
-  private[this] implicit val serialization = driver.serialization
+  private[this] implicit val serialization = driver.CasbahSerializers.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
 
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =

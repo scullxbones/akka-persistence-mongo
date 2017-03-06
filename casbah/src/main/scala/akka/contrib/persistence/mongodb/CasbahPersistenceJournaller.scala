@@ -16,11 +16,10 @@ import scala.util.Try
 
 class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
 
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
-  implicit val system = driver.actorSystem
+  private implicit val system = driver.actorSystem
 
-  private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long): DBObject =

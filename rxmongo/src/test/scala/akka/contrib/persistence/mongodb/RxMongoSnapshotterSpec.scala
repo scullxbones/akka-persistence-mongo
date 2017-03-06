@@ -7,9 +7,8 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.contrib.persistence.mongodb.RxMongoSerializers.RxMongoSnapshotSerialization
-import akka.persistence.{ SnapshotMetadata, SelectedSnapshot }
-import akka.serialization.SerializationExtension
+import akka.persistence.{SelectedSnapshot, SnapshotMetadata}
+import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
@@ -23,9 +22,9 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
   override def embedDB = "persistence-snapshotter-rxmongo"
 
-  implicit val serialization = SerializationExtension.get(system)
-  implicit val serializer = new RxMongoSnapshotSerialization()
-  implicit val as = system
+  implicit val serialization: Serialization = SerializationExtension.get(system)
+  implicit val serializer = RxMongoSerializersExtension(system).RxMongoSnapshotSerialization
+  implicit val as: ActorSystem = system
 
   val pid = "unit-test"
 

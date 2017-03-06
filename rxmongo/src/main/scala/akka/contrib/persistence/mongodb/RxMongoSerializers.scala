@@ -1,38 +1,47 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ActorRef}
-import akka.contrib.persistence.mongodb.JournallingFieldNames._
+import akka.actor.{ActorRef, ActorSystem, DynamicAccess, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import akka.persistence.serialization.Snapshot
-import akka.persistence.{SnapshotMetadata, SelectedSnapshot, PersistentRepr}
-import akka.serialization.Serialization
+import akka.persistence.{PersistentRepr, SelectedSnapshot, SnapshotMetadata}
+import akka.serialization.{Serialization, SerializationExtension}
 import reactivemongo.bson._
 import DefaultBSONHandlers._
-import reactivemongo.bson.buffer.ArrayReadableBuffer
+
+object RxMongoSerializersExtension extends ExtensionId[RxMongoSerializers] with ExtensionIdProvider {
+  override def lookup = RxMongoSerializersExtension
+
+  override def createExtension(system: ExtendedActorSystem) =
+    new RxMongoSerializers(system.dynamicAccess, system)
+
+  override def get(system: ActorSystem): RxMongoSerializers = super.get(system)
+}
 
 object RxMongoSerializers {
 
-  implicit val dt: DocumentType[BSONDocument] = new DocumentType[BSONDocument] { }
-
   implicit class PimpedBSONDocument(val doc: BSONDocument) extends AnyVal {
-    def as[A](key: String)(implicit ev: Manifest[A], reader: BSONReader[_ <: BSONValue, A]) =
+    def as[A](key: String)(implicit ev: Manifest[A], reader: BSONReader[_ <: BSONValue, A]): A =
       doc.getAs[A](key)
         .getOrElse(throw new IllegalArgumentException(s"Could not deserialize required key $key of type ${ev.runtimeClass.getName}"))
   }
 
-  implicit object BsonBinaryWriter extends BSONWriter[Array[Byte], BSONBinary] {
-    def write(t: Array[Byte]): reactivemongo.bson.BSONBinary =
-      BSONBinary(ArrayReadableBuffer(t), Subtype.GenericBinarySubtype)
-  }
+}
+
+class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) extends Extension {
+  import RxMongoSerializers._
+
+  implicit val loadClass: LoadClass = dynamicAccess
+  private implicit val system: ActorSystem = actorSystem
+  implicit val serialization = SerializationExtension(actorSystem)
+
+  implicit val dt: DocumentType[BSONDocument] = new DocumentType[BSONDocument] { }
 
   object Version {
     def unapply(d: BSONDocument): Option[(Int,BSONDocument)] = {
-      d.getAs[Int](VERSION).orElse(Option(0)).map(_ -> d)
+      d.getAs[Int](JournallingFieldNames.VERSION).orElse(Option(0)).map(_ -> d)
     }
   }
 
-  class RxMongoSnapshotSerialization(implicit serialization: Serialization) extends BSONDocumentReader[SelectedSnapshot] with BSONDocumentWriter[SelectedSnapshot] {
-
-    import SnapshottingFieldNames._
+  implicit object RxMongoSnapshotSerialization extends BSONDocumentReader[SelectedSnapshot] with BSONDocumentWriter[SelectedSnapshot] with SnapshottingFieldNames {
 
     override def read(doc: BSONDocument): SelectedSnapshot = {
       val content = doc.getAs[Array[Byte]](V1.SERIALIZED)
@@ -46,7 +55,7 @@ object RxMongoSerializers {
         val content = doc.get(V2.SERIALIZED) match {
           case Some(b: BSONDocument) =>
             b
-          case Some(v) =>
+          case Some(_) =>
             val snapshot = doc.as[Array[Byte]](V2.SERIALIZED)
             val deserialized = serialization.deserialize(snapshot, classOf[Snapshot]).get
             deserialized.data
@@ -81,9 +90,9 @@ object RxMongoSerializers {
     }
   }
 
-  implicit object JournalDeserializer extends CanDeserializeJournal[BSONDocument] {
+  implicit object JournalDeserializer extends CanDeserializeJournal[BSONDocument] with JournallingFieldNames {
 
-    override def deserializeDocument(document: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event = document match {
+    override def deserializeDocument(document: BSONDocument): Event = document match {
       case Version(1,doc) => deserializeVersionOne(doc)
       case Version(0,doc) => deserializeDocumentLegacy(doc)
       case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
@@ -101,11 +110,8 @@ object RxMongoSerializers {
       )
 
     private def deserializePayload(b: BSONValue, clue: String, clazzName: Option[String], serializerId: Option[Int], serializedManifest: Option[String])(implicit serialization: Serialization): Payload = (clue,b) match {
-      case ("ser",BSONBinary(bfr, _)) if serializerId.isDefined =>
-        Serialized(bfr.readArray(bfr.size), classOf[AnyRef], serializerId, serializedManifest)
-      case ("ser",BSONBinary(bfr, _)) if clazzName.isDefined =>
-        val clazz = Class.forName(clazzName.get).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
-        Serialized(bfr.readArray(bfr.size), clazz, serializerId, serializedManifest)
+      case ("ser",BSONBinary(bfr, _)) =>
+        Serialized(bfr.readArray(bfr.size), clazzName.getOrElse(classOf[AnyRef].getName), serializerId, serializedManifest)
       case ("bson",d:BSONDocument) => Bson(d)
       case ("bin",BSONBinary(bfr, _)) => Bin(bfr.readArray(bfr.size))
       case ("repr",BSONBinary(bfr, _)) => Legacy(bfr.readArray(bfr.size))
@@ -139,9 +145,9 @@ object RxMongoSerializers {
     }
   }
 
-  implicit object JournalSerializer extends CanSerializeJournal[BSONDocument] {
+  implicit object JournalSerializer extends CanSerializeJournal[BSONDocument] with JournallingFieldNames {
 
-    override def serializeAtom(atom: Atom)(implicit serialization: Serialization, system: ActorSystem): BSONDocument = {
+    override def serializeAtom(atom: Atom): BSONDocument = {
       BSONDocument(
         PROCESSOR_ID -> atom.pid,
         FROM -> atom.from,
@@ -152,18 +158,18 @@ object RxMongoSerializers {
     }
 
     import Producer._
-    private def serializeEvent(event: Event)(implicit serialization: Serialization, system: ActorSystem): BSONDocument = {
+    private def serializeEvent(event: Event): BSONDocument = {
       val doc = serializePayload(event.payload)(
         BSONDocument(VERSION -> 1, PROCESSOR_ID -> event.pid, SEQUENCE_NUMBER -> event.sn))
       (for {
         d <- Option(doc)
-        d <- event.manifest.map(m => d.add(MANIFEST -> m)).orElse(Option(d))
-        d <- event.writerUuid.map(u => d.add(WRITER_UUID -> u)).orElse(Option(d))
+        d <- event.manifest.map(m => d.merge(MANIFEST -> m)).orElse(Option(d))
+        d <- event.writerUuid.map(u => d.merge(WRITER_UUID -> u)).orElse(Option(d))
         d <- event.sender
-                  .filterNot(_ == system.deadLetters)
+                  .filterNot(_ == actorSystem.deadLetters)
                   .flatMap(serialization.serialize(_).toOption)
                   .map(BSON.write(_))
-                  .map(b => d.add(SenderKey -> b)).orElse(Option(d))
+                  .map(b => d.merge(SenderKey -> b)).orElse(Option(d))
       } yield d).getOrElse(doc)
     }
 
@@ -174,7 +180,7 @@ object RxMongoSerializers {
         case Legacy(bytes) => BSONDocument(PayloadKey -> bytes)
         case s: Serialized[_] =>
           BSONDocument(PayloadKey -> BSON.write(s.bytes),
-                       HINT -> s.clazz.getName,
+                       HINT -> s.className,
                        SER_ID -> s.serializerId,
                        SER_MANIFEST -> s.serializedManifest)
         case StringPayload(str) => BSONDocument(PayloadKey -> str)
@@ -184,7 +190,7 @@ object RxMongoSerializers {
         case x => throw new IllegalArgumentException(s"Unable to serialize payload of type $x")
       }
 
-      document.add(BSONDocument(TYPE -> payload.hint).add(asDoc))
+      document.merge(BSONDocument(TYPE -> payload.hint).merge(asDoc))
     }
   }
 

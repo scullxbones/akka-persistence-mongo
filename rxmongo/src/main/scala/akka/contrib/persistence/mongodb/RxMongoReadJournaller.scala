@@ -9,8 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.NotUsed
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
-import akka.contrib.persistence.mongodb.RxMongoSerializers._
-import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{KillSwitches, Materializer}
 import reactivemongo.akkastream.cursorProducer
 import reactivemongo.api.QueryOpts
@@ -21,6 +20,7 @@ import scala.util.Random
 
 object CurrentAllEvents {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
+    import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
@@ -42,6 +42,7 @@ object CurrentAllEvents {
 
 object CurrentAllPersistenceIds {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
+    import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
@@ -73,6 +74,7 @@ object CurrentAllPersistenceIds {
 
 object CurrentEventsByPersistenceId {
   def source(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
+    import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
 
     val query = BSONDocument(
@@ -98,7 +100,7 @@ object CurrentEventsByPersistenceId {
 }
 
 class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[Event, NotUsed]] {
-  import RxMongoSerializers._
+  import driver.RxMongoSerializers._
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 

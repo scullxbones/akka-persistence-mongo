@@ -3,11 +3,12 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorRef
 import akka.persistence.query.EventEnvelope
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.{SerializerWithStringManifest, Serialization}
+import akka.serialization.{Serialization, SerializerWithStringManifest}
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.language.existentials
-import scala.util.{Try, Failure, Success}
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
 
 sealed trait Payload {
   type Content
@@ -23,19 +24,39 @@ case class Bson[D: DocumentType](content: D) extends Payload {
   val hint = "bson"
 }
 
-case class Serialized[C <: AnyRef](bytes: Array[Byte], clazz: Class[C], serializerId: Option[Int], serializedManifest: Option[String])(implicit ser: Serialization) extends Payload {
+case class Serialized[C <: AnyRef](bytes: Array[Byte],
+                                   className: String,
+                                   serializerId: Option[Int],
+                                   serializedManifest: Option[String])(implicit ser: Serialization, loadClass: LoadClass, ct: ClassTag[C]) extends Payload {
   type Content = C
 
   val hint = "ser"
-  lazy val content = {
+  lazy val content: C = {
 
-    val resolvedSerializer = serializerId.map(ser.serializerByIdentity).getOrElse(ser.serializerFor(clazz))
+    val clazz = loadClass.getClassFor[X forSome { type X <: AnyRef }](className)
 
-    val tried = resolvedSerializer match {
-      case s:SerializerWithStringManifest =>
-        ser.deserialize(bytes, s.identifier, serializedManifest.getOrElse(clazz.getName))
+    val tried = (serializedManifest,serializerId,clazz.flatMap(c => Try(ser.serializerFor(c)))) match {
+      // Manifest was serialized, class exists ~ prefer read-time configuration
+      case (Some(manifest), _, Success(clazzSer)) =>
+        ser.deserialize(bytes, clazzSer.identifier, manifest)
 
-      case s => ser.deserialize(bytes, s.identifier, Some(clazz)).asInstanceOf[Try[AnyRef]]
+      // No manifest id serialized, prefer read-time configuration
+      case (None, _, Success(clazzSer)) =>
+        ser.deserialize[X forSome { type X <: AnyRef }](bytes, clazzSer.identifier, clazz.toOption)
+
+      // Manifest, id were serialized, class doesn't exist - use write-time configuration
+      case (Some(manifest), Some(id), Failure(_)) =>
+        ser.deserialize(bytes, id, manifest)
+
+      // Below cases very unlikely to succeed
+
+      // No manifest id serialized, class doesn't exist - use write-time configuration
+      case (None, Some(id),Failure(_)) =>
+        ser.deserialize[X forSome { type X <: AnyRef }](bytes, id, clazz.toOption)
+
+      // fall back
+      case (_,None, Failure(_)) =>
+        ser.deserialize(bytes, clazz.get)
     }
 
     tried match {
@@ -46,13 +67,13 @@ case class Serialized[C <: AnyRef](bytes: Array[Byte], clazz: Class[C], serializ
 }
 
 object Serialized {
-  def apply(any: AnyRef)(implicit ser: Serialization) = {
+  def apply(any: AnyRef)(implicit ser: Serialization, loadClass: LoadClass): Serialized[_ <: AnyRef] = {
     val clazz = any.getClass
     ser.findSerializerFor(any) match {
       case s:SerializerWithStringManifest =>
-        new Serialized(s.toBinary(any), clazz, Some(s.identifier), Option(s.manifest(any)))
+        new Serialized(s.toBinary(any), clazz.getName, Some(s.identifier), Option(s.manifest(any)).filter(_ => s.includeManifest))
       case s =>
-        new Serialized(s.toBinary(any), clazz, Some(s.identifier), None)
+        new Serialized(s.toBinary(any), clazz.getName, Some(s.identifier), None)
     }
   }
 }
@@ -61,7 +82,7 @@ case class Legacy(bytes: Array[Byte])(implicit ser: Serialization) extends Paylo
   type Content = PersistentRepr
   val hint = "repr"
 
-  lazy val content = {
+  lazy val content: PersistentRepr = {
     ser.serializerFor(classOf[PersistentRepr]).fromBinary(bytes).asInstanceOf[PersistentRepr]
   }
 }
@@ -117,42 +138,38 @@ object Payload {
   implicit def bln2payload(bool: Boolean): BooleanPayload = BooleanPayload(bool)
   implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf)
 
-  def apply[D](payload: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Payload = payload match {
+  def apply[D](payload: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Payload = payload match {
     case pr: PersistentRepr => Legacy(pr)
-    case d:D => Bson(d)
+    case d:D                => Bson(d)
     case bytes: Array[Byte] => Bin(bytes)
-    case str: String => StringPayload(str)
-    case n: Double => FloatingPointPayload(n)
-    case n: Long => FixedPointPayload(n)
-    case b: Boolean => BooleanPayload(b)
-    case x:AnyRef => Serialized(x)
-    case x => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
+    case str: String        => StringPayload(str)
+    case n: Double          => FloatingPointPayload(n)
+    case n: Long            => FixedPointPayload(n)
+    case b: Boolean         => BooleanPayload(b)
+    case x:AnyRef           => Serialized(x)
+    case x                  => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
   }
 
-  private def loadClass(byName: String): Class[AnyRef] = {
-    (Option(Thread.currentThread().getContextClassLoader) getOrElse getClass.getClassLoader).loadClass(byName).asInstanceOf[Class[X forSome {type X <: AnyRef}]]
-  }
-
-  def apply[D](hint: String, any: Any, clazzName: Option[String], serId: Option[Int], serManifest: Option[String])(implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D]):Payload = (hint,any) match {
-    case ("repr",repr:Array[Byte]) => Legacy(repr)
-    case ("ser",ser:Array[Byte]) if serId.isDefined =>
-      Serialized(ser, classOf[AnyRef], serId, serManifest)
-    case ("ser",ser:Array[Byte]) if clazzName.isDefined =>
-      val clazz = loadClass(clazzName.get)
-      Serialized(ser, clazz, serId, serManifest)
-    case ("bson",d:D) => Bson(d)
-    case ("bin",b:Array[Byte]) => Bin(b)
-    case ("s",s:String) => StringPayload(s)
-    case ("d",d:Double) => FloatingPointPayload(d)
-    case ("l",l:Long) => FixedPointPayload(l)
-    case ("b",b:Boolean) => BooleanPayload(b)
-    case (x,y) => throw new IllegalArgumentException(s"Unknown hint $x or type for payload content $y")
-  }
+  def apply[D](hint: String, any: Any, clazzName: Option[String],
+               serId: Option[Int], serManifest: Option[String])
+              (implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass):Payload =
+    (hint,any) match {
+      case ("repr",repr:Array[Byte]) => Legacy(repr)
+      case ("ser",ser:Array[Byte]) =>
+        Serialized(ser, clazzName.getOrElse(classOf[AnyRef].getName), serId, serManifest)
+      case ("bson",d:D) => Bson(d)
+      case ("bin",b:Array[Byte]) => Bin(b)
+      case ("s",s:String) => StringPayload(s)
+      case ("d",d:Double) => FloatingPointPayload(d)
+      case ("l",l:Long) => FixedPointPayload(l)
+      case ("b",b:Boolean) => BooleanPayload(b)
+      case (x,y) => throw new IllegalArgumentException(s"Unknown hint $x or type for payload content $y")
+    }
 }
 
 
 case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
-  def toRepr = payload match {
+  def toRepr: PersistentRepr = payload match {
     case l:Legacy =>
       l.content.update(persistenceId = pid, sequenceNr = sn)
     case x =>
@@ -166,7 +183,7 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
       )
   }
 
-  def toEnvelope(offset: Long) = payload match {
+  def toEnvelope(offset: Long): EventEnvelope = payload match {
     case l:Legacy =>
       EventEnvelope(
         offset = offset,
@@ -185,7 +202,7 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
 }
 
 object Event {
-  def apply[D](useLegacySerialization: Boolean)(repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Event =
+  def apply[D](useLegacySerialization: Boolean)(repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Event =
   if (useLegacySerialization)
     Event(
       pid = repr.persistenceId,
@@ -213,11 +230,11 @@ object Event {
 case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
 
 object Atom {
-  def apply[D](aw: AtomicWrite, useLegacySerialization: Boolean)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D]): Atom = {
+  def apply[D](aw: AtomicWrite, useLegacySerialization: Boolean)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Atom = {
     Atom(pid = aw.persistenceId,
       from = aw.lowestSequenceNr,
       to = aw.highestSequenceNr,
-      events = aw.payload.map(Event.apply(useLegacySerialization)(_)(ser,ev,dt)))
+      events = aw.payload.map(Event.apply(useLegacySerialization)(_)))
   }
 }
 

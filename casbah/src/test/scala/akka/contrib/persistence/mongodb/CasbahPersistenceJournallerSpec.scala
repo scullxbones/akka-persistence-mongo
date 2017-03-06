@@ -8,6 +8,8 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence._
+import akka.persistence.fsm.PersistentFSM
+import akka.persistence.serialization.MessageFormats.PersistentStateChangeEvent
 import akka.serialization.SerializationExtension
 import akka.testkit._
 import com.mongodb.casbah.Imports._
@@ -22,12 +24,13 @@ import scala.language.postfixOps
 class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
 
   import collection.immutable.{ Seq => ISeq }
-  import CasbahSerializers.Deserializer._
-  import CasbahSerializers.Serializer._
   import JournallingFieldNames._
 
   override def embedDB = "persistence-journaller-casbah"
 
+  implicit val CasbahSerializers = CasbahSerializersExtension(system)
+  import CasbahSerializers.Deserializer._
+  import CasbahSerializers.Serializer._
   implicit val serialization = SerializationExtension(system)
 
   implicit class PimpedDBObject(dbo: DBObject) {
