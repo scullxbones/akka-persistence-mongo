@@ -1,4 +1,4 @@
-val releaseV = "1.4.0"
+val releaseV = "1.4.1-SNAPSHOT"
 
 val scalaV = "2.11.8"
 
@@ -75,7 +75,6 @@ lazy val `akka-persistence-mongo-common` = (project in file("common"))
 
 lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  //.dependsOn(`akka-persistence-mongo-common` % "compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -85,7 +84,6 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  //.dependsOn(`akka-persistence-mongo-common` % "compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -102,7 +100,6 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
 
 lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .dependsOn(`akka-persistence-mongo-casbah` % "test->test;compile->compile")
-  //.dependsOn(`akka-persistence-mongo-casbah` % "compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(

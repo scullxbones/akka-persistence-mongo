@@ -10,7 +10,6 @@ import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
-import akka.serialization.{ Serialization, SerializationExtension }
 import com.codahale.metrics.SharedMetricRegistries
 import com.typesafe.config.Config
 import nl.grons.metrics.scala.InstrumentedBuilder
@@ -18,7 +17,7 @@ import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
-import scala.util.{ Success, Failure, Try }
+import scala.util.{Failure, Success, Try}
 
 object MongoPersistenceDriver {
 
@@ -44,11 +43,11 @@ trait Instrumented extends InstrumentedBuilder {
 }
 
 trait CanSerializeJournal[D] {
-  def serializeAtom(atom: Atom)(implicit serialization: Serialization, system: ActorSystem): D
+  def serializeAtom(atom: Atom): D
 }
 
 trait CanDeserializeJournal[D] {
-  def deserializeDocument(document: D)(implicit serialization: Serialization, system: ActorSystem): Event
+  def deserializeDocument(document: D): Event
 }
 
 trait CanSuffixCollectionNames {
@@ -73,7 +72,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   protected val logger = LoggerFactory.getLogger(getClass)
 
-  implicit lazy val actorSystem: ActorSystem = as
+  implicit val actorSystem: ActorSystem = as
 
   lazy val settings = {
     val defaults = MongoSettings(as.settings)
@@ -256,7 +255,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
   def suffixDropEmpty = settings.SuffixDropEmptyCollections
 
-  implicit def serialization = SerializationExtension(actorSystem)
-  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)(serialization, actorSystem)
-  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)(serialization, actorSystem)
+  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
+  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
 }

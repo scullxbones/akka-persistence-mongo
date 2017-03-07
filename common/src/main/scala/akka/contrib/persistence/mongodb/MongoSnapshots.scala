@@ -59,7 +59,7 @@ class MongoSnapshots(config: Config) extends SnapshotStore {
   override def receivePluginInternal: Actor.Receive = Actor.emptyBehavior
 }
 
-object SnapshottingFieldNames {
+trait SnapshottingFieldNames {
   final val PROCESSOR_ID = "pid"
   final val SEQUENCE_NUMBER = "sn"
   final val TIMESTAMP = "ts"
@@ -70,6 +70,8 @@ object SnapshottingFieldNames {
     final val SERIALIZED = "s2"
   }
 }
+
+object SnapshottingFieldNames extends SnapshottingFieldNames
 
 trait MongoPersistenceSnapshottingApi {
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Option[SelectedSnapshot]]

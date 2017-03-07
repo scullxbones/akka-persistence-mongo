@@ -6,15 +6,15 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{ BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI }
+import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.util.{ Failure, Success, Try }
+import scala.util.{Failure, Success, Try}
 import scala.language.reflectiveCalls
 
 object CasbahPersistenceDriver {
@@ -30,6 +30,8 @@ object CasbahPersistenceDriver {
 
 class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
   import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
+
+  val CasbahSerializers: CasbahSerializers = CasbahSerializersExtension(system)
 
   // Collection type
   type C = MongoCollection

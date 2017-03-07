@@ -23,12 +23,11 @@ import scala.util.{Failure, Success, Try}
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import JournallingFieldNames._
-  import RxMongoSerializers._
+  import driver.RxMongoSerializers._
 
   protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private[this] implicit val serialization = driver.serialization
-  private[this] lazy val writeConcern = driver.journalWriteConcern
+  private[this] val writeConcern = driver.journalWriteConcern
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
@@ -117,7 +116,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
       j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
         otherOperators = GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil).map(
-          rez => rez.head.flatMap(_.getAs[Long]("max")).headOption)
+          rez => rez.head(BSONDocumentIdentity).flatMap(_.getAs[Long]("max")).headOption)
     }
 
     for {

@@ -2,11 +2,14 @@ package akka.contrib.persistence
 
 import java.util.concurrent.TimeUnit
 
+import akka.actor.DynamicAccess
 import com.typesafe.config.Config
 
 import scala.concurrent.duration.FiniteDuration
 
 package object mongodb {
+
+  type LoadClass = DynamicAccess
 
   implicit class NonWrappingLongToInt(val pimped: Long) extends AnyVal {
     def toIntWithoutWrapping: Int = {

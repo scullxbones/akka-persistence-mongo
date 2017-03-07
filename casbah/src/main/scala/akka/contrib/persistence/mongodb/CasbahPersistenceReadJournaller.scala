@@ -21,14 +21,14 @@ object CurrentAllPersistenceIds {
 }
 
 class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
   val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
-  val temporaryCollection = driver.collection(temporaryCollectionName)
+  val temporaryCollection: MongoCollection = driver.collection(temporaryCollectionName)
 
   override protected def initialCursor: Stream[String] = {
-    driver.getJournalCollections()
-      .map { journal =>
+    driver.getJournalCollections().toStream
+      .flatMap { journal =>
         journal.aggregate(
           MongoDBObject("$project" -> MongoDBObject(PROCESSOR_ID -> 1)) ::
             MongoDBObject("$group" -> MongoDBObject("_id" -> s"$$$PROCESSOR_ID")) ::
@@ -36,7 +36,6 @@ class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorP
             Nil).results
         temporaryCollection.find().toStream
       }
-      .fold(Stream.empty)(_ ++ _)
       .flatMap(_.getAs[String]("_id"))
   }
 
@@ -59,7 +58,7 @@ object CurrentAllEvents {
 }
 
 class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, Stream[Event]] {
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
   override protected def initialCursor: Stream[Event] = {
     driver.getJournalCollections().map(_.find(MongoDBObject()).toStream).fold(Stream.empty)(_ ++ _)
@@ -84,7 +83,7 @@ object CurrentEventsByPersistenceId {
 }
 
 class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends SyncActorPublisher[Event, Stream[Event]] {
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
   override protected def initialCursor: Stream[Event] = {
     driver.getJournal(persistenceId)
@@ -108,7 +107,7 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
 }
 
 class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection] {
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
   override def cursor(): MongoCollection = {
     val c = driver.realtime
@@ -132,7 +131,6 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
 }
 
 class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPersistenceReadJournallingApi {
-  import CasbahSerializers._
 
   private val journalStreaming = {
     val stream = new CasbahMongoJournalStream(driver)

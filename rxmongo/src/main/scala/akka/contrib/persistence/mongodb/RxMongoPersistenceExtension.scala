@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -47,6 +47,8 @@ class RxMongoDriverProvider(actorSystem: ActorSystem) {
 
 class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
+
+  val RxMongoSerializers: RxMongoSerializers = RxMongoSerializersExtension(system)
 
   // Collection type
   type C = Future[BSONCollection]
