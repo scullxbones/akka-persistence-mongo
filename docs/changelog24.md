@@ -1,5 +1,10 @@
 ## Changelog for 1.x major version
 
+### 1.4.1
+* Fix for `PersistentFSM` serialization issue [#141](https://github.com/scullxbones/akka-persistence-mongo/issues/141)
+  * Change to prefer read-time values for serializer (binary serialization) when possible
+* Fix for `currentPersistenceIds` query on Casbah journal [#144](https://github.com/scullxbones/akka-persistence-mongo/issues/144)
+
 ### 1.4.0
 * Update Reactive Mongo driver to 0.12 series
 * Update Casbah driver to one that supports 2.11, 2.12
