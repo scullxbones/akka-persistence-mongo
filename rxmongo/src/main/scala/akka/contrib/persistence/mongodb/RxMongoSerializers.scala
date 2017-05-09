@@ -6,6 +6,9 @@ import akka.persistence.{PersistentRepr, SelectedSnapshot, SnapshotMetadata}
 import akka.serialization.{Serialization, SerializationExtension}
 import reactivemongo.bson._
 import DefaultBSONHandlers._
+import akka.NotUsed
+import akka.contrib.persistence.mongodb.JournallingFieldNames.{EVENTS, TIMESTAMP}
+import akka.stream.scaladsl.Flow
 
 object RxMongoSerializersExtension extends ExtensionId[RxMongoSerializers] with ExtensionIdProvider {
   override def lookup = RxMongoSerializersExtension
@@ -17,6 +20,16 @@ object RxMongoSerializersExtension extends ExtensionId[RxMongoSerializers] with 
 }
 
 object RxMongoSerializers {
+
+  def deserializeFlow(driver: RxMongoDriver)(implicit ev: CanDeserializeJournal[BSONDocument]): Flow[BSONDocument, Event, NotUsed] = {
+    Flow[BSONDocument]
+      .mapConcat { atom =>
+        atom.getAs[BSONArray](EVENTS).map(_.values.collect {
+          case event: BSONDocument =>
+            driver.deserializeJournal(event, atom.as[Long](TIMESTAMP))
+        }).getOrElse(Stream.empty[Event])
+      }
+  }
 
   implicit class PimpedBSONDocument(val doc: BSONDocument) extends AnyVal {
     def as[A](key: String)(implicit ev: Manifest[A], reader: BSONReader[_ <: BSONValue, A]): A =
@@ -92,16 +105,17 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
 
   implicit object JournalDeserializer extends CanDeserializeJournal[BSONDocument] with JournallingFieldNames {
 
-    override def deserializeDocument(document: BSONDocument): Event = document match {
-      case Version(1,doc) => deserializeVersionOne(doc)
-      case Version(0,doc) => deserializeDocumentLegacy(doc)
+    override def deserializeDocument(document: BSONDocument, timestamp: Long): Event = document match {
+      case Version(1,doc) => deserializeVersionOne(doc, timestamp)
+      case Version(0,doc) => deserializeDocumentLegacy(doc, timestamp)
       case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
       case _ => throw new IllegalStateException("Failed to read or default version field")
     }
 
-    private def deserializeVersionOne(d: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event =
+    private def deserializeVersionOne(d: BSONDocument, timestamp: Long)(implicit serialization: Serialization, system: ActorSystem): Event =
       Event(
         pid = d.as[String](PROCESSOR_ID),
+        timestamp = timestamp,
         sn = d.as[Long](SEQUENCE_NUMBER),
         payload = deserializePayload(d.get(PayloadKey).get,d.as[String](TYPE),d.getAs[String](HINT),d.getAs[Int](SER_ID),d.getAs[String](SER_MANIFEST)),
         sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
@@ -123,12 +137,13 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
     }
 
 
-    private def deserializeDocumentLegacy(document: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event = {
+    private def deserializeDocumentLegacy(document: BSONDocument, timestamp: Long)(implicit serialization: Serialization, system: ActorSystem): Event = {
       val persistenceId = document.as[String](PROCESSOR_ID)
       val sequenceNr = document.as[Long](SEQUENCE_NUMBER)
       document.get(SERIALIZED) match {
         case Some(b: BSONDocument) =>
           Event(pid = persistenceId,
+                timestamp = timestamp,
                 sn = sequenceNr,
                 payload = Bson(b.as[BSONDocument](PayloadKey)),
                 sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
@@ -136,7 +151,7 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
         case Some(ser: BSONBinary) =>
           val repr = serialization.deserialize(ser.byteArray, classOf[PersistentRepr])
             .getOrElse(throw new IllegalStateException(s"Unable to deserialize PersistentRepr for id $persistenceId and sequence number $sequenceNr"))
-          Event[BSONDocument](useLegacySerialization = false)(repr).copy(pid = persistenceId, sn = sequenceNr)
+          Event[BSONDocument](document.as[Long](TIMESTAMP), useLegacySerialization = false)(repr).copy(pid = persistenceId, sn = sequenceNr)
         case Some(x) =>
           throw new IllegalStateException(s"Unexpected value $x for $SERIALIZED field in document for id $persistenceId and sequence number $sequenceNr")
         case None =>
@@ -152,6 +167,7 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
         PROCESSOR_ID -> atom.pid,
         FROM -> atom.from,
         TO -> atom.to,
+        TIMESTAMP -> atom.timestamp,
         EVENTS -> BSONArray(atom.events.map(serializeEvent)),
         VERSION -> 1
       )

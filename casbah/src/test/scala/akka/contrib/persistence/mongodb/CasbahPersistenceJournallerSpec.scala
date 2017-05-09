@@ -8,8 +8,6 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence._
-import akka.persistence.fsm.PersistentFSM
-import akka.persistence.serialization.MessageFormats.PersistentStateChangeEvent
 import akka.serialization.SerializationExtension
 import akka.testkit._
 import com.mongodb.casbah.Imports._
@@ -62,7 +60,8 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in {
     new Fixture {
 
-      val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = "TEST")))
+      val timestamp = System.currentTimeMillis()
+      val repr = Atom(pid = "pid", from = 1L, to = 1L, timestamp, events = ISeq(Event(pid = "pid", sn = 1L, timestamp = System.currentTimeMillis(), payload = "TEST")))
 
       val serialized = serializeAtom(repr)
 
@@ -71,14 +70,16 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       atom.getAs[String](PROCESSOR_ID) shouldBe Some("pid")
       atom.getAs[Long](FROM) shouldBe Some(1L)
       atom.getAs[Long](TO) shouldBe Some(1L)
+      atom.getAs[Long](TIMESTAMP) shouldBe Some(timestamp)
 
-      val deserialized = deserializeDocument(serialized.firstEvent)
+      val deserialized = deserializeDocument(serialized.firstEvent, timestamp)
 
       deserialized.payload shouldBe StringPayload("TEST")
       deserialized.pid should be("pid")
       deserialized.sn should be(1)
       deserialized.manifest shouldBe empty
       deserialized.sender shouldBe empty
+      deserialized.timestamp shouldBe timestamp
     }
     ()
   }

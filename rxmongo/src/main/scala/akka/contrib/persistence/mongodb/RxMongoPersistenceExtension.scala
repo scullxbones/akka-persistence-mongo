@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -47,6 +47,7 @@ class RxMongoDriverProvider(actorSystem: ActorSystem) {
 
 class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
   import RxMongoPersistenceDriver._
+  import JournallingFieldNames._
 
   val RxMongoSerializers: RxMongoSerializers = RxMongoSerializersExtension(system)
 
@@ -93,10 +94,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     import scala.collection.immutable.{ Seq => ISeq }
 
     val id = doc.getAs[BSONObjectID]("_id").get
-    val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
+    val timestamp = doc.getAs[BSONLong](TIMESTAMP).map(_.value).get
+    val ev = Event[BSONDocument](timestamp, useLegacySerialization)(deserializeJournal(doc, timestamp).toRepr)
     val q = BSONDocument("_id" -> id)
 
-    val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))
+
+    val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, timestamp, ISeq(ev)))
     val results = collection.flatMap(_.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
       previous :+ wr
     })

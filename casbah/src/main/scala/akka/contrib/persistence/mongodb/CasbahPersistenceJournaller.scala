@@ -11,7 +11,7 @@ import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
@@ -36,15 +36,24 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long)(implicit ec: ExecutionContext): Iterator[Event] = {
     val journal = driver.getJournal(pid)
-    journal.find(journalRangeQuery(pid, from, to))
-      .sort(MongoDBObject(TO -> 1))
-      .flatMap(_.getAs[MongoDBList](EVENTS))
-      .flatMap(lst => lst.collect { case x: DBObject => x })
-      .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to))
-      .map(driver.deserializeJournal)
+
+    for {
+      atom <- journal
+        .find(journalRangeQuery(pid, from, to))
+        .sort(MongoDBObject(TO -> 1))
+      event <- atom.getAs[MongoDBList](EVENTS).map{ xs =>
+        xs.collect {
+          case x: DBObject => x
+        }
+      }.getOrElse(Iterator.empty)
+      if event.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= from && sn <= to)
+    } yield {
+      driver.deserializeJournal(event, atom.as[Long](TIMESTAMP))
+    }
   }
 
-  import collection.immutable.{ Seq => ISeq }
+  import collection.immutable.{Seq => ISeq}
+
   private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: MongoCollection)(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
     val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
 
@@ -70,7 +79,11 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.flatMap { _ => Future { doBatchAppend(writes, realtime) } }
+      batchFuture.flatMap { _ =>
+        Future {
+          doBatchAppend(writes, realtime)
+        }
+      }
     else
       batchFuture
   }

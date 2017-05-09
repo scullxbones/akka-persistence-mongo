@@ -168,7 +168,7 @@ object Payload {
 }
 
 
-case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
+case class Event(pid: String, sn: Long, timestamp: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
   def toRepr: PersistentRepr = payload match {
     case l:Legacy =>
       l.content.update(persistenceId = pid, sequenceNr = sn)
@@ -183,17 +183,17 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
       )
   }
 
-  def toEnvelope(offset: Long): EventEnvelope = payload match {
+  def toEnvelope: EventEnvelope = payload match {
     case l:Legacy =>
       EventEnvelope(
-        offset = offset,
+        offset = timestamp,
         persistenceId = pid,
         sequenceNr = sn,
         event = l.content.payload
       )
     case x =>
       EventEnvelope(
-        offset = offset,
+        offset = timestamp,
         persistenceId = pid,
         sequenceNr = sn,
         event = x.content
@@ -202,11 +202,12 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
 }
 
 object Event {
-  def apply[D](useLegacySerialization: Boolean)(repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Event =
+  def apply[D](timestamp: Long, useLegacySerialization: Boolean)(repr: PersistentRepr)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Event =
   if (useLegacySerialization)
     Event(
       pid = repr.persistenceId,
       sn = repr.sequenceNr,
+      timestamp = timestamp,
       payload = Payload(repr),
       sender = Option(repr.sender),
       manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
@@ -216,6 +217,7 @@ object Event {
     Event(
       pid = repr.persistenceId,
       sn = repr.sequenceNr,
+      timestamp,
       payload = Payload(repr.payload),
       sender = Option(repr.sender),
       manifest = Option(repr.manifest).filterNot(_ == PersistentRepr.Undefined),
@@ -227,14 +229,17 @@ object Event {
   }
 }
 
-case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
+case class Atom(pid: String, from: Long, to: Long, timestamp: Long, events: ISeq[Event])
 
 object Atom {
   def apply[D](aw: AtomicWrite, useLegacySerialization: Boolean)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Atom = {
+    val timestamp = System.currentTimeMillis()
+
     Atom(pid = aw.persistenceId,
+      timestamp = timestamp,
       from = aw.lowestSequenceNr,
       to = aw.highestSequenceNr,
-      events = aw.payload.map(Event.apply(useLegacySerialization)(_)))
+      events = aw.payload.map(Event(timestamp, useLegacySerialization)(_)))
   }
 }
 

@@ -136,12 +136,15 @@ trait JournallingFieldNames {
   final val EVENTS = "events"
   final val FROM = "from"
   final val TO = "to"
+  final val TIMESTAMP = "ts"
   final val MANIFEST = "manifest"
   final val WRITER_UUID = "_w"
   final val TYPE = "_t"
   final val HINT = "_h"
   final val SER_MANIFEST = "_sm"
   final val SER_ID = "_si"
+
+
 }
 object JournallingFieldNames extends JournallingFieldNames
 
