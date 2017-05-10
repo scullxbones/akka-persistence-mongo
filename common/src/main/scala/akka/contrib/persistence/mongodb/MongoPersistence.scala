@@ -8,7 +8,6 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
-import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
 import com.codahale.metrics.SharedMetricRegistries
 import com.typesafe.config.Config
@@ -47,7 +46,7 @@ trait CanSerializeJournal[D] {
 }
 
 trait CanDeserializeJournal[D] {
-  def deserializeDocument(document: D): Event
+  def deserializeDocument(document: D, timestamp: Long): Event
 }
 
 trait CanSuffixCollectionNames {
@@ -210,7 +209,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     ensureIndex(snapsIndexName, unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-      TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
+      SnapshottingFieldNames.TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
   }
 
   private[mongodb] lazy val realtime: C = {
@@ -255,6 +254,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
   def suffixDropEmpty = settings.SuffixDropEmptyCollections
 
-  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
+  def deserializeJournal(dbo: D, timestamp: Long)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo, timestamp
+  )
   def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
 }

@@ -9,6 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.NotUsed
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
+import akka.contrib.persistence.mongodb.RxMongoSerializers.deserializeFlow
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{KillSwitches, Materializer}
 import reactivemongo.akkastream.cursorProducer
@@ -19,30 +20,27 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 object CurrentAllEvents {
-  def source(driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
-    import driver.RxMongoSerializers._
+  import RxMongoSerializers._
+
+  def source(offset: Long, driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
     implicit val ec = driver.querySideDispatcher
+    import driver.RxMongoSerializers._
+
+    val query = BSONDocument(TIMESTAMP->BSONDocument("$gte"->BSONLong(offset)))
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map { c =>
-        c.find(BSONDocument())
+        c.find(query)
           .projection(BSONDocument(EVENTS -> 1))
           .cursor[BSONDocument]()
           .documentSource()
-          .map { doc =>
-            doc.getAs[BSONArray](EVENTS)
-              .map(_.elements
-                .map(_.value)
-                .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
-              .getOrElse(Nil)
-          }.mapConcat(identity)
+          .via(deserializeFlow(driver))
       }.reduceLeft(_ concat _))
   }
 }
 
 object CurrentAllPersistenceIds {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
-    import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
@@ -89,13 +87,8 @@ object CurrentEventsByPersistenceId {
                 .projection(BSONDocument(EVENTS -> 1))
                 .cursor[BSONDocument]()
                 .documentSource()
-            ).map( doc =>
-              doc.getAs[BSONArray](EVENTS)
-                .map(_.elements
-                  .map(_.value)
-                  .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
-                .getOrElse(Nil)
-            ).mapConcat(identity)
+            )
+            .via(deserializeFlow(driver))
   }
 }
 
@@ -114,11 +107,7 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
           .cursor[BSONDocument]()
           .documentSource()
           .via(killSwitch.flow)
-          .map ( _.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
-              case d: BSONDocument => driver.deserializeJournal(d)
-          }).getOrElse(Nil)
-          )
-          .mapConcat(identity)
+          .via(deserializeFlow(driver))
       }
 
   override def publishEvents(): Unit = {
@@ -139,8 +128,8 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
     stream
   }
 
-  override def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed] =
-    CurrentAllEvents.source(driver)
+  override def currentAllEvents(offset: Long)(implicit m: Materializer): Source[Event, NotUsed] =
+    CurrentAllEvents.source(offset, driver)
 
   override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
     CurrentAllPersistenceIds.source(driver)

@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
 import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI}
@@ -14,8 +14,8 @@ import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.util.{Failure, Success, Try}
 import scala.language.reflectiveCalls
+import scala.util.{Failure, Success, Try}
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
@@ -68,8 +68,12 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     logger.info(s"Journal automatic upgrade found $cnt records needing upgrade")
     if (cnt > 0) Try {
       val results = j.find[DBObject](q)
-        .map(d => d.as[ObjectId]("_id") -> Event[DBObject](useLegacySerialization)(deserializeJournal(d).toRepr))
-        .map { case (id, ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))) }
+        .map{d =>
+          val id = d.as[ObjectId]("_id")
+          val timestamp = d.getAs[Long](TIMESTAMP).getOrElse(id.getDate.getTime)
+          (id, Event[DBObject](timestamp, useLegacySerialization)(deserializeJournal(d, timestamp).toRepr))
+        }
+        .map { case (id, ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ev.timestamp, ISeq(ev)))) }
       results.foldLeft((0, 0)) {
         case ((successes, failures), result) =>
           val n = result.getN

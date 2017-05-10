@@ -32,16 +32,15 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
 
 object ScalaDslMongoReadJournal {
 
-  val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] = {
-    // TODO Use zipWithIndex in akka 2.4.14
-    Flow[Event].zip(Source.unfold(0L)(s => Some((s + 1, s)))).map { case (event, offset) => event.toEnvelope(offset) }
-  }
+  val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] =
+    Flow[Event].map(_.toEnvelope)
 
   implicit class RichFlow[Mat](source: Source[Event, Mat]) {
 
     def toEventEnvelopes: Source[EventEnvelope, Mat] =
       source.via(eventToEventEnvelope)
   }
+
 }
 
 class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implicit m: Materializer)
@@ -53,9 +52,14 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
 
   import ScalaDslMongoReadJournal._
 
-  def currentAllEvents(): Source[EventEnvelope, NotUsed] = impl.currentAllEvents.toEventEnvelopes
+  def currentAllEvents(): Source[EventEnvelope, NotUsed] =
+    currentAllEvents(0L)
 
-  override def currentPersistenceIds(): Source[String, NotUsed] = impl.currentPersistenceIds
+  def currentAllEvents(offset: Long): Source[EventEnvelope, NotUsed] =
+    impl.currentAllEvents(offset).toEventEnvelopes
+
+  override def currentPersistenceIds(): Source[String, NotUsed] =
+    impl.currentPersistenceIds
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
     require(persistenceId != null, "PersistenceId must not be null")
@@ -63,9 +67,16 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   }
 
   def allEvents(): Source[EventEnvelope, NotUsed] = {
-    val pastSource = impl.currentAllEvents
+    allEvents(0L)
+  }
+
+  def allEvents(offset: Long): Source[EventEnvelope, NotUsed] = {
+    val pastSource = impl.currentAllEvents(offset)
     val realtimeSource = Source.actorRef(100, OverflowStrategy.dropTail).mapMaterializedValue(impl.subscribeJournalEvents)
-    (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventsByPersistenceId).toEventEnvelopes
+    (pastSource ++ realtimeSource)
+      .filter(_.timestamp >= offset)
+      .via(new RemoveDuplicatedEventsByPersistenceId)
+      .toEventEnvelopes
   }
 
   override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
@@ -76,7 +87,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
 
     val realtimeSource =
       Source.actorRef[Event](100, OverflowStrategy.dropTail)
-        .mapMaterializedValue{ar => impl.subscribeJournalEvents(ar); NotUsed}
+        .mapMaterializedValue { ar => impl.subscribeJournalEvents(ar); NotUsed }
         .filter(_.pid == persistenceId)
         .filter(_.sn >= fromSequenceNr)
         .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
@@ -101,8 +112,17 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
     val pastSource = impl.currentPersistenceIds
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
       .map(_.pid)
-      .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
-    (pastSource ++ realtimeSource).via(new RemoveDuplicates)
+      .mapMaterializedValue { actor => impl.subscribeJournalEvents(actor); NotUsed }
+    (pastSource ++ realtimeSource)
+      .statefulMapConcat { () =>
+        val processeds = mutable.Set.empty[String]
+        candidate => if (processeds(candidate)) {
+          List.empty
+        } else {
+          processeds += candidate
+          List(candidate)
+      }
+      }
   }
 }
 
@@ -133,13 +153,15 @@ trait JournalStream[Cursor] {
   def publishEvents(): Unit
 }
 
-private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUsed],
-                                                  realtimeSource: Source[Event,NotUsed],
-                                                  persistenceId: String, minSequence: Long, maxSequence: Long)(implicit m: Materializer)
+private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event, NotUsed],
+                                                 realtimeSource: Source[Event, NotUsed],
+                                                 persistenceId: String, minSequence: Long, maxSequence: Long)(implicit m: Materializer)
   extends ActorPublisher[Event] with ActorLogging {
 
   case object OnInit
+
   case object Ack
+
   case object Complete
 
   override def preStart(): Unit = {
@@ -148,10 +170,10 @@ private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUse
 
   override def receive: Receive = past(-1L, Nil)
 
-  private def trySend(nextSn: Long, currentBuffer: Seq[Event], strictContiguous: Boolean): (Long,Seq[Event]) = {
+  private def trySend(nextSn: Long, currentBuffer: Seq[Event], strictContiguous: Boolean): (Long, Seq[Event]) = {
 
     @tailrec
-    def sendWhileRequested(atMost: Long, next: Long, buffer: Seq[Event]): (Long,Seq[Event]) = {
+    def sendWhileRequested(atMost: Long, next: Long, buffer: Seq[Event]): (Long, Seq[Event]) = {
       if (atMost == 0) next -> buffer
       else {
         buffer.sortBy(_.sn).headOption match {
@@ -164,7 +186,7 @@ private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUse
     }
 
     @tailrec
-    def sendWhileContiguous(atMost: Long, next: Long, buffer: Seq[Event]): (Long,Seq[Event]) = {
+    def sendWhileContiguous(atMost: Long, next: Long, buffer: Seq[Event]): (Long, Seq[Event]) = {
       if (atMost == 0) next -> buffer
       else {
         buffer.find(_.sn == next) match {
@@ -196,40 +218,40 @@ private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUse
       sender() ! Ack
     case Status.Failure(t) =>
       sender() ! Ack
-      log.error(t,s"[$logHeader] Failure while streaming eventsByPersistenceId for id $persistenceId, stopping stream")
+      log.error(t, s"[$logHeader] Failure while streaming eventsByPersistenceId for id $persistenceId, stopping stream")
       context.stop(self)
   }
 
   private def past(nextSequenceNr: Long, buffered: Seq[Event]): Receive =
     handleShutdownPublisherMessages orElse
       handleBasicActorRefSinkMessages("past") orElse {
-        case ActorPublisherMessage.Request(_) =>
-          if (nextSequenceNr > -1L) {
-            val (next,buf) = trySend(nextSequenceNr, buffered, strictContiguous = false)
-            context.become(past(next, buf))
-          }
-        case e:Event =>
-          val startingProblemSn = if (nextSequenceNr == -1L) e.sn else nextSequenceNr
-          sender() ! Ack
-          val (next,buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = false)
+      case ActorPublisherMessage.Request(_) =>
+        if (nextSequenceNr > -1L) {
+          val (next, buf) = trySend(nextSequenceNr, buffered, strictContiguous = false)
           context.become(past(next, buf))
-        case Complete =>
-          sender() ! Ack
-          runStream(realtimeSource,nextSequenceNr)
-          log.debug(s"Past completed for $persistenceId, transitioning to live @$nextSequenceNr with buffer of size ${buffered.size}")
-          context.become(live(nextSequenceNr, buffered)) // transition to realtime, maintaining last sn
-      }
+        }
+      case e: Event =>
+        val startingProblemSn = if (nextSequenceNr == -1L) e.sn else nextSequenceNr
+        sender() ! Ack
+        val (next, buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = false)
+        context.become(past(next, buf))
+      case Complete =>
+        sender() ! Ack
+        runStream(realtimeSource, nextSequenceNr)
+        log.debug(s"Past completed for $persistenceId, transitioning to live @$nextSequenceNr with buffer of size ${buffered.size}")
+        context.become(live(nextSequenceNr, buffered)) // transition to realtime, maintaining last sn
+    }
 
   private def live(nextSequenceNr: Long, buffered: Seq[Event]): Receive =
     handleShutdownPublisherMessages orElse
       handleBasicActorRefSinkMessages("current") orElse {
       case ActorPublisherMessage.Request(_) =>
-        val (next,buf) = trySend(nextSequenceNr, buffered, strictContiguous = true)
+        val (next, buf) = trySend(nextSequenceNr, buffered, strictContiguous = true)
         context.become(live(next, buf))
-      case e:Event =>
+      case e: Event =>
         val startingProblemSn = if (nextSequenceNr == -1L) e.sn else nextSequenceNr
         sender() ! Ack
-        val (next,buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = true)
+        val (next, buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = true)
         context.become(live(next, buf))
       case Complete =>
         log.debug(s"Upstream completed - stopping publisher for persistenceId $persistenceId")
@@ -237,7 +259,7 @@ private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUse
         context.stop(self)
     }
 
-  private def runStream(source: Source[Event,NotUsed], minSn: Long) = {
+  private def runStream(source: Source[Event, NotUsed], minSn: Long) = {
     source
       .filter(_.pid == persistenceId)
       .filter(_.sn >= minSn)
@@ -293,33 +315,6 @@ class RemoveDuplicatedEventsByPersistenceId extends GraphStage[FlowShape[Event, 
           pull(in)
       }
     }
-    override def onPull(): Unit = pull(in)
-
-    setHandlers(in, out, this)
-  }
-
-}
-
-class RemoveDuplicates[T] extends GraphStage[FlowShape[T, T]] {
-
-  private val in: Inlet[T] = Inlet("in")
-  private val out: Outlet[T] = Outlet("out")
-
-  override val shape: FlowShape[T, T] = FlowShape(in, out)
-
-  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) with InHandler with OutHandler {
-
-    private var processed = Set.empty[T]
-
-    override def onPush(): Unit = {
-      val element = grab(in)
-      if(processed.contains(element)) {
-        pull(in)
-      } else {
-        processed += element
-        push(out, element)
-      }
-    }
 
     override def onPull(): Unit = pull(in)
 
@@ -327,9 +322,10 @@ class RemoveDuplicates[T] extends GraphStage[FlowShape[T, T]] {
   }
 
 }
+
 
 trait MongoPersistenceReadJournallingApi {
-  def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed]
+  def currentAllEvents(offset: Long)(implicit m: Materializer): Source[Event, NotUsed]
 
   def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed]
 

@@ -54,17 +54,26 @@ class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorP
 }
 
 object CurrentAllEvents {
-  def props(driver: CasbahMongoDriver): Props = Props(new CurrentAllEvents(driver))
+  def props(offset: Long, driver: CasbahMongoDriver): Props = Props(new CurrentAllEvents(offset, driver))
 }
 
-class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, Stream[Event]] {
+class CurrentAllEvents(val offset: Long, val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, Stream[Event]] {
   import driver.CasbahSerializers._
 
   override protected def initialCursor: Stream[Event] = {
-    driver.getJournalCollections().map(_.find(MongoDBObject()).toStream).fold(Stream.empty)(_ ++ _)
-      .flatMap(_.getAs[MongoDBList](EVENTS))
-      .flatMap(lst => lst.collect { case x: DBObject => x })
-      .map(driver.deserializeJournal)
+
+    val query = MongoDBObject(TIMESTAMP->MongoDBObject("$gte"->offset))
+
+    for {
+      atom <- driver.getJournalCollections().map(_.find(query).toStream).fold(Stream.empty)(_ ++ _)
+      event <- atom.getAs[MongoDBList](EVENTS).map{ xs =>
+        xs.collect {
+          case x: DBObject => x
+        }
+      }.getOrElse(Stream.empty)
+    } yield {
+      driver.deserializeJournal(event, atom.as[Long](TIMESTAMP))
+    }
   }
 
   override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
@@ -86,14 +95,21 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   import driver.CasbahSerializers._
 
   override protected def initialCursor: Stream[Event] = {
-    driver.getJournal(persistenceId)
-      .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $lte toSeq) ++ (TO $gte fromSeq))
-      .sort(MongoDBObject(TO -> 1))
-      .toStream
-      .flatMap(_.getAs[MongoDBList](EVENTS))
-      .flatMap(lst => lst.collect { case x: DBObject => x })
-      .filter(dbo => dbo.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq))
-      .map(driver.deserializeJournal)
+
+    for {
+      atom <- driver.getJournal(persistenceId)
+        .find((PROCESSOR_ID $eq persistenceId) ++ (FROM $lte toSeq) ++ (TO $gte fromSeq))
+        .sort(MongoDBObject(TO -> 1))
+        .toStream
+      event <- atom.getAs[MongoDBList](EVENTS).map{ xs =>
+        xs.collect {
+          case x: DBObject => x
+        }
+      }.getOrElse(Stream.empty)
+      if event.getAs[Long](SEQUENCE_NUMBER).exists(sn => sn >= fromSeq && sn <= toSeq)
+    } yield {
+      driver.deserializeJournal(event, atom.as[Long](TIMESTAMP))
+    }
   }
 
   override protected def next(c: Stream[Event], atMost: Long): (Vector[Event], Stream[Event]) = {
@@ -121,7 +137,9 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
     Future {
       cursor().foreach { next =>
         if (next.keySet().contains(EVENTS)) {
-          val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
+          val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject =>
+            driver.deserializeJournal(x, next.as[Long](TIMESTAMP))
+          }
           events.foreach(driver.actorSystem.eventStream.publish)
         }
       }
@@ -138,8 +156,8 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
     stream
   }
 
-  override def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed] =
-    Source.actorPublisher[Event](CurrentAllEvents.props(driver)).mapMaterializedValue(_ => NotUsed)
+  override def currentAllEvents(offset: Long)(implicit m: Materializer): Source[Event, NotUsed] =
+    Source.actorPublisher[Event](CurrentAllEvents.props(offset, driver)).mapMaterializedValue(_ => NotUsed)
 
   override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
     Source.actorPublisher[String](CurrentAllPersistenceIds.props(driver)).mapMaterializedValue(_ => NotUsed)

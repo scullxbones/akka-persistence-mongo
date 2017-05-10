@@ -31,29 +31,31 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
 
   implicit object Deserializer extends CanDeserializeJournal[DBObject] {
 
-    override def deserializeDocument(dbo: DBObject): Event = dbo match {
-      case Version(1,d) => deserializeVersionOne(d)
-      case Version(0,d) => deserializeDocumentLegacy(d)
+    override def deserializeDocument(dbo: DBObject, timestamp: Long): Event = dbo match {
+      case Version(1,d) => deserializeVersionOne(d, timestamp)
+      case Version(0,d) => deserializeDocumentLegacy(d, timestamp)
       case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
     }
 
-    private def deserializeVersionOne(d: DBObject) = Event(
+    private def deserializeVersionOne(d: DBObject, timestamp: Long) = Event(
       pid = d.as[String](PROCESSOR_ID),
       sn = d.as[Long](SEQUENCE_NUMBER),
+      timestamp = timestamp,
       payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT),d.getAs[Int](SER_ID), d.getAs[String](SER_MANIFEST)),
       sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
       manifest = d.getAs[String](MANIFEST),
       writerUuid = d.getAs[String](WRITER_UUID)
     )
 
-    private def deserializeDocumentLegacy(d: DBObject) = {
+    private def deserializeDocumentLegacy(d: DBObject, timestamp: Long) = {
       val persistenceId = d.as[String](PROCESSOR_ID)
       val sequenceNr = d.as[Long](SEQUENCE_NUMBER)
-      d.get(SERIALIZED) match {
+       d.get(SERIALIZED) match {
         case b: DBObject =>
           Event(
             pid = persistenceId,
             sn = sequenceNr,
+            timestamp = timestamp,
             payload = Bson(b.as[DBObject](PayloadKey)),
             sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
             manifest = None,
@@ -62,7 +64,7 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
         case _ =>
           val content = d.as[Array[Byte]](SERIALIZED)
           val repr = serialization.deserialize(content, classOf[PersistentRepr]).get
-          Event[DBObject](useLegacySerialization = false)(repr).copy(pid = persistenceId, sn = sequenceNr)
+          Event[DBObject](timestamp, useLegacySerialization = false)(repr).copy(pid = persistenceId, sn = sequenceNr)
       }
 
     }
@@ -75,6 +77,7 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
         PROCESSOR_ID -> atom.pid,
         FROM -> atom.from,
         TO -> atom.to,
+        TIMESTAMP -> atom.timestamp,
         EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*),
         VERSION -> 1
       )

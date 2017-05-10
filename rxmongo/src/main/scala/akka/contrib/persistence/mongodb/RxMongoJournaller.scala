@@ -23,6 +23,7 @@ import scala.util.{Failure, Success, Try}
 class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import JournallingFieldNames._
+  import RxMongoSerializers._
   import driver.RxMongoSerializers._
 
   protected val logger: Logger = LoggerFactory.getLogger(getClass)
@@ -42,7 +43,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] implicit val system = driver.actorSystem
   private[this] implicit val materializer = ActorMaterializer()
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = {   //Enumerator.flatten
+
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = { //Enumerator.flatten
     val journal = driver.getJournal(pid)
     val source =
       Source
@@ -50,19 +52,12 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
         .flatMapConcat(
           _.find(journalRangeQuery(pid, from, to))
             .sort(BSONDocument(TO -> 1))
-            .projection(BSONDocument(EVENTS -> 1))
+            .projection(BSONDocument(TIMESTAMP->1, EVENTS -> 1))
             .cursor[BSONDocument]()
             .documentSource(maxDocs = max)
         )
 
-    val flow = Flow[BSONDocument]
-      .mapConcat(_.getAs[BSONArray](EVENTS).map(_.values.collect{
-        case d: BSONDocument => driver.deserializeJournal(d)
-      }).getOrElse(Stream.empty[Event]))
-      .filter(_.sn >= from)
-      .filter(_.sn <= to )
-
-    source.via(flow)
+    source.via(deserializeFlow(driver).filter(_.sn >= from).filter(_.sn <= to))
   }
 
   private[this] def writeResultToUnit(wr: WriteResult): Try[Unit] = {
@@ -116,7 +111,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
       j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
         otherOperators = GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil).map(
-          rez => rez.head(BSONDocumentIdentity).flatMap(_.getAs[Long]("max")).headOption)
+        rez => rez.head(BSONDocumentIdentity).flatMap(_.getAs[Long]("max")).headOption)
     }
 
     for {
