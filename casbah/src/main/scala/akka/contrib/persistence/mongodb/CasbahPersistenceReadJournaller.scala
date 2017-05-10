@@ -16,11 +16,11 @@ import com.mongodb.{Bytes, DBObject}
 import scala.concurrent.Future
 import scala.util.Random
 
-object CurrentAllPersistenceIds {
-  def props(driver: CasbahMongoDriver): Props = Props(new CurrentAllPersistenceIds(driver))
+object CurrentPersistenceIds {
+  def props(driver: CasbahMongoDriver): Props = Props(new CurrentPersistenceIds(driver))
 }
 
-class CurrentAllPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
+class CurrentPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
   import driver.CasbahSerializers._
 
   val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
@@ -142,7 +142,7 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
     Source.actorPublisher[Event](CurrentAllEvents.props(driver)).mapMaterializedValue(_ => NotUsed)
 
   override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
-    Source.actorPublisher[String](CurrentAllPersistenceIds.props(driver)).mapMaterializedValue(_ => NotUsed)
+    Source.actorPublisher[String](CurrentPersistenceIds.props(driver)).mapMaterializedValue(_ => NotUsed)
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
     Source.actorPublisher[Event](CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)).mapMaterializedValue(_ => NotUsed)
