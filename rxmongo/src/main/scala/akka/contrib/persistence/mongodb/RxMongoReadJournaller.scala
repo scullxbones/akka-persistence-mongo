@@ -40,7 +40,7 @@ object CurrentAllEvents {
   }
 }
 
-object CurrentAllPersistenceIds {
+object CurrentPersistenceIds {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
     import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
@@ -143,7 +143,7 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
     CurrentAllEvents.source(driver)
 
   override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
-    CurrentAllPersistenceIds.source(driver)
+    CurrentPersistenceIds.source(driver)
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
     CurrentEventsByPersistenceId.source(driver, persistenceId, fromSeq, toSeq)

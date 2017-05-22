@@ -287,7 +287,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       Await.ready(Future.sequence(promises.slice(0,3).map(_._2.future)), 5.seconds.dilated)
 
       val ks =
-        readJournal.allPersistenceIds()
+        readJournal.persistenceIds()
           .viaMat(KillSwitches.single)(Keep.right)
           .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
           .run()

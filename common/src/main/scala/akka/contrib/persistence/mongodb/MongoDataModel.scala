@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorRef
-import akka.persistence.query.EventEnvelope
+import akka.persistence.query.{EventEnvelope, Offset}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializerWithStringManifest}
 
@@ -183,7 +183,7 @@ case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRe
       )
   }
 
-  def toEnvelope(offset: Long): EventEnvelope = payload match {
+  def toEnvelope(offset: Offset): EventEnvelope = payload match {
     case l:Legacy =>
       EventEnvelope(
         offset = offset,

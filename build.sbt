@@ -1,12 +1,12 @@
-val releaseV = "1.4.1"
+val releaseV = "2.0.0-SNAPSHOT"
 
 val scalaV = "2.11.8"
 
 scalaVersion := scalaV
 
-crossScalaVersions := Seq("2.11.8", "2.12.1")
+crossScalaVersions := Seq("2.11.8", "2.12.2")
 
-val AkkaV = "2.4.17"
+val AkkaV = "2.5.1"
 
 def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")
@@ -18,7 +18,7 @@ def commonDeps(sv:String) = Seq(
   })
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12"),
-  "com.typesafe.akka"   %% "akka-persistence-query-experimental" % AkkaV % "provided",
+  "com.typesafe.akka"   %% "akka-persistence-query" % AkkaV % "provided",
   "org.mongodb"               % "mongodb-driver"            % "3.4.2"   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
@@ -87,10 +87,10 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.12.1" % "provided")
+      ("org.reactivemongo" %% "reactivemongo" % "0.12.3" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12"),
-      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.1" % "provided")
+      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.3" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12")
     ),

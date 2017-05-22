@@ -4,8 +4,8 @@ import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, ActorRef, ExtendedActorSystem, Props, Status}
 import akka.event.Logging
 import akka.persistence.query._
-import akka.persistence.query.javadsl.{AllPersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
-import akka.persistence.query.scaladsl.{AllPersistenceIdsQuery, CurrentEventsByPersistenceIdQuery, CurrentPersistenceIdsQuery, EventsByPersistenceIdQuery}
+import akka.persistence.query.javadsl.{PersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
+import akka.persistence.query.scaladsl._
 import akka.stream.actor._
 import akka.stream.javadsl.{Source => JSource}
 import akka.stream.scaladsl._
@@ -34,7 +34,7 @@ object ScalaDslMongoReadJournal {
 
   val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] = {
     // TODO Use zipWithIndex in akka 2.4.14
-    Flow[Event].zip(Source.unfold(0L)(s => Some((s + 1, s)))).map { case (event, offset) => event.toEnvelope(offset) }
+    Flow[Event].zip(Source.unfold(0L)(s => Some((s + 1, s)))).map { case (event, offset) => event.toEnvelope(Offset.sequence(offset)) }
   }
 
   implicit class RichFlow[Mat](source: Source[Event, Mat]) {
@@ -48,7 +48,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
-    with AllPersistenceIdsQuery
+    with PersistenceIdsQuery
     with EventsByPersistenceIdQuery {
 
   import ScalaDslMongoReadJournal._
@@ -96,7 +96,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
       .via(stages).toEventEnvelopes
   }
 
-  override def allPersistenceIds(): Source[String, NotUsed] = {
+  override def persistenceIds(): Source[String, NotUsed] = {
 
     val pastSource = impl.currentPersistenceIds
     val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
@@ -123,7 +123,7 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
     rj.eventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).asJava
   }
 
-  override def allPersistenceIds(): JSource[String, NotUsed] = rj.allPersistenceIds().asJava
+  override def persistenceIds(): JSource[String, NotUsed] = rj.persistenceIds().asJava
 }
 
 
