@@ -13,7 +13,7 @@
  * Cross-compiled against scala `2.11` and `2.12`
  * Be aware that there is a `16MB` payload size limit on snapshots and journal events.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
 
-### Change log is [here](changelog24.md)
+### Change log is [here](changelog25.md)
 
 ### Quick Start
 
@@ -23,12 +23,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.0"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.0-SNAPSHOT"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -37,12 +37,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 ```
 
 ### Details
-1. [Major changes in 1.x](#major)
-   * [Akka 2.4](#akka24)
-   * [Journal Data Model](#model)
-   * [0.x Journal Migration](#migration)
-   * [Read Journal](#readjournal)
-   * [Miscellaneous](#miscchanges)
+1. [Major changes in 2.x](#major)
 1. [Configuration Details](#config)
    * [Mongo URI](#mongouri)
    * [Collection and Index](#mongocollection)
@@ -62,79 +57,12 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Migration tool](#suffixmigration)
    
 <a name="major"/>
-### Major Changes in 1.x
-<a name="akka24"/>
+### Major Changes in 2.x
+<a name="akka25"/>
 
-#### Akka 2.4 support
-* The driving change for this new major version of the library is support of Akka 2.4
-* Many things changed with Akka 2.4, not limited to:
-  * Scala 2.10 support dropped
-  * Java 7 support dropped
-  * Journal Plugin API breaking changes
-  * Read Journal added as an experimental feature
-  * More information in [the migration guide](http://doc.akka.io/docs/akka/snapshot/project/migration-guide-2.3.x-2.4.x.html)
-
-<a name="model"/>
-#### Journal Data Model Changes
-##### This upgrade gave a good opportunity to correct the data model and make it more robust:
-
-  * Writes are atomic at the batch level, meaning if the plugin is sent 100 events, these are persisted in mongo as a single document.  This is much safer from a mongo perspective, and should be more performant when the plugin is receiving large batches of events.  With this we're able to close a long-standing issue with the old driver: [issue #5](https://github.com/scullxbones/akka-persistence-mongo/issues/5).
-  * All documents are versioned, allowing a foothold for backward-compatible schema migration
-  * Event metadata is directly represented as part of the document rather than being embedded in an opaque binary representation
-  * There is a generic (non-driver specific) data model to improve consistency
-  * All payloads have type hints, so that different payload types can be easily supported in the future
-  * Because of type hints, new pass-throughs are supported.  Pass-throughs are directly represented as their Bson version for easier inspection:
-    * In the 0.x series a pass-through was added for Bson documents (either `DBObject` for casbah or `BSONDocument` for RX); payloads that were not of this type were run through Akka Serialization
-    * In the 1.x series, `Array[Byte]`, `String`, `Double`, `Long`, and `Boolean` are added as pass-throughs.  The fallback continues to use Akka Serialization
-
-<a name="migration"/>  
-#### Migration of 0.x Journal
-
-* The 1.x journal is backward-incompatible with the 0.x journal.  Here are a couple of options for dealing with this.  These approaches assume no inbound writes to the journal:
-  1. Don't care about history? Take snapshots, and delete the journal from 0 to Max Long.
-  1. Care about history? Take a mongodump of the collection *FIRST*
-    * The driver will attempt to upgrade a 0.x journal to 1.x if the configuration option is set: `akka.contrib.persistence.mongodb.mongo.journal-automatic-upgrade=true`
-    * By default this feature is disabled, as it's possible that it can corrupt the journal.  It should be used in a controlled manner
-    * Additional logging has been added to help diagnose issues
-    * Thanks to @alari's help, if you are:
-      1. Having trouble upgrading 
-      1. Use cluster-sharding
-      1. Have persistent records in your journal for the same from 2.3
-    * The automated upgrade process will remove these records including logging their status
-      * Refer to [issue 44](https://github.com/scullxbones/akka-persistence-mongo/issues/44) for more details
-    * An alternative to removing these records is supplied with akka as of `2.4.0-RC3` [see more details](http://doc.akka.io/docs/akka/2.4.0-RC3/scala/cluster-sharding.html#Removal_of_Internal_Cluster_Sharding_Data)
-  
-<a name="readjournal"/>
-#### Read Journal [akka docs](http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html)
-
-To obtain a handle to the read journal use the following:
-```scala
-val readJournal = PersistenceQuery(<actor system>).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
-```
-Similarly there is a JavaDsl version.
-
-* There is a new experimental module in akka called `akka-persistence-query-experimental`.
-  * This provides a way to create an `akka-streams Source` of data from a query posed to the journal plugin
-  * The implementation of queries are purely up to the journal developer
-  * This is a very fluid part of `akka-persistence` for the moment, so expect it to be quite unstable
-* All `current` and `realtime` queries are supported, except eventsByTag.
-1. `currentPersistenceIds` (akka standard) - Provides a `Source[String,Unit]` of all of the persistence ids in the journal currently.  The results will be sorted by `persistenceId`.
-1. `persistenceIds` (akka standard) - Provides a `Source[String, Unit]` of all persistence ids in the journal. The Source not completes when reaches end of events and continues emit as new persistence ids are persist into journal
-1. `currentEventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query.  This can be used to mimic recovery, for example replacing a deprecated `PersistentView` with another actor.
-1. `eventsByPersistenceId` (akka standard) - Provides a `Source[EventEnvelope,Unit]` of events matching the query. The Source not completes when reaches end of events and continues emit as new events are persist into journal
-1. `currentAllEvents` (driver specific) - Provides a `Source[EventEnvelope,Unit]` of every event in the journal.  The results will be sorted by `persistenceId` and `sequenceNumber`.
-1. `allEvents` (driver specific) - Provides a live version of currentAllEvents
-* I'll look for community feedback about what driver-specific queries might be useful as well
-* The live queries use capped collection to stream events. If you do not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
-
-<a name="miscchanges"/>
-#### Miscellaneous Other Changes
-
-* The `CircuitBreaker` implementation operates a little differently:
-  * Writes operate as before
-  * Reads (think replays) do not contribute to timeouts or errors, but if the `CircuitBreaker` is in `Open` state, replays will fail fast.
-* Travis now verifies builds and tests run against all supported Mongo versions as well as Scala cross compile versions
-* Several metrics were no longer relevant due to journal changes in 2.4
+#### Akka 2.5 support
+* The driving change for this new major version of the library is support of Akka 2.5
+* More information in [the migration guide](http://doc.akka.io/docs/akka/2.5/project/migration-guide-2.4.x-2.5.x.html)
 
 <a name="config"/>
 #### Configuration
