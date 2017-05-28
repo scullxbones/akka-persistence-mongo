@@ -126,12 +126,27 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   }
 
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
-    metadata.flatMap(_.update(
-      BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
-      BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
-      writeConcern = driver.metadataWriteConcern,
-      upsert = true,
-      multi = false).map(_ => ()))
+    for {
+      md <- metadata
+      _  <- md.update(
+        BSONDocument(PROCESSOR_ID -> persistenceId),
+        BSONDocument(
+          "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
+        ),
+        writeConcern = driver.metadataWriteConcern,
+        upsert = true,
+        multi = false
+      )
+      _  <- md.update(
+        BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
+        BSONDocument(
+          "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
+        ),
+        writeConcern = driver.metadataWriteConcern,
+        upsert = false,
+        multi = false
+      )
+    } yield ()
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
