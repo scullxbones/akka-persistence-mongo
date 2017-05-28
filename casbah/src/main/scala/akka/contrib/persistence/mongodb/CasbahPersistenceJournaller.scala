@@ -85,7 +85,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
     metadata.update(
       MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
-      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
+      $setOnInsert(PROCESSOR_ID -> persistenceId) ++ $set(MAX_SN -> maxSequenceNr),
       upsert = true,
       multi = false,
       concern = driver.metadataWriteConcern)

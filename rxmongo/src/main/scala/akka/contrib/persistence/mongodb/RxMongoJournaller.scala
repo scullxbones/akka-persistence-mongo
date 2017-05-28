@@ -128,7 +128,10 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
     metadata.flatMap(_.update(
       BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
-      BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
+      BSONDocument(
+        "$set" -> BSONDocument(MAX_SN -> maxSequenceNr),
+        "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId)
+      ),
       writeConcern = driver.metadataWriteConcern,
       upsert = true,
       multi = false).map(_ => ()))
