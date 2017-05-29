@@ -1,5 +1,8 @@
 ## Changelog for 1.x major version
 
+### 1.4.2
+* Fix for timing-based error upon deleting journal entries [#151](https://github.com/scullxbones/akka-persistence-mongo/issues/151)
+
 ### 1.4.1
 * Fix for `PersistentFSM` serialization issue [#141](https://github.com/scullxbones/akka-persistence-mongo/issues/141)
   * Change to prefer read-time values for serializer (binary serialization) when possible
