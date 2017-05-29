@@ -84,11 +84,20 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
 
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
     metadata.update(
-      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
-      $setOnInsert(PROCESSOR_ID -> persistenceId) ++ $set(MAX_SN -> maxSequenceNr),
+      MongoDBObject(PROCESSOR_ID -> persistenceId),
+      $setOnInsert(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
       upsert = true,
       multi = false,
-      concern = driver.metadataWriteConcern)
+      concern = driver.metadataWriteConcern
+    )
+
+    metadata.update(
+      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
+      $set(MAX_SN -> maxSequenceNr),
+      upsert = false,
+      multi = false,
+      concern = driver.metadataWriteConcern
+    )
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
