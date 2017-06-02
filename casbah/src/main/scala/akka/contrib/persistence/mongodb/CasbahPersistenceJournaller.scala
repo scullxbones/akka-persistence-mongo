@@ -7,11 +7,11 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence._
-import com.mongodb.DBObject
+import com.mongodb.{DBObject, DuplicateKeyException}
 import com.mongodb.casbah.Imports._
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
@@ -83,13 +83,19 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
   }
 
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
-    metadata.update(
-      MongoDBObject(PROCESSOR_ID -> persistenceId),
-      $setOnInsert(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
-      upsert = true,
-      multi = false,
-      concern = driver.metadataWriteConcern
-    )
+    try {
+      metadata.update(
+        MongoDBObject(PROCESSOR_ID -> persistenceId),
+        $setOnInsert(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
+        upsert = true,
+        multi = false,
+        concern = driver.metadataWriteConcern
+      )
+    }
+    catch {
+      case e:DuplicateKeyException =>
+        // Ignore Duplicate Key, PID already exists
+    }
 
     metadata.update(
       MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
