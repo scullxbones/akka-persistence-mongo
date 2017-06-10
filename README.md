@@ -12,7 +12,7 @@
 
 * Cross-compiled for 2.11 / 2.12 - Java 8 targeted
 * Active development
-* Latest release - `2.0.1` ~ compatible with Akka 2.5
+* Latest release - `2.0.2` ~ compatible with Akka 2.5
 
 ### Using Akka 2.4? Use 1.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka24)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
@@ -22,7 +22,7 @@
 * Backward incompatible to 0.x series - details in docs
 * Compiled for 2.11 / 2.12 - Java 8 targeted
 * No enhancements going forward, bugfixes will continue
-* Latest release - `1.4.2` ~ compatible with Akka 2.4 (2.4.2+ for read journals)
+* Latest release - `1.4.3` ~ compatible with Akka 2.4 (2.4.2+ for read journals)
 
 ### Using Akka 2.3? Use 0.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka23)](https://travis-ci.org/scullxbones/akka-persistence-mongo)

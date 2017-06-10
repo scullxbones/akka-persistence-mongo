@@ -23,12 +23,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.2"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.2"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -55,7 +55,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Usage](#suffixusage)
    * [Details](#suffixdetail)
    * [Migration tool](#suffixmigration)
-   
+
 <a name="major"/>
 ### Major Changes in 2.x
 <a name="akka25"/>
@@ -80,13 +80,13 @@ akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.1
 
 If a user, password, and database are specified, the database will be used both as a credentials source as well as journal and/or snapshot storage.  
 In order to use a separate database for data storage, one can provide this with the following configuration item:
-   
+
 ```
 akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@localhost/credential-database"
 akka.contrib.persistence.mongodb.mongo.database = "storage-db"
 ```
 
-Proper MongoDB user permissions must be in place of course for the user to be able to access `storage-db` in this case 
+Proper MongoDB user permissions must be in place of course for the user to be able to access `storage-db` in this case
 
 <a name="mongocollection"/>
 ##### Mongo Collection, Index settings
@@ -149,7 +149,7 @@ These settings may need tuning depending on your particular environment.  If you
 [1](https://github.com/scullxbones/akka-persistence-mongo/issues/24)
 [2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
 
-Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`. 
+Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`.
 
 <a name="rxmfailover"/>
 ##### Reactive Mongo Driver - failover settings
@@ -197,7 +197,7 @@ case class Command(value: String)
 case class SampleState(counter: Int, lastValue: Option[String])
 
 class SampleActor extends PersistentActor {
-  
+
   var state = SampleState(0,None)
 
   def updateState(event: DBObject): Unit = {
@@ -209,7 +209,7 @@ class SampleActor extends PersistentActor {
       persist(DBObject("value" -> value))(updateState)
   }
 
-  // receiveRecover implementation, etc rest of class 
+  // receiveRecover implementation, etc rest of class
 }
 
 ```
@@ -281,7 +281,7 @@ akka-contrib-mongodb-persistence-journal-other {
   class = "akka.contrib.persistence.mongodb.MongoJournal"
   # Use delivered dispatcher
   plugin-dispatcher = "akka-contrib-persistence-dispatcher"
-  # Overrides to supply overridden parameters (can be anything) 
+  # Overrides to supply overridden parameters (can be anything)
   # - assumed config root is `akka.contrib.persistence.mongodb.mongo`
   overrides = {
     mongouri = "mongodb://host1:27017/special"
@@ -331,7 +331,7 @@ Some more information is covered in [#43](https://github.com/scullxbones/akka-pe
 
 <a name="casbahsettings"/>
 ##### Casbah Client Settings
-The Java MongoDB Driver, Casbah is based on, supports various connection related settings, which can be overriden in 
+The Java MongoDB Driver, Casbah is based on, supports various connection related settings, which can be overriden in
 `application.conf`:
 
 ```
@@ -352,7 +352,7 @@ akka.contrib.persistence.mongodb.casbah{
   minheartbeatfrequency = 500ms
   heartbeatconnecttimeout = 20seconds
   heartbeatsockettimeout = 20seconds
-} 
+}
 ```
 
 Be aware that some of them can be set via the MongoURI as well, in that case settings from MongoURI override the explicit
@@ -373,7 +373,7 @@ Additionally, we provide a trait called `CanSuffixCollectionNames` that should b
 * a `getSuffixfromPersistenceId` function allowing to "pick" relevant information from `persistenceId`
 * a `validateMongoCharacters` function allowing to replace any [MongoDB forbidden character](https://docs.mongodb.com/manual/reference/limits/#naming-restrictions) (including the separator)
 
-```scala 
+```scala
 def getSuffixfromPersistenceId(persistenceId: String): String
 def validateMongoCharacters(input: String): String
 ```
@@ -419,18 +419,18 @@ package com.mycompany.myproject
 import akka.contrib.persistence.mongodb.CanSuffixCollectionNames
 
 class SuffixCollectionNames extends CanSuffixCollectionNames {
-  
+
     override def getSuffixfromPersistenceId(persistenceId: String): String = persistenceId match {
       // in this example, we remove any leading "-test" string from persistenceId passed as parameter
       case str: String if (str.endsWith("-test")) => str.substring(0, str.indexOf("-test"))
       // otherwise, we do not suffix our collection
       case _ => ""
     }
-  
+
   override def validateMongoCharacters(input: String): String = {
     // According to mongoDB documentation,
     // forbidden characters in mongoDB collection names (Unix) are /\. "$
-    // Forbidden characters in mongoDB collection names (Windows) are /\. "$*<>:|? 
+    // Forbidden characters in mongoDB collection names (Windows) are /\. "$*<>:|?
     // in this example, we replace each forbidden character with an underscore character   
     val forbidden = List('/', '\\', '.', ' ', '\"', '$', '*', '<', '>', ':', '|', '?')
 
@@ -450,7 +450,7 @@ Keep in mind, while designing `getSuffixfromPersistenceId` and `validateMongoCha
 #### Details
 
 ##### Batch writing
-Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per collection manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*. 
+Writes remain *atomic at the batch level*, as explained [above](#model) but, as events are now persisted in a "per collection manner", it does not mean anymore that *if the plugin is sent 100 events, these are persisted in mongo as a single document*.
 
 Events are first *grouped* by collection, then batch-persisted, each group of events in its own correspondant suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
 
@@ -499,7 +499,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.1",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.2",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
@@ -543,7 +543,7 @@ Multiple main classes detected, select one to run:
  [1] com.mycompany.myproject.myapplication.main.Main
  [2] com.mycompany.myproject.myapplication.main.Migrate
 
-Enter number: 
+Enter number:
 ```
 If we choose number 2 here, we should see something like this (remember to configure INFO level for `MigrateToSuffixedCollections` class)
 ```
@@ -581,12 +581,3 @@ Keep your database safe, **avoid running again the migration process**, so:
 * remove `akka-persistence-mongo-tools` dependency from your `build.sbt` file
 
 That's it, you should **start your application** and enjoy *suffixed collection names* feature.
-
-
-
-
-
-
-
-
-
