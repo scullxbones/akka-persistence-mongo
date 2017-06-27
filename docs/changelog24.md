@@ -1,5 +1,11 @@
 ## Changelog for 1.x major version
 
+### 1.4.3
+* Fix for [#151](https://github.com/scullxbones/akka-persistence-mongo/issues/151), occasional failures on deleting by sequence number
+
+### 1.4.2
+* Ignore this release, did not address issue
+
 ### 1.4.1
 * Fix for `PersistentFSM` serialization issue [#141](https://github.com/scullxbones/akka-persistence-mongo/issues/141)
   * Change to prefer read-time values for serializer (binary serialization) when possible
