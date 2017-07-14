@@ -133,7 +133,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
       Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropTail)
         .mapMaterializedValue[NotUsed]{ar => impl.subscribeJournalEvents(ar); NotUsed}
         .filter{ case (ev, off) =>
-          ev.tags.contains(tag) && ordering.gteq(off, offset)
+          ev.tags.contains(tag) && ordering.gt(off, offset)
         }
         .toEventEnvelopes
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventEnvelopes)
