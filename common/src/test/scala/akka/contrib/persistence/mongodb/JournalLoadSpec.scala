@@ -9,8 +9,8 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor._
+import akka.persistence.PersistentActor
 import akka.testkit._
-import akka.persistence.{PersistentActor, Recovery}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 

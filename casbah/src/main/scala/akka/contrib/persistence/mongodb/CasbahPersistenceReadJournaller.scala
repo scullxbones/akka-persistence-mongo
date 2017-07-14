@@ -8,13 +8,18 @@ package akka.contrib.persistence.mongodb
 
 import akka.NotUsed
 import akka.actor.{ActorRef, Props}
-import akka.stream.Materializer
+import akka.persistence.query.{NoOffset, Offset}
 import akka.stream.scaladsl.Source
+import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
+import akka.stream.{Attributes, Materializer, Outlet, SourceShape}
 import com.mongodb.casbah.Imports._
 import com.mongodb.{Bytes, DBObject}
+import org.bson.types.ObjectId
 
 import scala.concurrent.Future
-import scala.util.Random
+import scala.util.Try
+import scala.util.control.NonFatal
+import scala.{util => su}
 
 object CurrentPersistenceIds {
   def props(driver: CasbahMongoDriver): Props = Props(new CurrentPersistenceIds(driver))
@@ -23,7 +28,7 @@ object CurrentPersistenceIds {
 class CurrentPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
   import driver.CasbahSerializers._
 
-  val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+  val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${su.Random.nextInt(1000)}"
   val temporaryCollection: MongoCollection = driver.collection(temporaryCollectionName)
 
   override protected def initialCursor: Stream[String] = {
@@ -106,6 +111,75 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   override protected def discard(c: Stream[Event]): Unit = ()
 }
 
+class CurrentEventsByTagCursorSource(driver: CasbahMongoDriver, tag: String, fromOffset: Offset)
+  extends GraphStage[SourceShape[(Event, Offset)]]
+    with JournallingFieldNames {
+
+  import driver.CasbahSerializers._
+
+  private val outlet = Outlet[(Event, Offset)]("out")
+
+  private def collectionCursor =
+    driver.getJournalCollections().toStream
+
+  private def buildCursor(coll: MongoCollection, query: DBObject) = {
+    val cursor = coll.find(query).sort(MongoDBObject(ID -> 1))
+    cursor
+      .toStream
+      .flatMap { rslt =>
+        val id = rslt.as[ObjectId](ID)
+        rslt.getAs[MongoDBList](EVENTS).map(_.map(ev => id -> ev))
+      }
+      .flatMap(lst => lst.collect { case (id, x: DBObject) => id -> x })
+      .filter { case (_, dbo) => dbo.getAs[MongoDBList](TAGS).exists(xs => xs.contains(tag)) }
+      .map { case (id, dbo) => (cursor, ObjectIdOffset(id.toHexString,id.getDate.getTime), driver.deserializeJournal(dbo)) }
+  }
+
+  private def translateOffset: Option[DBObject] =
+    fromOffset match {
+      case NoOffset =>
+        None
+      case ObjectIdOffset(hexStr, _) =>
+        Option(ID $gte new ObjectId(hexStr))
+    }
+
+  override val shape: SourceShape[(Event, Offset)] = SourceShape(outlet)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+    new GraphStageLogic(shape) with OutHandler {
+
+      private val query = translateOffset.foldLeft[MongoDBObject](TAGS $eq tag){ case(tags, offset) => tags ++= offset }
+      private var stream =
+        su.Try(collectionCursor)
+          .recover(recovery).get
+          .flatMap(c => Try(buildCursor(c, query)).recover(recovery).get)
+      private var currentCursor: Option[MongoCursor] = None
+
+      private def recovery[U]: PartialFunction[Throwable, Stream[U]] = {
+        case NonFatal(t) =>
+          fail(outlet, t)
+          Stream.empty
+      }
+
+      override def onPull(): Unit = {
+        stream match {
+          case (cur,id,el) #:: remaining =>
+            currentCursor = Option(cur)
+            stream = remaining
+            push(outlet, (el, id))
+          case _ =>
+            completeStage()
+        }
+      }
+
+      override def postStop(): Unit = {
+        currentCursor.foreach(_.close())
+      }
+
+      setHandler(outlet, this)
+    }
+}
+
 class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStream[MongoCollection] {
   import driver.CasbahSerializers._
 
@@ -121,7 +195,8 @@ class CasbahMongoJournalStream(val driver: CasbahMongoDriver) extends JournalStr
     Future {
       cursor().foreach { next =>
         if (next.keySet().contains(EVENTS)) {
-          val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) }
+          val id = next.as[ObjectId](ID)
+          val events = next.as[MongoDBList](EVENTS).collect { case x: DBObject => driver.deserializeJournal(x) -> ObjectIdOffset(id.toHexString, id.getDate.getTime) }
           events.foreach(driver.actorSystem.eventStream.publish)
         }
       }
@@ -147,8 +222,18 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
     Source.actorPublisher[Event](CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)).mapMaterializedValue(_ => NotUsed)
 
+  override def currentEventsByTag(tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
+    Source.fromGraph(new CurrentEventsByTagCursorSource(driver, tag, fromOffset))
+  }
+
+  override def checkOffsetIsSupported(offset: Offset): Boolean =
+    PartialFunction.cond(offset){
+      case NoOffset => true
+      case ObjectIdOffset(hexStr, _) => ObjectId.isValid(hexStr)
+    }
+
   override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
-    driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
+    driver.actorSystem.eventStream.subscribe(subscriber, classOf[(Event, Offset)])
     ()
   }
 }

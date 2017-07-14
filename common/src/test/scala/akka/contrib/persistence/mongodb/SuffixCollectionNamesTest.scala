@@ -23,7 +23,12 @@ object SuffixCollectionNamesTest {
   val extendedConfig = """
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"
     |akka.contrib.persistence.mongodb.mongo.suffix-drop-empty-collections = true
-    |""".stripMargin    
+    |""".stripMargin
+
+  def suffixedCollectionName(persistenceId: String): String = {
+    val suffix = new SuffixCollectionNamesTest().getSuffixFromPersistenceId(persistenceId)
+    s"akka_persistence_journal_$suffix"
+  }
     
   val rxMongoExtendedConfig = """
     |akka.contrib.persistence.mongodb.mongo.suffix-builder.class = "akka.contrib.persistence.mongodb.SuffixCollectionNamesTest"

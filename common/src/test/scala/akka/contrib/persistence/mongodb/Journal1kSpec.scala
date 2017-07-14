@@ -6,8 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.Props
-import akka.persistence.PersistentActor
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
@@ -39,35 +37,8 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
     $extendedConfig
     |""".stripMargin)
 
-  object Counter {
-    def props = Props(new Counter)
-    case object Inc
-    case object GetCounter
-    case object Shutdown
-  }
-
-  class Counter extends PersistentActor{
-    import Counter._
-    var counter = 0
-
-    override def receiveRecover: Receive = {
-      case Inc => counter += 1
-      case x:Int => counter += x
-    }
-
-    override def receiveCommand: Receive = {
-      case Inc =>
-        persist(1) { _ =>
-          counter += 1
-        }
-      case GetCounter => sender() ! counter
-      case Shutdown => context stop self
-    }
-
-    override def persistenceId: String = self.path.name
-  }
-
   val id = "123"
+  import TestStubActors._
   import Counter._
   import akka.pattern._
 
