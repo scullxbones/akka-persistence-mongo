@@ -19,7 +19,7 @@ def commonDeps(sv:String) = Seq(
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12"),
   "com.typesafe.akka"         %% "akka-persistence-query"   % AkkaV     % "provided",
-  "org.mongodb"               % "mongodb-driver"            % "3.4.2"   % "test",
+  "org.mongodb"               % "mongodb-driver"            % "3.2.2"   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",

@@ -1,0 +1,7 @@
+package akka.contrib.persistence.mongodb
+
+class RxMongoJournalTaggingSpec
+  extends JournalTaggingSpec(classOf[RxMongoPersistenceExtension], "rxmongo")
+
+class RxMongoSuffixJournalTaggingSpec
+  extends JournalTaggingSpec(classOf[RxMongoPersistenceExtension], "rxmongo", SuffixCollectionNamesTest.rxMongoExtendedConfig)

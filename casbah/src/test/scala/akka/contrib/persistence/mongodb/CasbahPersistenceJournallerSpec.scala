@@ -74,7 +74,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val deserialized = deserializeDocument(serialized.firstEvent)
 
-      deserialized.payload shouldBe StringPayload("TEST")
+      deserialized.payload shouldBe StringPayload("TEST", Set.empty)
       deserialized.pid should be("pid")
       deserialized.sn should be(1)
       deserialized.manifest shouldBe empty

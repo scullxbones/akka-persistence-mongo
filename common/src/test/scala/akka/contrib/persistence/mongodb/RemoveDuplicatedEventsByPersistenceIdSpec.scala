@@ -40,12 +40,12 @@ class RemoveDuplicatedEventsByPersistenceIdSpec extends BaseUnitTest with ScalaF
   "RemoveDuplicatedEventsByPersistenceId" should "not remove non duplicate events" in {
 
     val events = List(
-      Event("pid-1", 1L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 3L, StringPayload("foo")),
-      Event("pid-1", 4L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 2L, StringPayload("foo"))
+      Event("pid-1", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 3L, StringPayload("foo", Set())),
+      Event("pid-1", 4L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 2L, StringPayload("foo", Set()))
     )
 
     val processedEvents = Source(events).via(new RemoveDuplicatedEventsByPersistenceId).runFold(Vector.empty[Event])(_ :+ _).futureValue
@@ -56,24 +56,24 @@ class RemoveDuplicatedEventsByPersistenceIdSpec extends BaseUnitTest with ScalaF
   it should "remove duplicate sequential events" in {
 
     val events = List(
-      Event("pid-1", 1L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 3L, StringPayload("foo")),
-      Event("pid-1", 4L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 2L, StringPayload("foo"))
+      Event("pid-1", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 3L, StringPayload("foo", Set())),
+      Event("pid-1", 4L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 2L, StringPayload("foo", Set()))
     )
 
     val expectedEvents = List(
-      Event("pid-1", 1L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 3L, StringPayload("foo")),
-      Event("pid-1", 4L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 2L, StringPayload("foo"))
+      Event("pid-1", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 3L, StringPayload("foo", Set())),
+      Event("pid-1", 4L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 2L, StringPayload("foo", Set()))
     )
 
 
@@ -85,24 +85,24 @@ class RemoveDuplicatedEventsByPersistenceIdSpec extends BaseUnitTest with ScalaF
   it should "remove random duplicate events" in {
 
     val events = List(
-      Event("pid-1", 1L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-1", 3L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-2", 2L, StringPayload("foo")),
-      Event("pid-1", 4L, StringPayload("foo"))
+      Event("pid-1", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 3L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 4L, StringPayload("foo", Set()))
     )
 
     val expectedEvents = List(
-      Event("pid-1", 1L, StringPayload("foo")),
-      Event("pid-2", 1L, StringPayload("foo")),
-      Event("pid-1", 2L, StringPayload("foo")),
-      Event("pid-1", 3L, StringPayload("foo")),
-      Event("pid-2", 2L, StringPayload("foo")),
-      Event("pid-1", 4L, StringPayload("foo"))
+      Event("pid-1", 1L, StringPayload("foo", Set())),
+      Event("pid-2", 1L, StringPayload("foo", Set())),
+      Event("pid-1", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 3L, StringPayload("foo", Set())),
+      Event("pid-2", 2L, StringPayload("foo", Set())),
+      Event("pid-1", 4L, StringPayload("foo", Set()))
     )
 
 

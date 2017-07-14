@@ -4,7 +4,7 @@ import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, ActorRef, ExtendedActorSystem, Props, Status}
 import akka.event.Logging
 import akka.persistence.query._
-import akka.persistence.query.javadsl.{PersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP}
+import akka.persistence.query.javadsl.{PersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP, CurrentEventsByTagQuery => JCEBT, EventsByTagQuery => JEBT}
 import akka.persistence.query.scaladsl._
 import akka.stream.actor._
 import akka.stream.javadsl.{Source => JSource}
@@ -32,15 +32,20 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
 
 object ScalaDslMongoReadJournal {
 
-  val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] = {
-    // TODO Use zipWithIndex in akka 2.4.14
-    Flow[Event].zip(Source.unfold(0L)(s => Some((s + 1, s)))).map { case (event, offset) => event.toEnvelope(Offset.sequence(offset)) }
-  }
+  val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] =
+    Flow[Event].zipWithIndex.map{ case (event, offset) => event.toEnvelope(Offset.sequence(offset)) }
+
+  val eventPlusOffsetToEventEnvelope: Flow[(Event, Offset), EventEnvelope, NotUsed] =
+    Flow[(Event,Offset)].map{ case(event, offset) => event.toEnvelope(offset) }
 
   implicit class RichFlow[Mat](source: Source[Event, Mat]) {
-
     def toEventEnvelopes: Source[EventEnvelope, Mat] =
       source.via(eventToEventEnvelope)
+  }
+
+  implicit class RichFlowWithOffsets[Mat](source: Source[(Event, Offset), Mat]) {
+    def toEventEnvelopes: Source[EventEnvelope, Mat] =
+      source.via(eventPlusOffsetToEventEnvelope)
   }
 }
 
@@ -48,8 +53,10 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
+    with CurrentEventsByTagQuery
     with PersistenceIdsQuery
-    with EventsByPersistenceIdQuery {
+    with EventsByPersistenceIdQuery
+    with EventsByTagQuery {
 
   import ScalaDslMongoReadJournal._
 
@@ -62,9 +69,18 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
     impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr).toEventEnvelopes
   }
 
+  override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
+    require(tag != null, "Tag must not be null")
+    require(impl.checkOffsetIsSupported(offset), s"Offset $offset is not supported by read journal")
+    impl.currentEventsByTag(tag, offset).toEventEnvelopes
+  }
+
   def allEvents(): Source[EventEnvelope, NotUsed] = {
     val pastSource = impl.currentAllEvents
-    val realtimeSource = Source.actorRef(100, OverflowStrategy.dropTail).mapMaterializedValue(impl.subscribeJournalEvents)
+    val realtimeSource =
+      Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropTail)
+            .mapMaterializedValue(impl.subscribeJournalEvents)
+            .map{ case(e,_) => e }
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventsByPersistenceId).toEventEnvelopes
   }
 
@@ -75,8 +91,9 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
         .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
 
     val realtimeSource =
-      Source.actorRef[Event](100, OverflowStrategy.dropTail)
+      Source.actorRef[(Event,Offset)](100, OverflowStrategy.dropTail)
         .mapMaterializedValue{ar => impl.subscribeJournalEvents(ar); NotUsed}
+        .map{ case(e,_) => e }
         .filter(_.pid == persistenceId)
         .filter(_.sn >= fromSequenceNr)
         .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
@@ -99,14 +116,31 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   override def persistenceIds(): Source[String, NotUsed] = {
 
     val pastSource = impl.currentPersistenceIds
-    val realtimeSource = Source.actorRef[Event](100, OverflowStrategy.dropHead)
-      .map(_.pid)
+    val realtimeSource = Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropHead)
+      .map{case (e,_) => e.pid}
       .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
     (pastSource ++ realtimeSource).via(new RemoveDuplicates)
   }
+
+  override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
+    require(tag != null, "Tag must not be null")
+    require(impl.checkOffsetIsSupported(offset), s"Offset $offset is not supported by read journal")
+    val ordering = implicitly[Ordering[Offset]]
+    val pastSource =
+      impl.currentEventsByTag(tag, offset)
+        .toEventEnvelopes
+    val realtimeSource =
+      Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropTail)
+        .mapMaterializedValue[NotUsed]{ar => impl.subscribeJournalEvents(ar); NotUsed}
+        .filter{ case (ev, off) =>
+          ev.tags.contains(tag) && ordering.gteq(off, offset)
+        }
+        .toEventEnvelopes
+    (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventEnvelopes)
+  }
 }
 
-class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ {
+class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.ReadJournal with JCP with JCEBP with JEBP with JAPIQ with JCEBT with JEBT {
   def currentAllEvents(): JSource[EventEnvelope, NotUsed] = rj.currentAllEvents().asJava
 
   def allEvents(): JSource[EventEnvelope, NotUsed] = rj.allEvents().asJava
@@ -124,6 +158,10 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
   }
 
   override def persistenceIds(): JSource[String, NotUsed] = rj.persistenceIds().asJava
+
+  override def currentEventsByTag(tag: String, offset: Offset): JSource[EventEnvelope, NotUsed] = rj.currentEventsByTag(tag, offset).asJava
+
+  override def eventsByTag(tag: String, offset: Offset): JSource[EventEnvelope, NotUsed] = rj.eventsByTag(tag, offset).asJava
 }
 
 
@@ -133,6 +171,7 @@ trait JournalStream[Cursor] {
   def publishEvents(): Unit
 }
 
+// TODO: Convert to GraphStage
 private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUsed],
                                                   realtimeSource: Source[Event,NotUsed],
                                                   persistenceId: String, minSequence: Long, maxSequence: Long)(implicit m: Materializer)
@@ -269,6 +308,7 @@ class StopAtSeq(to: Long) extends GraphStage[FlowShape[Event, Event]] {
   }
 }
 
+// TODO: can cause lost events if upstream is out of sequence
 class RemoveDuplicatedEventsByPersistenceId extends GraphStage[FlowShape[Event, Event]] {
 
   private val in: Inlet[Event] = Inlet("in")
@@ -289,7 +329,38 @@ class RemoveDuplicatedEventsByPersistenceId extends GraphStage[FlowShape[Event, 
         case None =>
           push(out, event)
           lastSequenceNrByPersistenceId.update(event.pid, event.sn)
-        case Some(sn) =>
+        case Some(_) =>
+          pull(in)
+      }
+    }
+    override def onPull(): Unit = pull(in)
+
+    setHandlers(in, out, this)
+  }
+
+}
+
+// TODO: can cause lost events if upstream is out of sequence
+class RemoveDuplicatedEventEnvelopes extends GraphStage[FlowShape[EventEnvelope, EventEnvelope]] {
+  private val in: Inlet[EventEnvelope] = Inlet("in")
+  private val out: Outlet[EventEnvelope] = Outlet("out")
+
+  override val shape: FlowShape[EventEnvelope, EventEnvelope] = FlowShape(in, out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) with InHandler with OutHandler {
+
+    private val lastSequenceNrByPersistenceId = mutable.HashMap.empty[String, Long]
+
+    override def onPush(): Unit = {
+      val event = grab(in)
+      lastSequenceNrByPersistenceId.get(event.persistenceId) match {
+        case Some(sn) if event.sequenceNr > sn =>
+          push(out, event)
+          lastSequenceNrByPersistenceId.update(event.persistenceId, event.sequenceNr)
+        case None =>
+          push(out, event)
+          lastSequenceNrByPersistenceId.update(event.persistenceId, event.sequenceNr)
+        case Some(_) =>
           pull(in)
       }
     }
@@ -335,9 +406,14 @@ trait MongoPersistenceReadJournallingApi {
 
   def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed]
 
+  def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed]
+
+  def checkOffsetIsSupported(offset: Offset): Boolean
+
   def subscribeJournalEvents(subscriber: ActorRef): Unit
 }
 
+// TODO: Replace with GraphStage
 trait SyncActorPublisher[A, Cursor] extends ActorPublisher[A] with ActorLogging {
 
   import ActorPublisherMessage._

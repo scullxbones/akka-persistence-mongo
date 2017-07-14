@@ -184,7 +184,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
-    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1))
+    IndexSettings(journalSeqNrIndexName, unique = false, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, TO -> -1),
+    IndexSettings(journalTagIndexName, unique = false, sparse = true, TAGS -> 1)
+  )
 
   private[mongodb] lazy val journal: C = journal("")
 
@@ -238,6 +240,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def journalCollectionName = settings.JournalCollection
   def journalIndexName = settings.JournalIndex
   def journalSeqNrIndexName = settings.JournalSeqNrIndex
+  def journalTagIndexName = settings.JournalTagIndex
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
   def journalWTimeout = settings.JournalWTimeout
   def journalFsync = settings.JournalFSync

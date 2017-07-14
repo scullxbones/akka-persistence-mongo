@@ -9,6 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.NotUsed
 import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
+import akka.persistence.query.{NoOffset, Offset}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{KillSwitches, Materializer}
 import reactivemongo.akkastream.cursorProducer
@@ -42,7 +43,6 @@ object CurrentAllEvents {
 
 object CurrentPersistenceIds {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
-    import driver.RxMongoSerializers._
     implicit val ec = driver.querySideDispatcher
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
@@ -99,14 +99,48 @@ object CurrentEventsByPersistenceId {
   }
 }
 
-class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[Event, NotUsed]] {
+object CurrentEventsByTag {
+  def source(driver: RxMongoDriver, tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
+    import driver.RxMongoSerializers._
+    implicit val ec = driver.querySideDispatcher
+
+    val offset = fromOffset match {
+      case NoOffset => None
+      case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).toOption
+    }
+    val query = BSONDocument(
+      TAGS -> tag
+    ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gte" -> id))))
+
+    Source.fromFuture(driver.getAllCollectionsAsFuture(None))
+          .flatMapConcat{ xs =>
+            xs.map(c =>
+              c.find(query)
+               .sort(BSONDocument(ID -> 1))
+               .cursor[BSONDocument]()
+               .documentSource()
+            ).reduceLeft(_ ++ _)
+          }.map{ doc =>
+            val id = doc.getAs[BSONObjectID](ID).get
+            doc.getAs[BSONArray](EVENTS)
+              .map(_.elements
+                .map(_.value)
+                .collect{ case d:BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time) }
+                .filter(_._1.tags.contains(tag))
+              )
+              .getOrElse(Nil)
+    }.mapConcat(identity)
+  }
+}
+
+class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[(Event, Offset), NotUsed]] {
   import driver.RxMongoSerializers._
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 
   private val killSwitch = KillSwitches.shared("realtimeKillSwitch")
 
-  override def cursor(): Source[Event,NotUsed] =
+  override def cursor(): Source[(Event, Offset),NotUsed] =
     Source.fromFuture(driver.realtime)
       .flatMapConcat {rt =>
         rt.find(BSONDocument.empty)
@@ -114,15 +148,16 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
           .cursor[BSONDocument]()
           .documentSource()
           .via(killSwitch.flow)
-          .map ( _.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
-              case d: BSONDocument => driver.deserializeJournal(d)
-          }).getOrElse(Nil)
-          )
-          .mapConcat(identity)
+          .mapConcat { d =>
+            val id = d.getAs[BSONObjectID](ID).get
+            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+                case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
+            }).getOrElse(Nil)
+          }
       }
 
   override def publishEvents(): Unit = {
-    val sink = Sink.foreach[Event](driver.actorSystem.eventStream.publish)
+    val sink = Sink.foreach[(Event, Offset)](driver.actorSystem.eventStream.publish)
     cursor().runWith(sink)
     ()
   }
@@ -148,8 +183,17 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
   override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
     CurrentEventsByPersistenceId.source(driver, persistenceId, fromSeq, toSeq)
 
+  override def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] =
+    CurrentEventsByTag.source(driver, tag, offset)
+
+  override def checkOffsetIsSupported(offset: Offset): Boolean =
+    PartialFunction.cond(offset){
+      case NoOffset => true
+      case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).isSuccess
+    }
+
   override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
-    driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
+    driver.actorSystem.eventStream.subscribe(subscriber, classOf[(Event, Offset)])
     ()
   }
 }

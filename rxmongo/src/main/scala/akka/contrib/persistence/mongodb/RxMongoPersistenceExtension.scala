@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -19,7 +19,7 @@ import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent._
-import duration._
+import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
@@ -90,7 +90,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     import Producer._
     import RxMongoSerializers._
 
-    import scala.collection.immutable.{ Seq => ISeq }
+    import scala.collection.immutable.{Seq => ISeq}
 
     val id = doc.getAs[BSONObjectID]("_id").get
     val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
@@ -174,11 +174,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
 
   private[mongodb] def closeConnections(): Unit = {
-    import system.dispatcher
-    implicit val to = Timeout(5.seconds)
-    val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
-    Await.ready(closed, to.duration + 1.second)
-    ()
+//    import system.dispatcher
+//    implicit val to = Timeout(5.seconds)
+    driver.close(5.seconds)
+//    val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
+//    Await.ready(closed, to.duration + 1.second)
+//    ()
   }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
@@ -227,14 +228,18 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
 
   private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
-    for {
-      database  <- db
-      names     <- database.collectionNames
-      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
-    } yield list
+    getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
 
   private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) = getCollections(journalCollectionName)
+
+  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
+    for {
+      database  <- db
+      names     <- database.collectionNames
+      list      <- Future.sequence(names.filter(nameFilter.getOrElse(_ => true)).map(collection))
+    } yield list
+  }
 
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
   
@@ -288,7 +293,7 @@ class RxMongoDriverSettings(val config: Config) {
   def Factor: Double = failover.getDouble("factor")
 
   def GrowthFunction: Int => Double = Growth match {
-    case "con" => (i: Int) => Factor
+    case "con" => (_: Int) => Factor
     case "lin" => (i: Int) => i.toDouble
     case "exp" => (i: Int) => math.pow(i.toDouble, Factor)
   }

@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorRef
+import akka.persistence.journal.Tagged
 import akka.persistence.query.{EventEnvelope, Offset}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializerWithStringManifest}
@@ -15,17 +16,30 @@ sealed trait Payload {
 
   def hint: String
   def content: Content
+  def tags: Set[String]
 }
 
 trait DocumentType[D]
 
-case class Bson[D: DocumentType](content: D) extends Payload {
+case class ObjectIdOffset(hexStr: String, time: Long) extends Offset with Ordered[ObjectIdOffset] {
+  override def compare(that: ObjectIdOffset): Int = {
+    time compare that.time match {
+      case cmp if cmp != 0 =>
+        cmp
+      case _ =>
+        hexStr compare that.hexStr
+    }
+  }
+}
+
+case class Bson[D: DocumentType](content: D, tags: Set[String]) extends Payload {
   type Content = D
   val hint = "bson"
 }
 
 case class Serialized[C <: AnyRef](bytes: Array[Byte],
                                    className: String,
+                                   tags: Set[String],
                                    serializerId: Option[Int],
                                    serializedManifest: Option[String])(implicit ser: Serialization, loadClass: LoadClass, ct: ClassTag[C]) extends Payload {
   type Content = C
@@ -67,18 +81,18 @@ case class Serialized[C <: AnyRef](bytes: Array[Byte],
 }
 
 object Serialized {
-  def apply(any: AnyRef)(implicit ser: Serialization, loadClass: LoadClass): Serialized[_ <: AnyRef] = {
+  def apply(any: AnyRef, tags: Set[String])(implicit ser: Serialization, loadClass: LoadClass): Serialized[_ <: AnyRef] = {
     val clazz = any.getClass
     ser.findSerializerFor(any) match {
       case s:SerializerWithStringManifest =>
-        new Serialized(s.toBinary(any), clazz.getName, Some(s.identifier), Option(s.manifest(any)).filter(_ => s.includeManifest))
+        new Serialized(s.toBinary(any), clazz.getName, tags, Some(s.identifier), Option(s.manifest(any)).filter(_ => s.includeManifest))
       case s =>
-        new Serialized(s.toBinary(any), clazz.getName, Some(s.identifier), None)
+        new Serialized(s.toBinary(any), clazz.getName, tags, Some(s.identifier), None)
     }
   }
 }
 
-case class Legacy(bytes: Array[Byte])(implicit ser: Serialization) extends Payload {
+case class Legacy(bytes: Array[Byte], tags: Set[String])(implicit ser: Serialization) extends Payload {
   type Content = PersistentRepr
   val hint = "repr"
 
@@ -88,87 +102,99 @@ case class Legacy(bytes: Array[Byte])(implicit ser: Serialization) extends Paylo
 }
 
 object Legacy {
-  def apply(repr: PersistentRepr)(implicit ser: Serialization): Legacy = {
-    Legacy(ser.findSerializerFor(repr).toBinary(repr))
+  def apply(repr: PersistentRepr, tags: Set[String])(implicit ser: Serialization): Legacy = {
+    Legacy(ser.findSerializerFor(repr).toBinary(repr), tags)
   }
 }
 
-case class Bin(content: Array[Byte]) extends Payload {
+case class Bin(content: Array[Byte], tags: Set[String]) extends Payload {
   type Content = Array[Byte]
   val hint = "bin"
 }
 
-case class StringPayload(content: String) extends Payload {
+case class StringPayload(content: String, tags: Set[String]) extends Payload {
   type Content = String
   val hint = "s"
 }
 
 object FloatingPointPayload {
-  def apply[N:Numeric](value: N): FloatingPointPayload =
-    FloatingPointPayload(implicitly[Numeric[N]].toDouble(value))
+  def apply[N:Numeric](value: N, tags: Set[String]): FloatingPointPayload =
+    FloatingPointPayload(implicitly[Numeric[N]].toDouble(value), tags)
 }
 
-case class FloatingPointPayload(content: Double) extends Payload {
+case class FloatingPointPayload(content: Double, tags: Set[String]) extends Payload {
   type Content = Double
   val hint = "d"
 }
 
 object FixedPointPayload {
-  def apply[N:Numeric](value: N): FixedPointPayload =
-    FixedPointPayload(implicitly[Numeric[N]].toLong(value))
+  def apply[N:Numeric](value: N, tags: Set[String]): FixedPointPayload =
+    FixedPointPayload(implicitly[Numeric[N]].toLong(value), tags)
 }
 
-case class FixedPointPayload(content: Long) extends Payload {
+case class FixedPointPayload(content: Long, tags: Set[String]) extends Payload {
   type Content = Long
   val hint = "l"
 }
 
-case class BooleanPayload(content: Boolean) extends Payload {
+case class BooleanPayload(content: Boolean, tags: Set[String]) extends Payload {
   type Content = Boolean
   val hint = "b"
 }
 
 object Payload {
+
   import language.implicitConversions
 
-  implicit def bson2payload[D](document: D)(implicit ev: Manifest[D], dt: DocumentType[D]): Bson[D] = Bson(document)
-  implicit def str2payload(string: String): StringPayload = StringPayload(string)
-  implicit def fpnum2payload(double: Double): FloatingPointPayload = FloatingPointPayload(double)
-  implicit def fxnum2payload(long: Long): FixedPointPayload = FixedPointPayload(long)
-  implicit def bln2payload(bool: Boolean): BooleanPayload = BooleanPayload(bool)
-  implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf)
+  implicit def bson2payload[D](document: D)(implicit ev: Manifest[D], dt: DocumentType[D]): Bson[D] = Bson(document, Set.empty[String])
 
-  def apply[D](payload: Any)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Payload = payload match {
-    case pr: PersistentRepr => Legacy(pr)
-    case d:D                => Bson(d)
-    case bytes: Array[Byte] => Bin(bytes)
-    case str: String        => StringPayload(str)
-    case n: Double          => FloatingPointPayload(n)
-    case n: Long            => FixedPointPayload(n)
-    case b: Boolean         => BooleanPayload(b)
-    case x:AnyRef           => Serialized(x)
-    case x                  => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
+  implicit def str2payload(string: String): StringPayload = StringPayload(string, Set.empty[String])
+
+  implicit def fpnum2payload(double: Double): FloatingPointPayload = FloatingPointPayload(double, Set.empty[String])
+
+  implicit def fxnum2payload(long: Long): FixedPointPayload = FixedPointPayload(long, Set.empty[String])
+
+  implicit def bln2payload(bool: Boolean): BooleanPayload = BooleanPayload(bool, Set.empty[String])
+
+  implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf, Set.empty[String])
+
+  def apply[D](payload: Any, tags: Set[String] = Set.empty)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Payload = {
+    payload match {
+      case tg: Tagged => Payload(tg.payload, tg.tags)
+      case pr: PersistentRepr => Legacy(pr, tags)
+      case d: D => Bson(d, tags)
+      case bytes: Array[Byte] => Bin(bytes, tags)
+      case str: String => StringPayload(str, tags)
+      case n: Double => FloatingPointPayload(n, tags)
+      case n: Long => FixedPointPayload(n, tags)
+      case b: Boolean => BooleanPayload(b, tags)
+      case x: AnyRef => Serialized(x, tags)
+      case x => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
+    }
   }
 
-  def apply[D](hint: String, any: Any, clazzName: Option[String],
+  def apply[D](hint: String, any: Any, tags: Set[String], clazzName: Option[String],
                serId: Option[Int], serManifest: Option[String])
               (implicit evs: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass):Payload =
     (hint,any) match {
-      case ("repr",repr:Array[Byte]) => Legacy(repr)
+      case ("repr",repr:Array[Byte]) => Legacy(repr, tags)
       case ("ser",ser:Array[Byte]) =>
-        Serialized(ser, clazzName.getOrElse(classOf[AnyRef].getName), serId, serManifest)
-      case ("bson",d:D) => Bson(d)
-      case ("bin",b:Array[Byte]) => Bin(b)
-      case ("s",s:String) => StringPayload(s)
-      case ("d",d:Double) => FloatingPointPayload(d)
-      case ("l",l:Long) => FixedPointPayload(l)
-      case ("b",b:Boolean) => BooleanPayload(b)
+        Serialized(ser, clazzName.getOrElse(classOf[AnyRef].getName), tags, serId, serManifest)
+      case ("bson",d:D) => Bson(d, tags)
+      case ("bin",b:Array[Byte]) => Bin(b, tags)
+      case ("s",s:String) => StringPayload(s, tags)
+      case ("d",d:Double) => FloatingPointPayload(d, tags)
+      case ("l",l:Long) => FixedPointPayload(l, tags)
+      case ("b",b:Boolean) => BooleanPayload(b, tags)
       case (x,y) => throw new IllegalArgumentException(s"Unknown hint $x or type for payload content $y")
     }
 }
 
 
 case class Event(pid: String, sn: Long, payload: Payload, sender: Option[ActorRef] = None, manifest: Option[String] = None, writerUuid: Option[String] = None) {
+
+  def tags: Set[String] = payload.tags
+
   def toRepr: PersistentRepr = payload match {
     case l:Legacy =>
       l.content.update(persistenceId = pid, sequenceNr = sn)
@@ -227,7 +253,9 @@ object Event {
   }
 }
 
-case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event])
+case class Atom(pid: String, from: Long, to: Long, events: ISeq[Event]) {
+  def tags: Set[String] = events.foldLeft(Set.empty[String])(_ ++ _.tags)
+}
 
 object Atom {
   def apply[D](aw: AtomicWrite, useLegacySerialization: Boolean)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Atom = {

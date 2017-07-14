@@ -40,7 +40,14 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
     private def deserializeVersionOne(d: DBObject) = Event(
       pid = d.as[String](PROCESSOR_ID),
       sn = d.as[Long](SEQUENCE_NUMBER),
-      payload = Payload[DBObject](d.as[String](TYPE),d.as[Any](PayloadKey),d.getAs[String](HINT),d.getAs[Int](SER_ID), d.getAs[String](SER_MANIFEST)),
+      payload = Payload[DBObject](
+        hint = d.as[String](TYPE),
+        any = d.as[Any](PayloadKey),
+        tags = Set.empty[String] ++ d.getAs[MongoDBList](TAGS).toList.flatMap(_.collect{case s: String => s }),
+        clazzName = d.getAs[String](HINT),
+        serId = d.getAs[Int](SER_ID),
+        serManifest = d.getAs[String](SER_MANIFEST)
+      ),
       sender = d.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
       manifest = d.getAs[String](MANIFEST),
       writerUuid = d.getAs[String](WRITER_UUID)
@@ -54,7 +61,7 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
           Event(
             pid = persistenceId,
             sn = sequenceNr,
-            payload = Bson(b.as[DBObject](PayloadKey)),
+            payload = Bson(b.as[DBObject](PayloadKey), Set()),
             sender = b.getAs[Array[Byte]](SenderKey).flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption),
             manifest = None,
             writerUuid = None
@@ -71,13 +78,15 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
 
   implicit object Serializer extends CanSerializeJournal[DBObject] {
     override def serializeAtom(atom: Atom): DBObject = {
-      MongoDBObject(
-        PROCESSOR_ID -> atom.pid,
-        FROM -> atom.from,
-        TO -> atom.to,
-        EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*),
-        VERSION -> 1
-      )
+      Option(atom.tags).filter(_.nonEmpty).foldLeft(
+        MongoDBObject(
+          PROCESSOR_ID -> atom.pid,
+          FROM -> atom.from,
+          TO -> atom.to,
+          EVENTS -> MongoDBList(atom.events.map(serializeEvent): _*),
+          VERSION -> 1
+        )
+      ){ case(o,tags) => o ++= MongoDBObject(TAGS -> serializeTags(tags))}
     }
 
     private def serializeEvent(event: Event): DBObject = {
@@ -85,10 +94,12 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
           VERSION -> 1 ::
             PROCESSOR_ID -> event.pid ::
             SEQUENCE_NUMBER -> event.sn ::
+            TAGS -> event.tags.foldLeft(MongoDBList.newBuilder[String])(_ += _).result() ::
             Nil
         ))
       (for {
         bldr <- Option(b)
+        bldr <- Option(event.tags).filter(_.nonEmpty).map(tags => bldr += (TAGS -> serializeTags(tags))).orElse(Option(bldr))
         bldr <- event.manifest.map(s => bldr += (MANIFEST -> s)).orElse(Option(bldr))
         bldr <- event.writerUuid.map(s => bldr += (WRITER_UUID -> s)).orElse(Option(bldr))
         bldr <- event.sender
@@ -98,17 +109,20 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
       } yield bldr).getOrElse(b).result()
     }
 
+    private def serializeTags(tags: Set[String]): MongoDBList =
+      tags.foldLeft(MongoDBList.newBuilder[String])(_ += _).result()
+
     private def serializePayload(payload: Payload)(b: collection.mutable.Builder[(String,Any),DBObject]) = {
       val builder = b += (TYPE -> payload.hint)
       payload match {
-        case Bson(doc: DBObject) => builder += PayloadKey -> doc
-        case Bin(bytes) => builder += PayloadKey -> bytes
-        case Legacy(bytes) => builder += PayloadKey -> bytes
+        case Bson(doc: DBObject, _) => builder += PayloadKey -> doc
+        case Bin(bytes, _) => builder += PayloadKey -> bytes
+        case Legacy(bytes, _) => builder += PayloadKey -> bytes
         case s: Serialized[_] => builder ++= (PayloadKey -> s.bytes :: HINT -> s.className :: SER_MANIFEST -> s.serializedManifest :: SER_ID -> s.serializerId :: Nil)
-        case StringPayload(str) => builder += PayloadKey -> str
-        case FloatingPointPayload(d) => builder += PayloadKey -> d
-        case FixedPointPayload(l) => builder += PayloadKey -> l
-        case BooleanPayload(bl) => builder += PayloadKey -> bl
+        case StringPayload(str, _) => builder += PayloadKey -> str
+        case FloatingPointPayload(d, _) => builder += PayloadKey -> d
+        case FixedPointPayload(l, _) => builder += PayloadKey -> l
+        case BooleanPayload(bl, _) => builder += PayloadKey -> bl
         case x => throw new IllegalArgumentException(s"Unable to serialize payload for unknown type ${x.getClass.getName} with hint ${payload.hint}")
       }
     }
