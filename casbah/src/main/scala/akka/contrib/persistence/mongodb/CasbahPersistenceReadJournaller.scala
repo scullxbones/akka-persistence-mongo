@@ -140,7 +140,7 @@ class CurrentEventsByTagCursorSource(driver: CasbahMongoDriver, tag: String, fro
       case NoOffset =>
         None
       case ObjectIdOffset(hexStr, _) =>
-        Option(ID $gte new ObjectId(hexStr))
+        Option(ID $gt new ObjectId(hexStr))
     }
 
   override val shape: SourceShape[(Event, Offset)] = SourceShape(outlet)

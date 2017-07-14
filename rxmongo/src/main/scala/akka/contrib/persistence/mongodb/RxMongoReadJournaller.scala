@@ -110,7 +110,7 @@ object CurrentEventsByTag {
     }
     val query = BSONDocument(
       TAGS -> tag
-    ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gte" -> id))))
+    ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id))))
 
     Source.fromFuture(driver.getAllCollectionsAsFuture(None))
           .flatMapConcat{ xs =>
