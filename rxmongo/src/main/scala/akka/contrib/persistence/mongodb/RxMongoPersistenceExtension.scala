@@ -6,9 +6,8 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee._
 import reactivemongo.api._
@@ -174,11 +173,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
 
   private[mongodb] def closeConnections(): Unit = {
-    import system.dispatcher
-    implicit val to = Timeout(5.seconds)
-    val closed = Future.sequence(driver.connections.map(_.askClose().map(_ => ()))).map(_ => driver.close(to.duration))
-    Await.ready(closed, to.duration + 1.second)
-    ()
+    driver.close(5.seconds)
   }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
