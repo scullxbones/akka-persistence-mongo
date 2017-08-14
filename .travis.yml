@@ -1,4 +1,8 @@
 sudo: required
+cache:
+  - $HOME/.ivy2
+os: linux
+dist: trusty
 services:
    - docker
 language: scala
@@ -10,6 +14,7 @@ env:
     - MONGODB_VERSION=2.6
     - MONGODB_VERSION=3.0 STORAGE_ENGINE="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.2 STORAGE_ENGINE="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.4 STORAGE_ENGINE="--storageEngine wiredTiger"
   global:
     - MONGODB_AUTH_PORT=28117
     - MONGODB_NOAUTH_PORT=27117
@@ -25,4 +30,4 @@ before_script:
   - sleep 15
   - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
-  - travis_wait sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=10 ";akka-persistence-mongo-common/test;akka-persistence-mongo-casbah/test;akka-persistence-mongo-rxmongo/test;akka-persistence-mongo-tools/test"
+  - travis_retry travis_wait sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=10 ";akka-persistence-mongo-common/test;akka-persistence-mongo-casbah/test;akka-persistence-mongo-rxmongo/test;akka-persistence-mongo-tools/test"

@@ -8,7 +8,6 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import play.api.libs.iteratee._
 import reactivemongo.api._
