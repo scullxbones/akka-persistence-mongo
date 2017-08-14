@@ -9,7 +9,7 @@
      * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
      * If using `dlite`, `export CONTAINER_HOST=docker.local` should set the variable correctly
  * Supports Akka 2.5 series
- * Supports MongoDB major versions 2.6, 3.0, 3.2
+ * Test suite runs against MongoDB major versions 2.6, 3.0, 3.2, 3.4
  * Cross-compiled against scala `2.11` and `2.12`
  * Be aware that there is a `16MB` payload size limit on snapshots and journal events.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
 
