@@ -6,8 +6,9 @@
 
 package akka.contrib.persistence.mongodb
 
+import akka.actor.ActorSystem
 import akka.persistence._
-import akka.stream.ActorMaterializer
+import akka.stream.{ActorMaterializer, Materializer}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream.cursorProducer
@@ -40,8 +41,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     TO -> BSONDocument("$gte" -> from),
     FROM -> BSONDocument("$lte" -> to))
 
-  private[this] implicit val system = driver.actorSystem
-  private[this] implicit val materializer = ActorMaterializer()
+  private[this] implicit val system: ActorSystem = driver.actorSystem
+  private[this] implicit val materializer: Materializer = ActorMaterializer()
   private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = {   //Enumerator.flatten
     val journal = driver.getJournal(pid)
     val source =

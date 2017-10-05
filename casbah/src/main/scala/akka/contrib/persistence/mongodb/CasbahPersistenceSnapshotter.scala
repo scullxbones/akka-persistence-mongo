@@ -28,7 +28,7 @@ object CasbahPersistenceSnapshotter {
     snapshot.snapshot match {
       case o: DBObject =>
         obj.put(V2.SERIALIZED, o)
-      case b =>
+      case _ =>
         obj.put(V2.SERIALIZED, serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
     }
     obj
@@ -70,7 +70,7 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   import CasbahPersistenceSnapshotter._
   import SnapshottingFieldNames._
 
-  private[this] implicit val serialization = driver.CasbahSerializers.serialization
+  private[this] implicit val serialization: Serialization = driver.CasbahSerializers.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
 
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =
