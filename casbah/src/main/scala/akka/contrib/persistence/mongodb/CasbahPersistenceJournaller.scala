@@ -6,6 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
+import akka.actor.ActorSystem
 import akka.persistence._
 import com.mongodb.{DBObject, DuplicateKeyException}
 import com.mongodb.casbah.Imports._
@@ -18,7 +19,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
 
   import driver.CasbahSerializers._
 
-  private implicit val system = driver.actorSystem
+  private implicit val system: ActorSystem = driver.actorSystem
 
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
@@ -93,7 +94,7 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
       )
     }
     catch {
-      case e:DuplicateKeyException =>
+      case _:DuplicateKeyException =>
         // Ignore Duplicate Key, PID already exists
     }
 

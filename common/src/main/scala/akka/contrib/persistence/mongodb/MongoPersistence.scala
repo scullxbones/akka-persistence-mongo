@@ -10,10 +10,10 @@ import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import akka.pattern.CircuitBreaker
-import com.codahale.metrics.SharedMetricRegistries
+import com.codahale.metrics.{MetricRegistry, SharedMetricRegistries}
 import com.typesafe.config.Config
 import nl.grons.metrics.scala.InstrumentedBuilder
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
@@ -39,7 +39,7 @@ object MongoPersistenceDriver {
 }
 
 trait Instrumented extends InstrumentedBuilder {
-  override val metricRegistry = MongoPersistenceDriver.registry
+  override val metricRegistry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
 trait CanSerializeJournal[D] {
@@ -70,11 +70,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   val DEFAULT_DB_NAME = "akka-persistence"
 
-  protected val logger = LoggerFactory.getLogger(getClass)
+  protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
   implicit val actorSystem: ActorSystem = as
 
-  lazy val settings = {
+  lazy val settings: MongoSettings = {
     val defaults = MongoSettings(as.settings)
     Try(config.getConfig("overrides")) match {
       case Success(overrides) =>
@@ -108,12 +108,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * retrieve suffix from persistenceId
    */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
-    case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
+    case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
       val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
       builderIns.getSuffixFromPersistenceId(persistenceId)
-    }
     case _ => ""
   }
 
@@ -121,12 +120,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    * validate characters in collection name
    */
   private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
-    case Some(suffixBuilderClass) if (!suffixBuilderClass.trim.isEmpty) => {
+    case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
       val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
       builderIns.validateMongoCharacters(input)
-    }
     case _ => input
   }
 
@@ -146,7 +144,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     val name =
       suffix match {
         case "" => nameInSettings
-        case _  => s"${nameInSettings}${suffixSeparator}${validateMongoCharacters(suffix)}"
+        case _  => s"$nameInSettings$suffixSeparator${validateMongoCharacters(suffix)}"
       }
     logger.debug(s"""Suffixed name for value "$nameInSettings" in settings and suffix "$suffix" is "$name"""")
     name
@@ -251,7 +249,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def mongoUri = settings.MongoUri
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
-  def suffixBuilderClassOption = Option(settings.SuffixBuilderClass)
+  def suffixBuilderClassOption = Option(settings.SuffixBuilderClass).filter(_.trim.nonEmpty)
   def suffixSeparator = settings.SuffixSeparator match {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
     case _                   => "_"
