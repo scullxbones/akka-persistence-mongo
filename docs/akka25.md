@@ -19,6 +19,7 @@
 
 * Choose a driver - Casbah and ReactiveMongo are currently supported
 * Driver dependencies are `provided`, meaning they must be included in the application project's dependencies.
+  * Please note that rxmongo also requires the `"org.reactivemongo" %% "reactivemongo-akkastream"` project.
 * Add the following to sbt:
 
 (Casbah)
