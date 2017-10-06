@@ -1,9 +1,6 @@
 package akka.contrib.persistence.mongodb
 
-import java.util.concurrent.atomic.AtomicBoolean
-
 import akka.actor.Actor
-import akka.pattern.{CircuitBreaker, CircuitBreakerOpenException}
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import com.typesafe.config.Config
@@ -11,13 +8,12 @@ import nl.grons.metrics.scala.{MetricName, Timer}
 
 import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
 import scala.util.Try
 
 class MongoJournal(config: Config) extends AsyncWriteJournal {
   
   private[this] val impl = MongoPersistenceExtension(context.system)(config).journaler
-  private[this] implicit val ec = context.dispatcher
+  private[this] implicit val ec: ExecutionContext = context.dispatcher
 
   /**
    * Plugin API: asynchronously writes a batch (`Seq`) of persistent messages to the
@@ -155,36 +151,6 @@ trait MongoPersistenceJournallingApi {
   private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
-}
-
-trait MongoPersistenceJournalFailFast extends MongoPersistenceJournallingApi {
-
-  private[mongodb] val breaker: CircuitBreaker
-
-  private lazy val cbOpen = {
-    val ab = new AtomicBoolean(false)
-    breaker.onOpen(ab.set(true))
-    breaker.onHalfOpen(ab.set(false))
-    breaker.onClose(ab.set(false))
-    ab
-  }
-
-  private def onlyWhenClosed[A](thunk: => A) = {
-    if (cbOpen.get()) throw new CircuitBreakerOpenException(0.seconds)
-    else thunk
-  }
-
-  private[mongodb] abstract override def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] =
-    breaker.withCircuitBreaker(super.batchAppend(writes))
-
-  private[mongodb] abstract override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] =
-    breaker.withCircuitBreaker(super.deleteFrom(persistenceId, toSequenceNr))
-
-  private[mongodb] abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
-    onlyWhenClosed(super.replayJournal(pid,from,to,max)(breaker.withSyncCircuitBreaker(replayCallback)))
-
-  private[mongodb] abstract override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.maxSequenceNr(pid,from))
 }
 
 trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with Instrumented {

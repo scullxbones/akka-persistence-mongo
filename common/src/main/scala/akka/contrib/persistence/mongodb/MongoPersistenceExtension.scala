@@ -107,10 +107,6 @@ class MongoSettings(val config: Config) {
 
   val MetadataCollection: String = config.getString("metadata-collection")
 
-  val Tries: Int = config.getInt("breaker.maxTries")
-  val CallTimeout: FiniteDuration = config.getDuration("breaker.timeout.call", MILLISECONDS).millis
-  val ResetTimeout: FiniteDuration = config.getDuration("breaker.timeout.reset", MILLISECONDS).millis
-
   val UseLegacyJournalSerialization: Boolean = config.getBoolean("use-legacy-serialization")
   
   val SuffixBuilderClass: String = config.getString("suffix-builder.class")

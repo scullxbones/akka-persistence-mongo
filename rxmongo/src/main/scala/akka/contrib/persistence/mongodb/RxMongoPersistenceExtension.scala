@@ -251,14 +251,11 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
 
     lazy val driver = new RxMongoDriver(actorSystem, config, driverProvider)
 
-    override lazy val journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+    override lazy val journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics {
       override def driverName = "rxmongo"
-      override private[mongodb] val breaker = driver.breaker
     }
 
-    override lazy val snapshotter = new RxMongoSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
-      override private[mongodb] val breaker = driver.breaker
-    }
+    override lazy val snapshotter = new RxMongoSnapshotter(driver)
     override lazy val readJournal = new RxMongoReadJournaller(driver, ActorMaterializer()(actorSystem))
   }
 

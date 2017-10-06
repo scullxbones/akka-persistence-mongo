@@ -6,7 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.pattern.CircuitBreaker
 import akka.testkit.{TestKit, _}
 import com.typesafe.config.ConfigFactory
 import play.api.libs.iteratee._
@@ -22,14 +21,10 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
 
   class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty(), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
-
-    override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
   class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig), provider) {
     override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
-
-    override lazy val breaker = CircuitBreaker(system.scheduler, 0, 10.seconds, 10.seconds)
   }
 
   val driver = new SpecDriver

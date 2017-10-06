@@ -151,13 +151,11 @@ class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPers
 
     val driver = new CasbahMongoDriver(actorSystem, config)
 
-    override lazy val journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+    override lazy val journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
       override def driverName = "casbah"
-      override private[mongodb] val breaker = driver.breaker
     }
-    override lazy val snapshotter = new CasbahPersistenceSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
-      override private[mongodb] val breaker = driver.breaker
-    }
+    override lazy val snapshotter = new CasbahPersistenceSnapshotter(driver)
+
     override lazy val readJournal = new CasbahPersistenceReadJournaller(driver)
   }
 
