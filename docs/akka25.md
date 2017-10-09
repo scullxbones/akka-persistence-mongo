@@ -24,12 +24,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.4"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.3"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.4"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -43,7 +43,6 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Mongo URI](#mongouri)
    * [Collection and Index](#mongocollection)
    * [Write Concerns](#writeconcern)
-   * [Circuit Breaker / Fail Fast](#circuitbreaker)
    * [ReactiveMongo Failover](#rxmfailover)
    * [Dispatcher](#dispatcher)
    * [Pass-Through BSON](#passthru)
@@ -134,25 +133,6 @@ akka.contrib.persistence.mongodb.mongo.journal-fsync = false
 akka.contrib.persistence.mongodb.mongo.snaps-wtimeout = 3s
 akka.contrib.persistence.mongodb.mongo.snaps-fsync = false
 ```
-
-<a name="circuitbreaker"/>
-##### Circuit breaker settings
-
-By default the circuit breaker is set up with a `maxTries` of 5, and `callTimeout` and `resetTimeout` of 5s.  [Akka's circuit breaker documentation](http://doc.akka.io/docs/akka/snapshot/common/circuitbreaker.html) covers in detail what these settings are used for.  In the context of this plugin, you can set these in the following way:
-
-```
-akka.contrib.persistence.mongodb.mongo.breaker.maxTries = 3
-akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 3s
-akka.contrib.persistence.mongodb.mongo.breaker.timeout.reset = 10s
-```
-
-These settings may need tuning depending on your particular environment.  If you are seeing `CircuitBreakerOpenException`s in the log without other errors that can mean that timeouts are occurring.  Make sure to look at the mongo slow logs as part of the research.  Here are some prior tickets where these issues have been discussed in the past (including an explanation of how to disable the Circuit Breaker):
-
-[1](https://github.com/scullxbones/akka-persistence-mongo/issues/24)
-[2](https://github.com/scullxbones/akka-persistence-mongo/issues/22)
-
-Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`.
-
 <a name="rxmfailover"/>
 ##### Reactive Mongo Driver - failover settings
 
@@ -517,7 +497,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.3",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.4",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
