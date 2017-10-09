@@ -9,7 +9,6 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
-import akka.pattern.CircuitBreaker
 import com.codahale.metrics.{MetricRegistry, SharedMetricRegistries}
 import com.typesafe.config.Config
 import nl.grons.metrics.scala.InstrumentedBuilder
@@ -85,8 +84,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
         defaults
     }
   }
-
-  lazy val breaker = CircuitBreaker(actorSystem.scheduler, settings.Tries, settings.CallTimeout, settings.ResetTimeout)
 
   as.registerOnTermination {
     closeConnections()

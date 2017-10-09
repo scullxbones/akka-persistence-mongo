@@ -37,8 +37,8 @@ package object mongodb {
   implicit object OffsetOrdering extends Ordering[Offset] {
     override def compare(x: Offset, y: Offset): Int = {
       (x,y) match {
-        case (NoOffset, _)                        => -1
         case (NoOffset, NoOffset)                 => 0
+        case (NoOffset, _)                        => -1
         case (_, NoOffset)                        => 1
         case (Sequence(a), Sequence(b))           => a compareTo b
         case (_:Sequence, _)                      => 0 // Can't compare
