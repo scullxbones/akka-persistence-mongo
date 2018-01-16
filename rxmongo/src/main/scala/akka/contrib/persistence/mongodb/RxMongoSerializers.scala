@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Fix issue #179 about actorRef serialization
+ */
 package akka.contrib.persistence.mongodb
 
 import akka.actor.{ActorRef, ActorSystem, DynamicAccess, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
@@ -72,7 +76,9 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
         case b: BSONDocument =>
           b
         case _ =>
-          BSON.write(serialization.serialize(Snapshot(snap.snapshot)).get)
+          SerializationHelper.withTransportInformation(serialization.system) {
+            BSON.write(serialization.serialize(Snapshot(snap.snapshot)).get)
+          }
       }
       BSONDocument(PROCESSOR_ID -> snap.metadata.persistenceId,
         SEQUENCE_NUMBER -> snap.metadata.sequenceNr,
