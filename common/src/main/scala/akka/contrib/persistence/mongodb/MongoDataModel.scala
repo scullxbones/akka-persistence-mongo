@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Fix issue #179 about actorRef serialization
+ */
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorRef
@@ -159,17 +163,19 @@ object Payload {
   implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf, Set.empty[String])
 
   def apply[D](payload: Any, tags: Set[String] = Set.empty)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Payload = {
-    payload match {
-      case tg: Tagged => Payload(tg.payload, tg.tags)
-      case pr: PersistentRepr => Legacy(pr, tags)
-      case d: D => Bson(d, tags)
-      case bytes: Array[Byte] => Bin(bytes, tags)
-      case str: String => StringPayload(str, tags)
-      case n: Double => FloatingPointPayload(n, tags)
-      case n: Long => FixedPointPayload(n, tags)
-      case b: Boolean => BooleanPayload(b, tags)
-      case x: AnyRef => Serialized(x, tags)
-      case x => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
+    SerializationHelper.withTransportInformation[Payload](ser.system) {
+      payload match {
+        case tg: Tagged => Payload(tg.payload, tg.tags)
+        case pr: PersistentRepr => Legacy(pr, tags)
+        case d: D => Bson(d, tags)
+        case bytes: Array[Byte] => Bin(bytes, tags)
+        case str: String => StringPayload(str, tags)
+        case n: Double => FloatingPointPayload(n, tags)
+        case n: Long => FixedPointPayload(n, tags)
+        case b: Boolean => BooleanPayload(b, tags)
+        case x: AnyRef => Serialized(x, tags)
+        case x => throw new IllegalArgumentException(s"Type for $x of ${x.getClass} is currently unsupported")
+      }
     }
   }
 

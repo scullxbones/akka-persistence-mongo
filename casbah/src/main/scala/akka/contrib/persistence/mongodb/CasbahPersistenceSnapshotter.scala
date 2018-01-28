@@ -1,4 +1,7 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Fix issue #179 about actorRef serialization
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
  * ...
@@ -29,7 +32,9 @@ object CasbahPersistenceSnapshotter {
       case o: DBObject =>
         obj.put(V2.SERIALIZED, o)
       case _ =>
-        obj.put(V2.SERIALIZED, serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
+        SerializationHelper.withTransportInformation(serialization.system) {
+          obj.put(V2.SERIALIZED, serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
+        }
     }
     obj
   }
