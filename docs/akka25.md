@@ -24,12 +24,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.5"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.5"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -344,7 +344,7 @@ settings.
 ### EventsByTag queries
 `EventsByTag` queries as described in [the akka docs](http://doc.akka.io/docs/akka/current/scala/persistence-query.html#eventsbytag-and-currenteventsbytag) are available for use.  When payloads are wrapped in an instance of `akka.persistence.journal.Tagged`, these tags are stored in the journal and can be used as part of a persistence query.  In DDD context, tags correspond well to aggregate roots.
 
-An example query is below.  This is querying for all events tagged `foo`.  Alternately, an offset can be passed (stored for example from a previous query).  This offset is considered exclusive, so the query will restart at the next item (`>` rather than `>=` behavior). 
+An example query is below.  This is querying for all events tagged `foo`.  Alternately, an offset can be passed (stored for example from a previous query).  This offset is considered exclusive, so the query will restart at the next item (`>` rather than `>=` behavior).
 ```scala
     implicit val system = as
     implicit val am = ActorMaterializer()
@@ -497,7 +497,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.4",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.5",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 

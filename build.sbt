@@ -1,4 +1,4 @@
-val releaseV = "2.0.4"
+val releaseV = "2.0.5"
 
 val scalaV = "2.11.8"
 
@@ -106,7 +106,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
       "org.mongodb" %% "casbah" % "3.1.1" % "provided"
     )
   )
-  
+
 lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-tools`)
   .settings(commonSettings:_*)

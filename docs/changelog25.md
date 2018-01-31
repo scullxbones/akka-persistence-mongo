@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.0.5
+* ActorRef serialization, quite old bug. transportInformation should be set.  Thanks to @gbrd for the PR
+[#179](https://github.com/scullxbones/akka-persistence-mongo/issues/179)
+
 ### 2.0.4
 * Remove circuit breaker - currently redundant with breaker provided by akka-persistence layer [#168](https://github.com/scullxbones/akka-persistence-mongo/issues/168)
 * Properly document rxmongo akka-stream requirement [#166](https://github.com/scullxbones/akka-persistence-mongo/issues/166)
