@@ -1,4 +1,7 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
  * ...
@@ -120,8 +123,10 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     journal.update(query, update, upsert = false, multi = true, writeConcern)
     maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
     journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && journal.count() == 0)
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && journal.count() == 0) {
       journal.dropCollection()
+      driver.removeJournalInCache(persistenceId)
+    }
     ()
   }
 

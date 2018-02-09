@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Brian Scully
- * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache.
+ * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
  *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
@@ -211,7 +211,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
         ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
       }
     })
+  }
 
+  private[mongodb] def removeJournalInCache(persistenceId:String) = {
+    val collectionName = getJournalCollectionName(persistenceId)
+    journalMap.remove(collectionName)
   }
 
   private[mongodb] lazy val snaps: C = snaps("")
