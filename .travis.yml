@@ -15,6 +15,7 @@ env:
     - MONGODB_VERSION=3.0 STORAGE_ENGINE="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.2 STORAGE_ENGINE="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.4 STORAGE_ENGINE="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.6 STORAGE_ENGINE="--storageEngine wiredTiger"
   global:
     - MONGODB_AUTH_PORT=28117
     - MONGODB_NOAUTH_PORT=27117
