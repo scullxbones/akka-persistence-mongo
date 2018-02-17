@@ -1,7 +1,7 @@
 ## Changelog for 2.x major version
 
 ### 2.0.6
-* Optimization: journal collection cache (#181)
+* Optimization: journal collection cache (#181) - Thanks to @gbrd for the PR
 
 ### 2.0.5
 * ActorRef serialization, quite old bug. transportInformation should be set.  Thanks to @gbrd for the PR
