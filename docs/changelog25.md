@@ -1,5 +1,8 @@
 ## Changelog for 2.x major version
 
+### 2.0.6
+* Optimization: journal collection cache (#181)
+
 ### 2.0.5
 * ActorRef serialization, quite old bug. transportInformation should be set.  Thanks to @gbrd for the PR
 [#179](https://github.com/scullxbones/akka-persistence-mongo/issues/179)
