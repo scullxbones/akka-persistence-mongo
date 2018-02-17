@@ -1,4 +1,7 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
  * ...
@@ -176,6 +179,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
           n <- j.count()
           if n == 0
           _ <- j.drop(failIfNotFound = false)
+          _ = driver.removeJournalInCache(persistenceId)
         } yield ()
       ()
     }

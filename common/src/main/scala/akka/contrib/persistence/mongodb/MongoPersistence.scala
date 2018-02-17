@@ -1,4 +1,7 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
  * ...
@@ -14,6 +17,7 @@ import com.typesafe.config.Config
 import nl.grons.metrics.scala.InstrumentedBuilder
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
@@ -21,9 +25,13 @@ import scala.util.{Failure, Success, Try}
 object MongoPersistenceDriver {
 
   sealed trait WriteSafety
+
   case object Unacknowledged extends WriteSafety
+
   case object Acknowledged extends WriteSafety
+
   case object Journaled extends WriteSafety
+
   case object ReplicaAcknowledged extends WriteSafety
 
   implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase match {
@@ -185,19 +193,29 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] lazy val journal: C = journal("")
 
+  private[mongodb] val journalMap = TrieMap.empty[String, C]
+
   private[mongodb] def journal(persistenceId: String): C = {
-    if (settings.JournalAutomaticUpgrade) {
-      logger.debug("Journal automatic upgrade is enabled, executing upgrade process")
-      upgradeJournalIfNeeded(persistenceId)
-      logger.debug("Journal automatic upgrade process has completed")
-    }
+    val collectionName = getJournalCollectionName(persistenceId)
+    journalMap.getOrElseUpdate(collectionName, {
+      if (settings.JournalAutomaticUpgrade) {
+        logger.debug("Journal automatic upgrade is enabled, executing upgrade process")
+        upgradeJournalIfNeeded(persistenceId)
+        logger.debug("Journal automatic upgrade process has completed")
+      }
 
-    val journalCollection = collection(getJournalCollectionName(persistenceId))
+      val journalCollection = collection(collectionName)
 
-    indexes.foldLeft(journalCollection) { (acc, index) =>
-      import index._
-      ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
-    }
+      indexes.foldLeft(journalCollection) { (acc, index) =>
+        import index._
+        ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
+      }
+    })
+  }
+
+  private[mongodb] def removeJournalInCache(persistenceId:String) = {
+    val collectionName = getJournalCollectionName(persistenceId)
+    journalMap.remove(collectionName)
   }
 
   private[mongodb] lazy val snaps: C = snaps("")
