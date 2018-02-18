@@ -12,7 +12,7 @@ import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.persistence.query.{NoOffset, Offset}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{KillSwitches, Materializer}
-import reactivemongo.akkastream.cursorProducer
+import reactivemongo.akkastream._
 import reactivemongo.api.QueryOpts
 import reactivemongo.bson._
 
@@ -22,7 +22,7 @@ import scala.util.Random
 object CurrentAllEvents {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec = driver.querySideDispatcher
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map { c =>
@@ -43,7 +43,7 @@ object CurrentAllEvents {
 
 object CurrentPersistenceIds {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
-    implicit val ec = driver.querySideDispatcher
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
     Source.fromFuture(for {
@@ -51,12 +51,16 @@ object CurrentPersistenceIds {
         tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
                           import c.BatchCommands.AggregationFramework.{Group, Out, Project}
                           val nameWithIndex = s"$temporaryCollectionName-$idx"
-                          c.aggregate(
+                          c.aggregatorContext[BSONDocument](
                             Project(BSONDocument(PROCESSOR_ID -> 1)),
                             Group(BSONString(s"$$$PROCESSOR_ID"))() ::
                             Out(nameWithIndex) ::
-                            Nil
-                          ).map(_ => nameWithIndex)
+                            Nil,
+                            batchSize = Option(1000)
+                          ).prepared[AkkaStreamCursor]
+                            .cursor
+                            .headOption
+                            .map(_ => nameWithIndex)
                         })
         tmps         <- Future.sequence(tmpNames.map(driver.collection))
       } yield tmps )
@@ -75,7 +79,7 @@ object CurrentPersistenceIds {
 object CurrentEventsByPersistenceId {
   def source(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec = driver.querySideDispatcher
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val query = BSONDocument(
       PROCESSOR_ID -> persistenceId,
@@ -102,7 +106,7 @@ object CurrentEventsByPersistenceId {
 object CurrentEventsByTag {
   def source(driver: RxMongoDriver, tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec = driver.querySideDispatcher
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val offset = fromOffset match {
       case NoOffset => None

@@ -12,10 +12,10 @@ scala:
 env:
   matrix:
     - MONGODB_VERSION=2.6
-    - MONGODB_VERSION=3.0 STORAGE_ENGINE="--storageEngine wiredTiger"
-    - MONGODB_VERSION=3.2 STORAGE_ENGINE="--storageEngine wiredTiger"
-    - MONGODB_VERSION=3.4 STORAGE_ENGINE="--storageEngine wiredTiger"
-    - MONGODB_VERSION=3.6 STORAGE_ENGINE="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.2 MONGODB_OPTS="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.4 MONGODB_OPTS="--storageEngine wiredTiger"
+    - MONGODB_VERSION=3.6 MONGODB_OPTS="--storageEngine wiredTiger --bind_ip_all"
   global:
     - MONGODB_AUTH_PORT=28117
     - MONGODB_NOAUTH_PORT=27117
@@ -24,8 +24,8 @@ jdk:
   - oraclejdk8
 before_install:
   - docker pull scullxbones/mongodb:$MONGODB_VERSION
-  - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $STORAGE_ENGINE
-  - docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth $STORAGE_ENGINE
+  - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
+  - docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth $MONGODB_OPTS
   - docker ps -a
 before_script:
   - sleep 15
