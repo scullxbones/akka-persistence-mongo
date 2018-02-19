@@ -1,6 +1,7 @@
 sudo: required
 cache:
   - $HOME/.ivy2
+  - $HOME/.sbt
 os: linux
 dist: trusty
 services:

@@ -62,7 +62,7 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMo
 @RunWith(classOf[JUnitRunner])
 class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
-  val authMode: String = if( "3.0" :: "3.2" :: "3.4" :: Nil exists envMongoVersion.contains) "?authMode=scram-sha1" else "?authMode=mongocr"
+  val authMode: String = if( envMongoVersion.contains("2.6") ) "?authMode=mongocr" else "?authMode=scram-sha1"
 
   val authConfig: Config = ConfigFactory.parseString(
     s"""
