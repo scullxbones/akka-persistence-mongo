@@ -11,10 +11,10 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence._
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
-import reactivemongo.akkastream.cursorProducer
+import reactivemongo.akkastream._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
 import reactivemongo.bson._
@@ -118,9 +118,14 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
       import j.BatchCommands.AggregationFramework.{GroupField, Match, MaxField}
 
-      j.aggregate(firstOperator = Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
-        otherOperators = GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil).map(
-          rez => rez.head(BSONDocumentIdentity).flatMap(_.getAs[Long]("max")).headOption)
+      j.aggregatorContext[BSONDocument](
+        Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
+        GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil,
+        batchSize = Option(1)
+      ).prepared[AkkaStreamCursor]
+        .cursor
+        .headOption
+        .map(_.flatMap(_.getAs[Long]("max")))
     }
 
     for {
