@@ -9,7 +9,7 @@
      * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
      * If using `dlite`, `export CONTAINER_HOST=docker.local` should set the variable correctly
  * Supports Akka 2.5 series
- * Test suite runs against MongoDB major versions 2.6, 3.0, 3.2, 3.4
+ * Test suite runs against MongoDB major versions 2.6, 3.0, 3.2, 3.4, 3.6
  * Cross-compiled against scala `2.11` and `2.12`
  * Be aware that there is a `16MB` payload size limit on snapshots and journal events.  In addition a journal batch must be <= `16MB` in size.  A journal batch is defined by the `Seq` of events passed to `persistAll`.
 
@@ -24,12 +24,12 @@
 
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.6"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.0.7"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.6"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.0.7"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -497,7 +497,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.6",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.0.7",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 

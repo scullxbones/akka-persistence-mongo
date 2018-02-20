@@ -29,12 +29,17 @@ SECTION
 
 perl -ni -e "print; print \"\n$BLOCK\n\" if $. == 1" docs/changelog25.md
 
+git add .
+git commit -m 'Prepare for '$NEXT' release'
+git tag -a $NEXT -m "$BLOCK" -s
+git push origin master
+git push origin --tags
+
 API_JSON='{
     "tag_name": "'"$NEXT"'",
     "target_commitish": "master",
     "name": "'"$NEXT"'",
-    "body": "'"$BLOCK"'",
     "draft": true
 }'
 
-curl -H "Content-Type: application/json" -XPOST --data "$API_JSON" https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN
+curl -H "Content-Type: application/json" -XPOST --data \'"$API_JSON"\' "https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN"

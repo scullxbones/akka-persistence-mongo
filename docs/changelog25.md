@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.0.7
+* Wip smoke tests against 3.6 (#183)
+* Break release process into two parts
+
 ### 2.0.6
 * Optimization: journal collection cache (#181) - Thanks to @gbrd for the PR
 
