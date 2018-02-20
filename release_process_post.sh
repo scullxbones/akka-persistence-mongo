@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-git add .
-git commit -m 'Prepare for '$NEXT' release'
-git tag -a $NEXT -m '' -s
+git push origin master
+git push origin --tags
 
 sbt +publishSigned
 sbt sonatypeReleaseAll

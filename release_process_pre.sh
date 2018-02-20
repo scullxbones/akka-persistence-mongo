@@ -30,16 +30,20 @@ SECTION
 perl -ni -e "print; print \"\n$BLOCK\n\" if $. == 1" docs/changelog25.md
 
 git add .
-git commit -m 'Prepare for '$NEXT' release'
+git commit -m 'Prepare for '$NEXT' release' -S
 git tag -a $NEXT -m "$BLOCK" -s
-git push origin master
-git push origin --tags
+
+CR=$(printf '\r')
+BLOCK_WITH_CR=$(echo $BLOCK | sed -e "s/\$/$CR/g")
 
 API_JSON='{
     "tag_name": "'"$NEXT"'",
     "target_commitish": "master",
     "name": "'"$NEXT"'",
-    "draft": true
+    "draft": true,
+    "body": "'"$BLOCK_WITH_CR"'"
 }'
 
-curl -H "Content-Type: application/json" -XPOST --data \'"$API_JSON"\' "https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN"
+curl -v -H "Content-Type: application/json" -XPOST \
+    --data "$API_JSON" \
+    https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN
