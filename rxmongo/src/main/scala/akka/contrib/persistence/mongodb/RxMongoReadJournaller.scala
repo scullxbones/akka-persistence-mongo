@@ -34,7 +34,7 @@ object CurrentAllEvents {
             doc.getAs[BSONArray](EVENTS)
               .map(_.elements
                 .map(_.value)
-                .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
+                .collect { case d: BSONDocument => driver.deserializeJournal(d) })
               .getOrElse(Nil)
           }.mapConcat(identity)
       }.reduceLeft(_ concat _))
@@ -47,26 +47,26 @@ object CurrentPersistenceIds {
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
     Source.fromFuture(for {
-        collections <- driver.journalCollectionsAsFuture
-        tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
-                          import c.BatchCommands.AggregationFramework.{Group, Out, Project}
-                          val nameWithIndex = s"$temporaryCollectionName-$idx"
-                          c.aggregatorContext[BSONDocument](
-                            Project(BSONDocument(PROCESSOR_ID -> 1)),
-                            Group(BSONString(s"$$$PROCESSOR_ID"))() ::
-                            Out(nameWithIndex) ::
-                            Nil,
-                            batchSize = Option(1000)
-                          ).prepared[AkkaStreamCursor]
-                            .cursor
-                            .headOption
-                            .map(_ => nameWithIndex)
-                        })
-        tmps         <- Future.sequence(tmpNames.map(driver.collection))
-      } yield tmps )
+      collections <- driver.journalCollectionsAsFuture
+      tmpNames <- Future.sequence(collections.zipWithIndex.map { case (c, idx) =>
+        import c.BatchCommands.AggregationFramework.{Group, Out, Project}
+        val nameWithIndex = s"$temporaryCollectionName-$idx"
+        c.aggregatorContext[BSONDocument](
+          Project(BSONDocument(PROCESSOR_ID -> 1)),
+          Group(BSONString(s"$$$PROCESSOR_ID"))() ::
+            Out(nameWithIndex) ::
+            Nil,
+          batchSize = Option(1000)
+        ).prepared[AkkaStreamCursor]
+          .cursor
+          .headOption
+          .map(_ => nameWithIndex)
+      })
+      tmps <- Future.sequence(tmpNames.map(driver.collection))
+    } yield tmps)
       .flatMapConcat(cols => cols.map(_.find(BSONDocument()).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
       .mapConcat(_.getAs[String]("_id").toList)
-      .alsoTo(Sink.onComplete{ _ =>
+      .alsoTo(Sink.onComplete { _ =>
         driver
           .getCollectionsAsFuture(temporaryCollectionName)
           .foreach(cols =>
@@ -87,19 +87,19 @@ object CurrentEventsByPersistenceId {
       FROM -> BSONDocument("$lte" -> toSeq))
 
     Source.fromFuture(driver.getJournal(persistenceId))
-            .flatMapConcat(
-              _.find(query)
-                .sort(BSONDocument(TO -> 1))
-                .projection(BSONDocument(EVENTS -> 1))
-                .cursor[BSONDocument]()
-                .documentSource()
-            ).map( doc =>
-              doc.getAs[BSONArray](EVENTS)
-                .map(_.elements
-                  .map(_.value)
-                  .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
-                .getOrElse(Nil)
-            ).mapConcat(identity)
+      .flatMapConcat(
+        _.find(query)
+          .sort(BSONDocument(TO -> 1))
+          .projection(BSONDocument(EVENTS -> 1))
+          .cursor[BSONDocument]()
+          .documentSource()
+      ).map(doc =>
+      doc.getAs[BSONArray](EVENTS)
+        .map(_.elements
+          .map(_.value)
+          .collect { case d: BSONDocument => driver.deserializeJournal(d) })
+        .getOrElse(Nil)
+    ).mapConcat(identity)
   }
 }
 
@@ -117,48 +117,53 @@ object CurrentEventsByTag {
     ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id))))
 
     Source.fromFuture(driver.getAllCollectionsAsFuture(None))
-          .flatMapConcat{ xs =>
-            xs.map(c =>
-              c.find(query)
-               .sort(BSONDocument(ID -> 1))
-               .cursor[BSONDocument]()
-               .documentSource()
-            ).reduceLeft(_ ++ _)
-          }.map{ doc =>
-            val id = doc.getAs[BSONObjectID](ID).get
-            doc.getAs[BSONArray](EVENTS)
-              .map(_.elements
-                .map(_.value)
-                .collect{ case d:BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time) }
-                .filter(_._1.tags.contains(tag))
-              )
-              .getOrElse(Nil)
+      .flatMapConcat { xs =>
+        xs.map(c =>
+          c.find(query)
+            .sort(BSONDocument(ID -> 1))
+            .cursor[BSONDocument]()
+            .documentSource()
+        ).reduceLeft(_ ++ _)
+      }.map { doc =>
+      val id = doc.getAs[BSONObjectID](ID).get
+      doc.getAs[BSONArray](EVENTS)
+        .map(_.elements
+          .map(_.value)
+          .collect { case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time) }
+          .filter(_._1.tags.contains(tag))
+        )
+        .getOrElse(Nil)
     }.mapConcat(identity)
   }
 }
 
 class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[(Event, Offset), NotUsed]] {
+
   import driver.RxMongoSerializers._
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 
   private val killSwitch = KillSwitches.shared("realtimeKillSwitch")
 
-  override def cursor(): Source[(Event, Offset),NotUsed] =
-    Source.fromFuture(driver.realtime)
-      .flatMapConcat {rt =>
-        rt.find(BSONDocument.empty)
-          .options(QueryOpts().tailable.awaitData)
-          .cursor[BSONDocument]()
-          .documentSource()
-          .via(killSwitch.flow)
-          .mapConcat { d =>
-            val id = d.getAs[BSONObjectID](ID).get
-            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+  override def cursor(): Source[(Event, Offset), NotUsed] =
+    if (driver.realtimeEnablePersistence) {
+      Source.fromFuture(driver.realtime)
+        .flatMapConcat { rt =>
+          rt.find(BSONDocument.empty)
+            .options(QueryOpts().tailable.awaitData)
+            .cursor[BSONDocument]()
+            .documentSource()
+            .via(killSwitch.flow)
+            .mapConcat { d =>
+              val id = d.getAs[BSONObjectID](ID).get
+              d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
                 case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
-            }).getOrElse(Nil)
-          }
-      }
+              }).getOrElse(Nil)
+            }
+        }
+    } else {
+      Source.empty
+    }
 
   override def publishEvents(): Unit = {
     val sink = Sink.foreach[(Event, Offset)](driver.actorSystem.eventStream.publish)
@@ -191,7 +196,7 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
     CurrentEventsByTag.source(driver, tag, offset)
 
   override def checkOffsetIsSupported(offset: Offset): Boolean =
-    PartialFunction.cond(offset){
+    PartialFunction.cond(offset) {
       case NoOffset => true
       case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).isSuccess
     }
