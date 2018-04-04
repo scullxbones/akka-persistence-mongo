@@ -433,9 +433,9 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       implicit val ec = as.dispatcher
 
       val done = Future.sequence(promises.map(_._1.future))
-      Await.result(done, 10.seconds.dilated)
+      Await.result(done, 20.seconds.dilated)
 
-      probe.receiveN(nrOfActors * nrOfEvents, 10.seconds.dilated) should have size (nrOfActors.toLong * nrOfEvents)
+      probe.receiveN(nrOfActors * nrOfEvents, 20.seconds.dilated) should have size (nrOfActors.toLong * nrOfEvents)
       ks.shutdown()
   }
 }

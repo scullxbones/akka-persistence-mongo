@@ -35,10 +35,10 @@ object MongoPersistenceDriver {
   case object ReplicaAcknowledged extends WriteSafety
 
   implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase match {
-    case "errorsignored"       => throw new IllegalArgumentException("Errors ignored is no longer supported as a write safety option")
-    case "unacknowledged"      => Unacknowledged
-    case "acknowledged"        => Acknowledged
-    case "journaled"           => Journaled
+    case "errorsignored" => throw new IllegalArgumentException("Errors ignored is no longer supported as a write safety option")
+    case "unacknowledged" => Unacknowledged
+    case "acknowledged" => Acknowledged
+    case "journaled" => Journaled
     case "replicaacknowledged" => ReplicaAcknowledged
   }
 
@@ -59,6 +59,7 @@ trait CanDeserializeJournal[D] {
 
 trait CanSuffixCollectionNames {
   def getSuffixFromPersistenceId(persistenceId: String): String
+
   def validateMongoCharacters(input: String): String
 }
 
@@ -67,6 +68,7 @@ trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJourna
 private case class IndexSettings(name: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)
 
 abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
+
   import MongoPersistenceDriver._
 
   // Collection type
@@ -110,8 +112,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit
 
   /**
-   * retrieve suffix from persistenceId
-   */
+    * retrieve suffix from persistenceId
+    */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
@@ -122,8 +124,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * validate characters in collection name
-   */
+    * validate characters in collection name
+    */
   private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
@@ -134,8 +136,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * retrieve collection from persistenceId
-   */
+    * retrieve collection from persistenceId
+    */
   private[this] def getSuffixedCollection(persistenceId: String)(build: String => String): C = {
     val name = build(getSuffixFromPersistenceId(persistenceId))
     logger.debug(s"Name used to build collection is $name")
@@ -143,46 +145,46 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * build name of a collection by appending separator and suffix to usual name in settings
-   */
+    * build name of a collection by appending separator and suffix to usual name in settings
+    */
   private[this] def appendSuffixToName(nameInSettings: String)(suffix: String): String = {
     val name =
       suffix match {
         case "" => nameInSettings
-        case _  => s"$nameInSettings$suffixSeparator${validateMongoCharacters(suffix)}"
+        case _ => s"$nameInSettings$suffixSeparator${validateMongoCharacters(suffix)}"
       }
     logger.debug(s"""Suffixed name for value "$nameInSettings" in settings and suffix "$suffix" is "$name"""")
     name
   }
 
   /**
-   * Convenient methods to retrieve journal name from persistenceId
-   */
+    * Convenient methods to retrieve journal name from persistenceId
+    */
   private[mongodb] def getJournalCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => journalCollectionName
-      case _  => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
+      case _ => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
     }
 
   /**
-   * Convenient methods to retrieve snapshot name from persistenceId
-   */
+    * Convenient methods to retrieve snapshot name from persistenceId
+    */
   private[mongodb] def getSnapsCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => snapsCollectionName
-      case _  => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
+      case _ => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
     }
 
   /**
-   * Convenient methods to retrieve EXISTING journal collection from persistenceId.
-   * CAUTION: this method does NOT create the journal and its indexes.
-   */
+    * Convenient methods to retrieve EXISTING journal collection from persistenceId.
+    * CAUTION: this method does NOT create the journal and its indexes.
+    */
   private[mongodb] def getJournal(persistenceId: String): C = collection(getJournalCollectionName(persistenceId))
 
   /**
-   * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
-   * CAUTION: this method does NOT create the snapshot and its indexes.
-   */
+    * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
+    * CAUTION: this method does NOT create the snapshot and its indexes.
+    */
   private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
@@ -213,7 +215,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     })
   }
 
-  private[mongodb] def removeJournalInCache(persistenceId:String) = {
+  private[mongodb] def removeJournalInCache(persistenceId: String) = {
     val collectionName = getJournalCollectionName(persistenceId)
     journalMap.remove(collectionName)
   }
@@ -245,32 +247,53 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined
 
   def databaseName = settings.Database
+
   def snapsCollectionName = settings.SnapsCollection
+
   def snapsIndexName = settings.SnapsIndex
+
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
+
   def snapsWTimeout = settings.SnapsWTimeout
+
   def snapsFsync = settings.SnapsFSync
+
   def journalCollectionName = settings.JournalCollection
+
   def journalIndexName = settings.JournalIndex
+
   def journalSeqNrIndexName = settings.JournalSeqNrIndex
+
   def journalTagIndexName = settings.JournalTagIndex
+
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
+
   def journalWTimeout = settings.JournalWTimeout
+
   def journalFsync = settings.JournalFSync
+
   def realtimeEnablePersistence = settings.realtimeEnablePersistence
+
   def realtimeCollectionName = settings.realtimeCollectionName
+
   def realtimeCollectionSize = settings.realtimeCollectionSize
+
   def metadataCollectionName = settings.MetadataCollection
+
   def mongoUri = settings.MongoUri
+
   def useLegacySerialization = settings.UseLegacyJournalSerialization
 
   def suffixBuilderClassOption = Option(settings.SuffixBuilderClass).filter(_.trim.nonEmpty)
+
   def suffixSeparator = settings.SuffixSeparator match {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
-    case _                   => "_"
+    case _ => "_"
   }
+
   def suffixDropEmpty = settings.SuffixDropEmptyCollections
 
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
+
   def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
 }
