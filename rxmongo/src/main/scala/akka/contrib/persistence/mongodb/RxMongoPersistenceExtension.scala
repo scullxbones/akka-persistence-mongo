@@ -231,7 +231,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     for {
       database  <- db
       names     <- database.collectionNames
-      list      <- Future.sequence(names.filter(nameFilter.getOrElse(_ => true)).map(collection))
+      list      <- Future.sequence(names.filterNot(_ == realtimeCollectionName).filter(nameFilter.getOrElse(_ => true)).map(collection))
     } yield list
   }
 
