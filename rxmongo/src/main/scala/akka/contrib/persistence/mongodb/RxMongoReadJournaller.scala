@@ -145,20 +145,23 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
   private val killSwitch = KillSwitches.shared("realtimeKillSwitch")
 
   override def cursor(): Source[(Event, Offset),NotUsed] =
-    Source.fromFuture(driver.realtime)
-      .flatMapConcat {rt =>
-        rt.find(BSONDocument.empty)
-          .options(QueryOpts().tailable.awaitData)
-          .cursor[BSONDocument]()
-          .documentSource()
-          .via(killSwitch.flow)
-          .mapConcat { d =>
-            val id = d.getAs[BSONObjectID](ID).get
-            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+    if (driver.realtimeEnablePersistence)
+      Source.fromFuture(driver.realtime)
+        .flatMapConcat { rt =>
+          rt.find(BSONDocument.empty)
+            .options(QueryOpts().tailable.awaitData)
+            .cursor[BSONDocument]()
+            .documentSource()
+            .via(killSwitch.flow)
+            .mapConcat { d =>
+              val id = d.getAs[BSONObjectID](ID).get
+              d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
                 case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
-            }).getOrElse(Nil)
-          }
-      }
+              }).getOrElse(Nil)
+            }
+        }
+    else
+      Source.empty
 
   override def publishEvents(): Unit = {
     val sink = Sink.foreach[(Event, Offset)](driver.actorSystem.eventStream.publish)
