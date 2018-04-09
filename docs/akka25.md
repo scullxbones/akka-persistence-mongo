@@ -73,10 +73,10 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 
 A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
 
-For example `mongodb://user:secret@localhost:2.0.8/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
+For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
 
 ```
-akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:2.0.8,192.168.0.2:27017/replicated-database"
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2:27017/replicated-database"
 ```
 
 If a user, password, and database are specified, the database will be used both as a credentials source as well as journal and/or snapshot storage.  
@@ -256,7 +256,7 @@ multiple instances of this plugin, something like the following can be added to 
 
 ```
 # Supply default uri
-akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://defaultHost:2.0.8/db1"
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://defaultHost:27017/db1"
 
 akka-contrib-mongodb-persistence-journal-other {
   # Select this plugin as journal implementation
@@ -266,7 +266,7 @@ akka-contrib-mongodb-persistence-journal-other {
   # Overrides to supply overridden parameters (can be anything)
   # - assumed config root is `akka.contrib.persistence.mongodb.mongo`
   overrides = {
-    mongouri = "mongodb://host1:2.0.8/special"
+    mongouri = "mongodb://host1:27017/special"
   }
   # use this parametes to config akka persistence
   circuit-breaker {
@@ -287,7 +287,7 @@ akka-contrib-mongodb-persistence-journal-other-snapshot {
   class = "akka.contrib.persistence.mongodb.MongoSnapshots"
   # Overrides to supply overridden parameters (can be anything) - config root is `akka.contrib.persistence.mongodb.mongo`
   overrides = {
-    mongouri = "mongodb://host1:2.0.8/special"
+    mongouri = "mongodb://host1:27017/special"
   }  
   # use this parametes to config akka persistence
   circuit-breaker {
