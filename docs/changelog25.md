@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.0.8
+* Merge pull request #187 from TiendaNube/fix-two-issues
+* Fix#1 - Filter out realtime collection name when using multiple collections. Fix#2 - Use the configuration to enable/disable the realtime cursor.
+* Still trying to clean up the release process
+
 ### 2.0.7
 * Wip smoke tests against 3.6 (#183)
 * Break release process into two parts

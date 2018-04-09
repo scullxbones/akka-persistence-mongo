@@ -5,6 +5,10 @@ die () {
     exit 1
 }
 
+if [ "$GH_TOKEN" == "" ]; then
+    die "Missing github oauth token"
+fi
+
 NEXT=$1
 NEXT_WO_V=$(echo $1 | sed -Ee 's/^v([.0-9]+)$/\1/')
 PREVIOUS=$(git describe --tags `git rev-list --tags --max-count=1`)
