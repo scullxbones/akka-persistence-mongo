@@ -228,10 +228,14 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) = getCollections(journalCollectionName)
 
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
+    def excluded(name: String): Boolean =
+      name == realtimeCollectionName ||
+        name.startsWith("system.")
+
     for {
       database  <- db
       names     <- database.collectionNames
-      list      <- Future.sequence(names.filterNot(_ == realtimeCollectionName).filter(nameFilter.getOrElse(_ => true)).map(collection))
+      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
     } yield list
   }
 
