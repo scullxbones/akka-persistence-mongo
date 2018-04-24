@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.0.9
+* Merge pull request #189 from bmontuelle/master
+* Filter database system collections
+* Fix regex substitute error; upgrade to 0.13.10 due to `sbt-dependency-graph`
+
 ### 2.0.8
 * Merge pull request #187 from TiendaNube/fix-two-issues
 * Fix#1 - Filter out realtime collection name when using multiple collections. Fix#2 - Use the configuration to enable/disable the realtime cursor.
