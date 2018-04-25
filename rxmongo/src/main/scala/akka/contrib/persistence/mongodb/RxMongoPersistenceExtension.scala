@@ -193,12 +193,21 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { collection =>
     val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-    collection.flatMap(c => c.indexesManager.ensure(Index(
+    def ensureIndex(c: BSONCollection) = c.indexesManager.ensure(Index(
       key = ky,
       background = true,
       unique = unique,
       sparse = sparse,
-      name = Some(indexName))).map(_ => c))
+      name = Some(indexName)))
+
+    collection.flatMap(c =>
+      ensureIndex(c).recoverWith {
+        case CommandError.Code(26) => //no collection
+          c.create().recover {
+            case CommandError.Code(48) => //name exists (race condition)
+              ()
+          }.flatMap(_ => ensureIndex(c))
+      }.map(_ => c))
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {

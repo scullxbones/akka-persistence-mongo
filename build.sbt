@@ -1,4 +1,4 @@
-val releaseV = "2.0.8"
+val releaseV = "2.0.8-ffm1"
 
 val scalaV = "2.11.8"
 
@@ -88,10 +88,10 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.12.3" % "provided")
+      ("org.reactivemongo" %% "reactivemongo" % "0.13.0" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12"),
-      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.3" % "provided")
+      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.13.0" % "provided")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12")
     ),
