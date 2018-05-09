@@ -25,9 +25,9 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
   private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
   private[this] implicit val materializer = ActorMaterializer()(system)
 
-  override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl)
+  override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl,config)
 
-  override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl))
+  override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl, config))
 }
 
 object ScalaDslMongoReadJournal {
@@ -49,7 +49,7 @@ object ScalaDslMongoReadJournal {
   }
 }
 
-class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implicit m: Materializer)
+class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config: Config)(implicit m: Materializer)
   extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
@@ -59,6 +59,8 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
     with EventsByTagQuery {
 
   import ScalaDslMongoReadJournal._
+
+  val streamBufferSizeMaxConfig = config.getConfig("akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size")
 
   def currentAllEvents(): Source[EventEnvelope, NotUsed] = impl.currentAllEvents.toEventEnvelopes
 
@@ -78,7 +80,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   def allEvents(): Source[EventEnvelope, NotUsed] = {
     val pastSource = impl.currentAllEvents
     val realtimeSource =
-      Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropTail)
+      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("all-events"), OverflowStrategy.dropTail)
             .mapMaterializedValue(impl.subscribeJournalEvents)
             .map{ case(e,_) => e }
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventsByPersistenceId).toEventEnvelopes
@@ -91,7 +93,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
         .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
 
     val realtimeSource =
-      Source.actorRef[(Event,Offset)](100, OverflowStrategy.dropTail)
+      Source.actorRef[(Event,Offset)](streamBufferSizeMaxConfig.getInt("event-by-pid"), OverflowStrategy.dropTail)
         .mapMaterializedValue{ar => impl.subscribeJournalEvents(ar); NotUsed}
         .map{ case(e,_) => e }
         .filter(_.pid == persistenceId)
@@ -116,7 +118,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   override def persistenceIds(): Source[String, NotUsed] = {
 
     val pastSource = impl.currentPersistenceIds
-    val realtimeSource = Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropHead)
+    val realtimeSource = Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("pid"), OverflowStrategy.dropHead)
       .map{case (e,_) => e.pid}
       .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
     (pastSource ++ realtimeSource).via(new RemoveDuplicates)
@@ -130,7 +132,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
       impl.currentEventsByTag(tag, offset)
         .toEventEnvelopes
     val realtimeSource =
-      Source.actorRef[(Event, Offset)](100, OverflowStrategy.dropTail)
+      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("events-by-tag"), OverflowStrategy.dropTail)
         .mapMaterializedValue[NotUsed]{ar => impl.subscribeJournalEvents(ar); NotUsed}
         .filter{ case (ev, off) =>
           ev.tags.contains(tag) && ordering.gt(off, offset)
