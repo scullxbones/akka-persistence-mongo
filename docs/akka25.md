@@ -44,6 +44,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Collection and Index](#mongocollection)
    * [Write Concerns](#writeconcern)
    * [ReactiveMongo Failover](#rxmfailover)
+   * [Stream buffer size](#buffer-size)
    * [Dispatcher](#dispatcher)
    * [Pass-Through BSON](#passthru)
    * [Legacy Serialization](#legacyser)
@@ -156,6 +157,17 @@ akka.contrib.persistence.mongodb.rxmongo.failover {
 ```
 
 See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.12/documentation/advanced-topics/failoverstrategy.html) for more information.
+
+<a name="buffer-size"/>
+##### Configuring size of buffer for read stream
+
+Akka persitence mongo uses streams to feed the read side with events. By default, the buffer's size is fixed at `1000
+To modify the default value for a specific use case, you can add the following configuration lines in your `application.conf`.
+  
+ akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.event-by-pid = [your value]
+ akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.all-events = [your value]
+ akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.events-by-tag = [your value]
+ akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-sizepid = [your value]
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used
