@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.0.10
+* Merge pull request #192 from Fabszn/externalizedConfBuffer
+* Makes buffer size can be setting up from properties
+
 ### 2.0.9
 * Merge pull request #189 from bmontuelle/master
 * Filter database system collections

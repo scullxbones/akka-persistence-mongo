@@ -18,8 +18,8 @@ if [ "$PREVIOUS" = "$NEXT" ]; then
     die "Previous and next must be different prev=$PREVIOUS next=$NEXT"
 fi
 
-echo $PREVIOUS | grep -E -q '^v[0-9]\.[0-9]\.[0-9]$' || die "Previous version must follow pattern v#.#.#, was $PREVIOUS"
-echo $NEXT | grep -E -q '^v[0-9]\.[0-9]\.[0-9]$' || die "Next version must follow pattern v#.#.#, was $NEXT"
+echo $PREVIOUS | grep -E -q '^v[0-9]+\.[0-9]+\.[0-9]+$' || die "Previous version must follow pattern v#.#.#, was $PREVIOUS"
+echo $NEXT | grep -E -q '^v[0-9]+\.[0-9]+\.[0-9]+$' || die "Next version must follow pattern v#.#.#, was $NEXT"
 
 sed -i '' -e "s/$PREVIOUS_WO_V/$NEXT_WO_V/" README.md
 sed -i '' -e "s/$PREVIOUS_WO_V/$NEXT_WO_V/" docs/akka25.md
@@ -38,16 +38,20 @@ git commit -m 'Prepare for '$NEXT' release' -S
 git tag -a $NEXT -m "$BLOCK" -s
 
 CR=$(printf '\r')
-BLOCK_WITH_CR=$(echo $BLOCK | sed -e "s/\$/$CR/g")
+BLOCK_WITH_CR=$(echo -e "$BLOCK" | sed -e "s/\$/$CR/g")
 
-API_JSON='{
-    "tag_name": "'"$NEXT"'",
+cat <<API_JSON >api.json 
+{
+    "tag_name": "$NEXT",
     "target_commitish": "master",
-    "name": "'"$NEXT"'",
+    "name": "$NEXT",
     "draft": true,
-    "body": "'"$BLOCK_WITH_CR"'"
-}'
+    "body": "$BLOCK"
+}
+API_JSON
 
 curl -v -H "Content-Type: application/json" -XPOST \
-    --data "$API_JSON" \
+    -d @api.json \
     https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN
+
+rm api.json
