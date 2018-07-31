@@ -13,6 +13,7 @@ import play.api.libs.iteratee._
 import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands._
+import reactivemongo.api.commands.bson.DefaultBSONCommandError
 import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 import reactivemongo.core.nodeset.Authenticate
@@ -22,6 +23,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
+
   import MongoPersistenceDriver._
 
   def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern = (writeSafety, wtimeout.toMillis.toInt, fsync) match {
@@ -45,6 +47,7 @@ class RxMongoDriverProvider(actorSystem: ActorSystem) {
 }
 
 class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongoDriverProvider) extends MongoPersistenceDriver(system, config) {
+
   import RxMongoPersistenceDriver._
 
   val RxMongoSerializers: RxMongoSerializers = RxMongoSerializersExtension(system)
@@ -55,32 +58,17 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   type D = BSONDocument
 
   private def rxSettings = RxMongoDriverSettings(system.settings)
+
   private[mongodb] val driver = driverProvider.driver
   private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
-    case Success(parsed)    => parsed
+    case Success(parsed) => parsed
     case Failure(throwable) => throw throwable
   }
 
   implicit val waitFor: FiniteDuration = 10.seconds
 
-  private[this] lazy val unauthenticatedConnection: MongoConnection = wait {
-    // create unauthenticated connection, there is no direct way to wait for authentication this way
-    // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
-    driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
-      .database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
-      .map(_.connection)(system.dispatcher)
-  }
+  private[mongodb] lazy val connection: MongoConnection = driver.connection(parsedMongoUri)
 
-  private[mongodb] lazy val connection: MongoConnection =
-    // now authenticate explicitly and wait for confirmation
-    parsedMongoUri.authenticate.fold(unauthenticatedConnection) { auth =>
-      waitForAuthentication(unauthenticatedConnection, auth)
-    }
-
-  private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password))
-    conn
-  }
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
@@ -125,9 +113,9 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       logger.info(s"Journal automatic upgrade found $count records needing upgrade")
       if (count > 0) {
         j.flatMap(_.find(q)
-                    .cursor[BSONDocument]()
-                    .enumerate()
-                    .run(Iteratee.foldM(empty)(walker)))
+          .cursor[BSONDocument]()
+          .enumerate()
+          .run(Iteratee.foldM(empty)(walker)))
       } else Future.successful(empty)
     }
 
@@ -177,6 +165,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
+
   private[mongodb] def failoverStrategy: FailoverStrategy = {
     val rxMSettings = rxSettings
     FailoverStrategy(
@@ -184,21 +173,36 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
+
   private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db.map(_[BSONCollection](name))(system.dispatcher)
+
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
+
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
+
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
 
-  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { collection =>
-    val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-    collection.flatMap(c => c.indexesManager.ensure(Index(
-      key = ky,
-      background = true,
-      unique = unique,
-      sparse = sparse,
-      name = Some(indexName))).map(_ => c))
+  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { futureCollection =>
+    val keyTypes = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
+    val index = Index(key = keyTypes, background = true, unique = unique, sparse = sparse, name = Some(indexName))
+
+    futureCollection
+      .flatMap(collection => collection.create())
+      .flatMap(_ => futureCollection)
+      .recoverWith {
+        case e: DefaultBSONCommandError if e.code.contains(48) => futureCollection //Collection already exist
+      }
+      .flatMap { collection =>
+        val indexesManager = collection.indexesManager
+        //FIX: ensureIndex is deprecated since version 3.0.0: https://docs.mongodb.com/manual/reference/method/db.collection.ensureIndex/#db.collection.ensureIndex
+        indexesManager.list().flatMap(_.find(_.name == indexName) match {
+          case None => indexesManager.create(index).map(_ => collection)
+          case _ => futureCollection
+        })
+      }
+
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
@@ -214,10 +218,10 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
     val fut = for {
-      database  <- db
-      names     <- database.collectionNames
-      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
-    } yield Enumerator(list: _*)    
+      database <- db
+      names <- database.collectionNames
+      list <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
+    } yield Enumerator(list: _*)
     Enumerator.flatten(fut)
   }
 
@@ -233,16 +237,16 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
         name.startsWith("system.")
 
     for {
-      database  <- db
-      names     <- database.collectionNames
-      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
+      database <- db
+      names <- database.collectionNames
+      list <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
     } yield list
   }
 
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
-  
+
   private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollections(snapsCollectionName)
-  
+
 }
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
@@ -279,12 +283,19 @@ class RxMongoDriverSettings(val config: Config) {
   config.checkValid(config, "failover")
 
   private val failover = config.getConfig("failover")
+
   def InitialDelay: FiniteDuration = failover.getFiniteDuration("initialDelay")
+
   def Retries: Int = failover.getInt("retries")
+
   def Growth: String = failover.getString("growth")
+
   def ConstantGrowth: Boolean = Growth == "con"
+
   def LinearGrowth: Boolean = Growth == "lin"
+
   def ExponentialGrowth: Boolean = Growth == "exp"
+
   def Factor: Double = failover.getDouble("factor")
 
   def GrowthFunction: Int => Double = Growth match {
