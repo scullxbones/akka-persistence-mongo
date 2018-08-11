@@ -20,7 +20,7 @@ object ConfigLoanFixture {
   import concurrent.duration._
 
   def withConfig[T](config: Config, configurationRoot: String, name: String = "unit-test")(testCode: ((ActorSystem,Config)) => T):T = {
-    val actorSystem: ActorSystem = ActorSystem(name,config)
+    implicit val actorSystem: ActorSystem = ActorSystem(name,config)
     val overrides = Try(config.getConfig(configurationRoot)).toOption.getOrElse(ConfigFactory.empty())
     try {
       testCode( (actorSystem, overrides) )
