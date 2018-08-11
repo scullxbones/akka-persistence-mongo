@@ -13,4 +13,4 @@ import org.scalatest.junit.JUnitRunner
 class CasbahPersistenceJournalTckSpec extends JournalTckSpec(classOf[CasbahPersistenceExtension], s"casbahJournalTck")
 
 @RunWith(classOf[JUnitRunner])
-class CasbahSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[CasbahPersistenceExtension], s"casbahJournalTck", SuffixCollectionNamesTest.extendedConfig)
+class CasbahSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[CasbahPersistenceExtension], s"casbahJournalTck-suffix", SuffixCollectionNamesTest.extendedConfig)

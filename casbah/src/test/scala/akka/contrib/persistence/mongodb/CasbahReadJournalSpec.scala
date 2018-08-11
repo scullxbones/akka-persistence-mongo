@@ -6,6 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-class CasbahReadJournalSpec extends ReadJournalSpec(classOf[CasbahPersistenceExtension], "casbah")
+class CasbahReadJournalSpec extends ReadJournalSpec(classOf[CasbahPersistenceExtension], "casbah-rj")
 
-class CasbahSuffixReadJournalSpec extends ReadJournalSpec(classOf[CasbahPersistenceExtension], "casbah", SuffixCollectionNamesTest.extendedConfig)
+class CasbahSuffixReadJournalSpec extends ReadJournalSpec(classOf[CasbahPersistenceExtension], "casbah-rj-suffix", SuffixCollectionNamesTest.extendedConfig)

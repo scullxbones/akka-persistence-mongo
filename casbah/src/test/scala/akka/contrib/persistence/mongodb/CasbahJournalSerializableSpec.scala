@@ -6,6 +6,6 @@
 
 package akka.contrib.persistence.mongodb
 
-class CasbahJournalSerializableSpec extends JournalSerializableSpec(classOf[CasbahPersistenceExtension],"casbah")
+class CasbahJournalSerializableSpec extends JournalSerializableSpec(classOf[CasbahPersistenceExtension],"casbah-ser")
 
-class CasbahSuffixJournalSerializableSpec extends JournalSerializableSpec(classOf[CasbahPersistenceExtension],"casbah", SuffixCollectionNamesTest.extendedConfig)
+class CasbahSuffixJournalSerializableSpec extends JournalSerializableSpec(classOf[CasbahPersistenceExtension],"casbah-ser-suffix", SuffixCollectionNamesTest.extendedConfig)

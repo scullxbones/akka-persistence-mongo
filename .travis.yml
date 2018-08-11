@@ -8,8 +8,8 @@ services:
    - docker
 language: scala
 scala:
-   - 2.11.8
-   - 2.12.1
+   - 2.11.12
+   - 2.12.6
 env:
   matrix:
     - MONGODB_VERSION=2.6
@@ -22,7 +22,8 @@ env:
     - MONGODB_NOAUTH_PORT=27117
     - CONTAINER_HOST=127.0.0.1
 jdk:
-  - oraclejdk8
+  - openjdk8
+  - openjdk9
 before_install:
   - docker pull scullxbones/mongodb:$MONGODB_VERSION
   - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
