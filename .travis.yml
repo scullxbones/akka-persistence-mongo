@@ -23,7 +23,6 @@ env:
     - CONTAINER_HOST=127.0.0.1
 jdk:
   - openjdk8
-  - openjdk9
 before_install:
   - docker pull scullxbones/mongodb:$MONGODB_VERSION
   - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
