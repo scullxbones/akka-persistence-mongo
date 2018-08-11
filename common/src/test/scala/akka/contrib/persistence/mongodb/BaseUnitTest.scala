@@ -1,6 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.{FlatSpecLike, Matchers}
 import org.scalatest.concurrent.PatienceConfiguration
@@ -25,7 +26,7 @@ object ConfigLoanFixture {
       testCode( (actorSystem, overrides) )
     } finally {
       actorSystem.terminate()
-      Await.ready(actorSystem.whenTerminated, 3.seconds)
+      Await.ready(actorSystem.whenTerminated, 3.seconds.dilated)
       ()
     }
   }

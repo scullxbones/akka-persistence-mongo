@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.Props
+import akka.actor.{ActorSystem, Props}
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.{ActorMaterializer, KillSwitches}
@@ -19,10 +19,15 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Await, ExecutionContextExecutor, Future, Promise}
 import scala.util.Random
 
-abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with BeforeAndAfter with Eventually {
+abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: Class[A], dbName: String, extendedConfig: String = "|")
+  extends BaseUnitTest
+    with ContainerMongo
+    with BeforeAndAfterAll
+    with BeforeAndAfter
+    with Eventually {
 
   import ConfigLoanFixture._
 
@@ -87,8 +92,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   "A read journal" should "support the journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val events = "this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil
 
@@ -114,8 +119,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the realtime journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val am = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val am: ActorMaterializer = ActorMaterializer()
 
       val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
 
@@ -138,7 +143,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
           .run()
 
       events slice (3, 6) foreach (ar2 ! _)
-      implicit val ec = as.dispatcher
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
 
       probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
       ks.shutdown()
@@ -147,8 +152,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the current all events query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       
@@ -164,7 +169,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         }
       }
 
-      implicit val ec = as.dispatcher
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
       val futures = promises.map { case (_, p) => p.future }
       val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
       count shouldBe 5
@@ -187,10 +192,10 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the current persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
       
-      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+      implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       val ars = promises.map { case (id, p) => as.actorOf(props(id, p, 1), s"current-persistenceId-$id") }
@@ -198,7 +203,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val end = Append("END")
       ars foreach (_ ! end)
 
-      implicit val ec = as.dispatcher
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
       val waitForStop = Future.sequence(promises.map { case (_, p) => p.future })
       Await.result(waitForStop, 10.seconds.dilated) should have size 5
 
@@ -221,12 +226,12 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       assume(!suffixCollNamesEnabled) // no suffixed collection here, as this test uses a hard coded journal name
       import concurrent.duration._
 
-      implicit val system = as
+      implicit val system: ActorSystem = as
 
-      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+      implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
-      implicit val ec = as.dispatcher
-      implicit val mat = ActorMaterializer()
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
       val PID_SIZE = 900
@@ -266,16 +271,16 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the all persistence ids query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
       
-      implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+      implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       val ars = promises.map { case (id, p) => as.actorOf(props(id, p, 4)) }
       val events = ("this" :: "is" :: "a" :: "test" :: Nil) map Append.apply
 
-      implicit val ec = as.dispatcher
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -310,8 +315,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the current events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
 
@@ -337,8 +342,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -369,8 +374,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support the events by id query with multiple persistent actors" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -406,8 +411,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   it should "support read 1k events from journal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
-      implicit val system = as
-      implicit val mat = ActorMaterializer()
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -430,7 +435,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       secondHalf foreach(ev => ars foreach (_ ! ev) )
 
-      implicit val ec = as.dispatcher
+      implicit val ec: ExecutionContextExecutor = as.dispatcher
 
       val done = Future.sequence(promises.map(_._1.future))
       Await.result(done, 10.seconds.dilated)

@@ -116,7 +116,7 @@ object CurrentEventsByTag {
       TAGS -> tag
     ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id))))
 
-    Source.fromFuture(driver.getAllCollectionsAsFuture(None))
+    Source.fromFuture(driver.journalCollectionsAsFuture)
           .flatMapConcat{ xs =>
             xs.map(c =>
               c.find(query)
