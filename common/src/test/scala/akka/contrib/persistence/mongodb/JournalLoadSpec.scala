@@ -141,7 +141,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
-    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds.dilated)
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 10.seconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
@@ -149,7 +149,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     val start = System.currentTimeMillis
     (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated))
+    val total = Try(Await.result(result.future, 30.seconds.dilated))
 
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
@@ -179,7 +179,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated)).recoverWith {
+    val total = Try(Await.result(result.future, 10.seconds.dilated)).recoverWith {
       case t: Throwable =>
         t.printStackTrace()
         scala.util.Failure(t)
