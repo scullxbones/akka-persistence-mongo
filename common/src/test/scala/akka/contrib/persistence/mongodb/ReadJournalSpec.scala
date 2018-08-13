@@ -102,7 +102,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       events map Append.apply foreach (ar ! _)
 
-      Await.result(promise.future, 10.seconds.dilated)
+      Await.result(promise.future, 3.seconds.dilated)
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -113,7 +113,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         received - asAppend
       }
 
-      Await.result(fut, 10.seconds.dilated).size shouldBe 0
+      Await.result(fut, 3.seconds.dilated).size shouldBe 0
   }
 
   it should "support the realtime journal dump query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -145,7 +145,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       events slice (3, 6) foreach (ar2 ! _)
       implicit val ec: ExecutionContextExecutor = as.dispatcher
 
-      probe.receiveN(events.size, 10.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
+      probe.receiveN(events.size, 3.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
       ks.shutdown()
   }
 
@@ -205,7 +205,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       implicit val ec: ExecutionContextExecutor = as.dispatcher
       val waitForStop = Future.sequence(promises.map { case (_, p) => p.future })
-      Await.result(waitForStop, 10.seconds.dilated) should have size 5
+      Await.result(waitForStop, 3.seconds.dilated) should have size 5
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -260,7 +260,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
       val fut = readJournal.currentPersistenceIds().runFold(0) { case (inc, _) => inc + 1 }
-      Await.result(fut, 20.seconds.dilated) shouldBe EVENT_COUNT
+      Await.result(fut, 5.seconds.dilated) shouldBe EVENT_COUNT
 
       eventually {
         mongoClient.getDatabase(embedDB).listCollectionNames()
@@ -289,7 +289,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       ars.slice(0,3).foreach(ar =>events.foreach(ar ! _))
 
-      Await.ready(Future.sequence(promises.slice(0,3).map(_._2.future)), 5.seconds.dilated)
+      Await.ready(Future.sequence(promises.slice(0,3).map(_._2.future)), 3.seconds.dilated)
 
       val ks =
         readJournal.persistenceIds()
@@ -301,7 +301,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         events foreach (ar ! _)
       }
 
-      probe.receiveN(ars.size, 10.seconds.dilated)
+      probe.receiveN(ars.size, 3.seconds.dilated)
         .collect { case x: String => x } should contain allOf ("1", "2", "3", "4", "5")
 
       ks.shutdown()
@@ -325,7 +325,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       events foreach (ar ! _)
 
-      Await.result(promise.future, 10.seconds.dilated)
+      Await.result(promise.future, 3.seconds.dilated)
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -336,7 +336,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         received - asAppend
       }
 
-      Await.result(fut, 10.seconds.dilated).map(_.s) shouldBe Set("just", "a", "test", "END")
+      Await.result(fut, 3.seconds.dilated).map(_.s) shouldBe Set("just", "a", "test", "END")
   }
 
   it should "support the events by id query" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
@@ -363,7 +363,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       events foreach (ar ! _)
 
-      probe.receiveN(2, 10.seconds.dilated)
+      probe.receiveN(2, 3.seconds.dilated)
         .collect { case msg: EventEnvelope => msg }
         .toList
         .map(_.event) should contain inOrderOnly("bar", "bar2")
@@ -400,7 +400,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       events foreach (ar ! _)
       events2 foreach (ar2 ! _)
 
-      probe.receiveN(events2.size, 10.seconds.dilated)
+      probe.receiveN(events2.size, 3.seconds.dilated)
         .collect { case msg: EventEnvelope => msg }
         .toList
         .map(_.event) should be(events2.map(_.s))
