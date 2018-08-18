@@ -12,7 +12,6 @@ scala:
    - 2.12.6
 env:
   matrix:
-    - MONGODB_VERSION=2.6
     - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.2 MONGODB_OPTS="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.4 MONGODB_OPTS="--storageEngine wiredTiger"
