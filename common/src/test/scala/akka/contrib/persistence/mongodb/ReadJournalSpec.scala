@@ -16,6 +16,7 @@ import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.bson.Document
 import org.scalatest.concurrent.Eventually
+import org.scalatest.tagobjects.Slow
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import scala.collection.JavaConverters._
@@ -408,7 +409,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       ks.shutdown()
   }
 
-  it should "support read 1k events from journal" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
+  it should "support read 1k events from journal" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal") {
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
