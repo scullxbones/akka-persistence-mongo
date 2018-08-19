@@ -14,4 +14,4 @@ class RxMongoPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPer
 
 
 @RunWith(classOf[JUnitRunner])
-class RxMongoSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoSuffixJournalTck", SuffixCollectionNamesTest.rxMongoExtendedConfig)
+class RxMongoSuffixPersistenceJournalTckSpec extends JournalTckSpec(classOf[RxMongoPersistenceExtension], "rxMongoSuffixJournalTck-suffix", SuffixCollectionNamesTest.rxMongoExtendedConfig)

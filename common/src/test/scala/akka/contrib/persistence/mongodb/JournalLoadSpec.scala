@@ -13,6 +13,7 @@ import akka.persistence.PersistentActor
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.tagobjects.Slow
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
@@ -139,9 +140,9 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
   def startPersistentActors(as: ActorSystem, eventsPer: Int, maxDuration: FiniteDuration) =
     persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
-  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
+  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
-    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds.dilated)
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 10.seconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
@@ -149,7 +150,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     val start = System.currentTimeMillis
     (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated))
+    val total = Try(Await.result(result.future, 30.seconds.dilated))
 
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
@@ -171,7 +172,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     total shouldBe Success(commandsPerBatch * batches * maxActors)
   }
 
-  it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
+  it should "recover in less than 20 seconds" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
     val start = System.currentTimeMillis
     val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds.dilated)
@@ -179,7 +180,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
     actors.foreach(_ ! SetTarget(accumulator))
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated)).recoverWith {
+    val total = Try(Await.result(result.future, 10.seconds.dilated)).recoverWith {
       case t: Throwable =>
         t.printStackTrace()
         scala.util.Failure(t)

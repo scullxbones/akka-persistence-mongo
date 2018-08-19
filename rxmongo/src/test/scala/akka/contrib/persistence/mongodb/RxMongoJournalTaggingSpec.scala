@@ -4,4 +4,4 @@ class RxMongoJournalTaggingSpec
   extends JournalTaggingSpec(classOf[RxMongoPersistenceExtension], "rxmongo")
 
 class RxMongoSuffixJournalTaggingSpec
-  extends JournalTaggingSpec(classOf[RxMongoPersistenceExtension], "rxmongo", SuffixCollectionNamesTest.rxMongoExtendedConfig)
+  extends JournalTaggingSpec(classOf[RxMongoPersistenceExtension], "rxmongo-suffix", SuffixCollectionNamesTest.rxMongoExtendedConfig)

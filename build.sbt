@@ -33,6 +33,8 @@ def commonDeps(sv:String) = Seq(
   "com.typesafe.akka"         %% "akka-cluster-sharding"    % AkkaV     % "test"
 )
 
+lazy val Travis = config("travis").extend(Test)
+
 val commonSettings = Seq(
   scalaVersion := scalaV,
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
@@ -66,12 +68,14 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  parallelExecution in Test := false,
-  testOptions in Test += Tests.Argument("-oDS")
-)
+  parallelExecution in Test := true,
+  testOptions in Test += Tests.Argument("-oDS"),
+  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow")
+) ++ inConfig(Travis)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
   .settings(commonSettings:_*)
+  .configs(Travis)
 
 lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
@@ -82,6 +86,7 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
       "org.mongodb" %  "mongo-java-driver" % "3.6.3" % "test"
     )
   )
+  .configs(Travis)
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
@@ -98,6 +103,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
     crossScalaVersions := Seq("2.11.8"),
     scalaVersion := "2.11.8"
   )
+  .configs(Travis)
 
 lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .dependsOn(`akka-persistence-mongo-casbah` % "test->test;compile->compile")
@@ -107,10 +113,13 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
       "org.mongodb" %% "casbah" % "3.1.1" % "provided"
     )
   )
+  .configs(Travis)
 
 lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-tools`)
   .settings(commonSettings:_*)
   .settings(
     packagedArtifacts in file(".") := Map.empty,
-    publishTo := Some(Resolver.file("file", new File("target/unusedrepo"))))
+    publishTo := Some(Resolver.file("file", new File("target/unusedrepo")))
+  )
+  .configs(Travis)

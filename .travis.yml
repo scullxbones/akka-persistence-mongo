@@ -8,11 +8,10 @@ services:
    - docker
 language: scala
 scala:
-   - 2.11.8
-   - 2.12.1
+   - 2.11.12
+   - 2.12.6
 env:
   matrix:
-    - MONGODB_VERSION=2.6
     - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.2 MONGODB_OPTS="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.4 MONGODB_OPTS="--storageEngine wiredTiger"
@@ -22,7 +21,7 @@ env:
     - MONGODB_NOAUTH_PORT=27117
     - CONTAINER_HOST=127.0.0.1
 jdk:
-  - oraclejdk8
+  - openjdk8
 before_install:
   - docker pull scullxbones/mongodb:$MONGODB_VERSION
   - docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
@@ -32,4 +31,4 @@ before_script:
   - sleep 15
   - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
-  - travis_retry travis_wait sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=10 ";akka-persistence-mongo-common/test;akka-persistence-mongo-casbah/test;akka-persistence-mongo-rxmongo/test;akka-persistence-mongo-tools/test"
+  - travis_retry sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=10 ";akka-persistence-mongo-common/travis:test;akka-persistence-mongo-casbah/travis:test;akka-persistence-mongo-rxmongo/travis:test;akka-persistence-mongo-tools/travis:test"
