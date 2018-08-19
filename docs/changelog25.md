@@ -1,5 +1,8 @@
 ## Changelog for 2.x major version
 
+### 2.0.11
+* Fix for RXM tag query being too broad (#196)
+
 ### 2.0.10
 * Merge pull request #192 from Fabszn/externalizedConfBuffer
 * Makes buffer size can be setting up from properties
