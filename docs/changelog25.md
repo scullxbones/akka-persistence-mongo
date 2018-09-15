@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.0.12
+* Merge pull request #201 from scullxbones/wip-200
+* Fix for case when query is run before collections exist
+
 ### 2.0.11
 * Fix for RXM tag query being too broad (#196)
 
