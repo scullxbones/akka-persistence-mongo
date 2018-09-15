@@ -37,7 +37,8 @@ object CurrentAllEvents {
                 .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
               .getOrElse(Nil)
           }.mapConcat(identity)
-      }.reduceLeft(_ concat _))
+      }.reduceLeftOption(_ concat _)
+       .getOrElse(Source.empty))
   }
 }
 
@@ -123,7 +124,8 @@ object CurrentEventsByTag {
                .sort(BSONDocument(ID -> 1))
                .cursor[BSONDocument]()
                .documentSource()
-            ).reduceLeft(_ ++ _)
+            ).reduceLeftOption(_ ++ _)
+             .getOrElse(Source.empty)
           }.map{ doc =>
             val id = doc.getAs[BSONObjectID](ID).get
             doc.getAs[BSONArray](EVENTS)
