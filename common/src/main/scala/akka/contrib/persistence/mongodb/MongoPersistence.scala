@@ -100,6 +100,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def collection(name: String): C
 
+  private[mongodb] def ensureCollection(name: String): C
+
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
   private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C

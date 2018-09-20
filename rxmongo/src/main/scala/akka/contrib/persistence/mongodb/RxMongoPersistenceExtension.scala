@@ -99,6 +99,16 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
   private[mongodb] override def collection(name: String) = db.map(_[BSONCollection](name))(system.dispatcher)
+
+  private val NamespaceExistsErrorCode = 48
+  private[mongodb] override def ensureCollection(name: String): Future[BSONCollection] = {
+    implicit val ec: ExecutionContext = system.dispatcher
+    for {
+      coll <- collection(name)
+      _ <- coll.create().recover { case CommandError.Code(NamespaceExistsErrorCode) => coll }
+    } yield coll
+  }
+
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
