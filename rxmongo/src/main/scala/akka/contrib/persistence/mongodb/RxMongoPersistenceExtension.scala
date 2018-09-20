@@ -78,7 +78,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     }
 
   private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password))
+    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse("")))
     conn
   }
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
