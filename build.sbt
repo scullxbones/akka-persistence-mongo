@@ -71,7 +71,9 @@ val commonSettings = Seq(
   ),
   parallelExecution in Test := true,
   testOptions in Test += Tests.Argument("-oDS"),
-  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow")
+  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
+  fork in Test := true,
+  javaOptions in Test += "-Dakka.test.timefactor=3"
 ) ++ inConfig(Travis)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
