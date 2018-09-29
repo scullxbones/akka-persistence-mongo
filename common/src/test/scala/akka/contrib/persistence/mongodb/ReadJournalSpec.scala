@@ -9,13 +9,13 @@ package akka.contrib.persistence.mongodb
 import akka.actor.{ActorSystem, Props}
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
-import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.testkit._
 import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.bson.Document
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.tagobjects.Slow
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
@@ -28,7 +28,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     with ContainerMongo
     with BeforeAndAfterAll
     with BeforeAndAfter
-    with Eventually {
+    with Eventually
+    with ScalaFutures {
 
   import ConfigLoanFixture._
 
@@ -71,6 +72,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   def props(id: String, promise: Promise[Unit], eventCount: Int) = Props(new PersistentCountdown(id, promise, eventCount))
 
   case class Append(s: String)
+  case object RUAlive
+  case object IMAlive
 
   class PersistentCountdown(val persistenceId: String, completed: Promise[Unit], count: Int) extends PersistentActor {
     private var remaining = count
@@ -80,6 +83,8 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     }
 
     override def receiveCommand: Receive = {
+      case RUAlive =>
+        sender() ! IMAlive
       case Append(s) => persist(s) { _ =>
         remaining -= 1
         if (remaining == 0) {
@@ -390,6 +395,10 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val events2 = ("just" :: "a" :: "test" :: Nil) map Append.apply
 
       val probe = TestProbe()
+      probe.send(ar, RUAlive)
+      probe.send(ar2, RUAlive)
+      probe.expectMsg(IMAlive)
+      probe.expectMsg(IMAlive)
 
       val ks = readJournal
         .eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue)

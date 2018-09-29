@@ -7,11 +7,10 @@
 package akka.contrib.persistence.mongodb
 
 import akka.NotUsed
-import akka.actor._
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.persistence.query.{NoOffset, Offset}
+import akka.stream.Materializer
 import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.{KillSwitches, Materializer}
 import reactivemongo.akkastream._
 import reactivemongo.api.QueryOpts
 import reactivemongo.bson._
@@ -78,14 +77,17 @@ object CurrentPersistenceIds {
 }
 
 object CurrentEventsByPersistenceId {
+  def queryFor(persistenceId: String, fromSeq: Long, toSeq: Long) = BSONDocument(
+    PROCESSOR_ID -> persistenceId,
+    TO -> BSONDocument("$gte" -> fromSeq),
+    FROM -> BSONDocument("$lte" -> toSeq)
+  )
+
   def source(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
     import driver.RxMongoSerializers._
     implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-    val query = BSONDocument(
-      PROCESSOR_ID -> persistenceId,
-      TO -> BSONDocument("$gte" -> fromSeq),
-      FROM -> BSONDocument("$lte" -> toSeq))
+    val query = queryFor(persistenceId, fromSeq, toSeq)
 
     Source.fromFuture(driver.getJournal(persistenceId))
             .flatMapConcat(
@@ -144,13 +146,11 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-  private val killSwitch = KillSwitches.shared("realtimeKillSwitch")
-
-  override def cursor(): Source[(Event, Offset),NotUsed] =
+  def cursor(query: Option[BSONDocument]): Source[(Event, Offset),NotUsed] =
     if (driver.realtimeEnablePersistence)
       Source.fromFuture(driver.realtime)
         .flatMapConcat { rt =>
-          rt.find(BSONDocument.empty)
+          rt.find(query.getOrElse(BSONDocument.empty))
             .options(QueryOpts().tailable.awaitData)
             .cursor[BSONDocument]()
             .documentSource()
@@ -164,21 +164,12 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
         }
     else
       Source.empty
-
-  override def publishEvents(): Unit = {
-    val sink = Sink.foreach[(Event, Offset)](driver.actorSystem.eventStream.publish)
-    cursor().runWith(sink)
-    ()
-  }
-
-  def stopAllStreams(): Unit = killSwitch.shutdown()
 }
 
 class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
 
   val journalStream: RxMongoJournalStream = {
     val stream = new RxMongoJournalStream(driver)(m)
-    stream.publishEvents()
     driver.actorSystem.registerOnTermination(stream.stopAllStreams())
     stream
   }
@@ -201,8 +192,23 @@ class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends Mong
       case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).isSuccess
     }
 
-  override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
-    driver.actorSystem.eventStream.subscribe(subscriber, classOf[(Event, Offset)])
-    ()
+  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer): Source[Event, NotUsed] = {
+    journalStream.cursor(Option(BSONDocument(
+      PROCESSOR_ID -> persistenceId
+    ))).mapConcat{ case(ev,_) => List(ev).filter(_.pid == persistenceId) }
+  }
+
+  override def liveEvents(implicit m: Materializer): Source[Event, NotUsed] = {
+    journalStream.cursor(None).map(_._1)
+  }
+
+  override def livePersistenceIds(implicit m: Materializer): Source[String, NotUsed] = {
+    journalStream.cursor(None).map{ case(ev,_) => ev.pid }
+  }
+
+  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] = {
+    journalStream.cursor(Option(BSONDocument(
+      TAGS -> tag
+    ))).filter{ case(ev, off) => ev.tags.contains(tag) &&  ord.gt(off, offset)}
   }
 }
