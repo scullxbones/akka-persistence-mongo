@@ -6,7 +6,7 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
 import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI}
@@ -14,8 +14,8 @@ import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.util.{Failure, Success, Try}
 import scala.language.reflectiveCalls
+import scala.util.{Failure, Success, Try}
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
@@ -43,8 +43,9 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   override private[mongodb] def upgradeJournalIfNeeded: Unit = upgradeJournalIfNeeded("")
 
   override private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit = {
-    import scala.collection.immutable.{ Seq => ISeq }
     import CasbahSerializers._
+
+    import scala.collection.immutable.{Seq => ISeq}
 
     val j = getJournal(persistenceId)
     val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))

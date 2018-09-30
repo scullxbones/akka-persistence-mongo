@@ -208,7 +208,7 @@ case class CasbahRealtimeResource(driver: CasbahMongoDriver, maybeFilter: Option
     maybeFilter.fold(tailing().find())(tailing().find(_))
   }
 
-  private def readNext(): Unit = {
+  private def readNext() = {
     promise = Promise[Option[DBObject]]()
     promise.completeWith(Future(
       if (cursor.hasNext) Option(cursor.next())
