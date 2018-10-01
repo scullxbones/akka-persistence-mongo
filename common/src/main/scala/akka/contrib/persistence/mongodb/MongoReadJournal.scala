@@ -1,19 +1,17 @@
 package akka.contrib.persistence.mongodb
 
 import akka.NotUsed
-import akka.actor.{Actor, ActorLogging, ActorRef, ExtendedActorSystem, Props, Status}
+import akka.actor.ExtendedActorSystem
 import akka.event.Logging
 import akka.persistence.query._
-import akka.persistence.query.javadsl.{PersistenceIdsQuery => JAPIQ, CurrentEventsByPersistenceIdQuery => JCEBP, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP, CurrentEventsByTagQuery => JCEBT, EventsByTagQuery => JEBT}
+import akka.persistence.query.javadsl.{CurrentEventsByPersistenceIdQuery => JCEBP, CurrentEventsByTagQuery => JCEBT, CurrentPersistenceIdsQuery => JCP, EventsByPersistenceIdQuery => JEBP, EventsByTagQuery => JEBT, PersistenceIdsQuery => JAPIQ}
 import akka.persistence.query.scaladsl._
-import akka.stream.actor._
 import akka.stream.javadsl.{Source => JSource}
 import akka.stream.scaladsl._
 import akka.stream.stage._
 import akka.stream.{javadsl => _, scaladsl => _, _}
 import com.typesafe.config.Config
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 
 object MongoReadJournal {
@@ -24,7 +22,7 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
 
 
   private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
-  private[this] implicit val materializer = ActorMaterializer()(system)
+  private[this] implicit val materializer: Materializer = ActorMaterializer()(system)
 
   override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl,system.settings.config)
 
@@ -61,7 +59,7 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
 
   import ScalaDslMongoReadJournal._
 
-  val streamBufferSizeMaxConfig = config.getConfig("akka.contrib.persistence.stream-buffer-max-size")
+  val streamBufferSizeMaxConfig: Config = config.getConfig("akka.contrib.persistence.stream-buffer-max-size")
 
 
 
@@ -82,10 +80,10 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
 
   def allEvents(): Source[EventEnvelope, NotUsed] = {
     val pastSource = impl.currentAllEvents
-    val realtimeSource =
-      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("all-events"), OverflowStrategy.dropTail)
-            .mapMaterializedValue(impl.subscribeJournalEvents)
-            .map{ case(e,_) => e }
+    val realtimeSource = impl.liveEvents
+//      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("all-events"), OverflowStrategy.dropTail)
+//            .mapMaterializedValue(impl.subscribeJournalEvents)
+//            .map{ case(e,_) => e }
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventsByPersistenceId).toEventEnvelopes
   }
 
@@ -93,25 +91,23 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
     require(persistenceId != null, "PersistenceId must not be null")
     val pastSource =
       impl.currentEventsByPersistenceId(persistenceId, fromSequenceNr, toSequenceNr)
-        .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
+        .withAttributes(
+          Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel).and(Attributes.name("events-by-pid-current"))
+        )
 
-    val realtimeSource =
-      Source.actorRef[(Event,Offset)](streamBufferSizeMaxConfig.getInt("event-by-pid"), OverflowStrategy.dropTail)
-        .mapMaterializedValue{ar => impl.subscribeJournalEvents(ar); NotUsed}
-        .map{ case(e,_) => e }
-        .filter(_.pid == persistenceId)
-        .filter(_.sn >= fromSequenceNr)
-        .withAttributes(Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel))
-
-    val liveSource = Source.actorPublisher[Event](
-      Props(new LiveEventsByPersistenceId(pastSource, realtimeSource, persistenceId, fromSequenceNr, toSequenceNr))
-    )
+    val realtimeSource = impl
+      .liveEventsByPersistenceId(persistenceId)
+      .withAttributes(
+        Attributes.logLevels(Logging.InfoLevel, Logging.InfoLevel).and(Attributes.name("events-by-pid-realtime"))
+      )
 
     val stages = Flow[Event]
       .filter(_.pid == persistenceId)
       .filter(_.sn >= fromSequenceNr)
       .via(new StopAtSeq(toSequenceNr))
       .via(new RemoveDuplicatedEventsByPersistenceId)
+
+    val liveSource = pastSource.concat(realtimeSource)
 
     liveSource
       .mapMaterializedValue(_ => NotUsed)
@@ -121,25 +117,19 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
   override def persistenceIds(): Source[String, NotUsed] = {
 
     val pastSource = impl.currentPersistenceIds
-    val realtimeSource = Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("pid"), OverflowStrategy.dropHead)
-      .map{case (e,_) => e.pid}
-      .mapMaterializedValue{actor => impl.subscribeJournalEvents(actor); NotUsed}
+    val realtimeSource = impl.livePersistenceIds
     (pastSource ++ realtimeSource).via(new RemoveDuplicates)
   }
 
   override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
     require(tag != null, "Tag must not be null")
     require(impl.checkOffsetIsSupported(offset), s"Offset $offset is not supported by read journal")
-    val ordering = implicitly[Ordering[Offset]]
+    implicit val ordering: Ordering[Offset] = implicitly[Ordering[Offset]]
     val pastSource =
       impl.currentEventsByTag(tag, offset)
         .toEventEnvelopes
     val realtimeSource =
-      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("events-by-tag"), OverflowStrategy.dropTail)
-        .mapMaterializedValue[NotUsed]{ar => impl.subscribeJournalEvents(ar); NotUsed}
-        .filter{ case (ev, off) =>
-          ev.tags.contains(tag) && ordering.gt(off, offset)
-        }
+      impl.liveEventsByTag(tag, offset)
         .toEventEnvelopes
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventEnvelopes)
   }
@@ -171,123 +161,9 @@ class JavaDslMongoReadJournal(rj: ScalaDslMongoReadJournal) extends javadsl.Read
 
 
 trait JournalStream[Cursor] {
-  def cursor(): Cursor
+  protected val killSwitch: SharedKillSwitch = KillSwitches.shared("realtimeKillSwitch")
 
-  def publishEvents(): Unit
-}
-
-// TODO: Convert to GraphStage
-private[mongodb] class LiveEventsByPersistenceId(pastSource: Source[Event,NotUsed],
-                                                  realtimeSource: Source[Event,NotUsed],
-                                                  persistenceId: String, minSequence: Long, maxSequence: Long)(implicit m: Materializer)
-  extends ActorPublisher[Event] with ActorLogging {
-
-  case object OnInit
-  case object Ack
-  case object Complete
-
-  override def preStart(): Unit = {
-    runStream(pastSource, minSequence)
-  }
-
-  override def receive: Receive = past(-1L, Nil)
-
-  private def trySend(nextSn: Long, currentBuffer: Seq[Event], strictContiguous: Boolean): (Long,Seq[Event]) = {
-
-    @tailrec
-    def sendWhileRequested(atMost: Long, next: Long, buffer: Seq[Event]): (Long,Seq[Event]) = {
-      if (atMost == 0) next -> buffer
-      else {
-        buffer.sortBy(_.sn).headOption match {
-          case None => next -> buffer
-          case Some(e) =>
-            onNext(e)
-            sendWhileRequested(atMost - 1, e.sn + 1, buffer.filterNot(_.sn == next))
-        }
-      }
-    }
-
-    @tailrec
-    def sendWhileContiguous(atMost: Long, next: Long, buffer: Seq[Event]): (Long,Seq[Event]) = {
-      if (atMost == 0) next -> buffer
-      else {
-        buffer.find(_.sn == next) match {
-          case None => next -> buffer
-          case Some(e) =>
-            onNext(e)
-            sendWhileContiguous(atMost - 1, next + 1, buffer.filterNot(_.sn == next))
-        }
-      }
-    }
-
-    val demand = totalDemand
-    if (strictContiguous) sendWhileContiguous(demand, nextSn, currentBuffer)
-    else sendWhileRequested(demand, nextSn, currentBuffer)
-  }
-
-  private def handleShutdownPublisherMessages: Receive = {
-    case ActorPublisherMessage.Cancel =>
-      log.debug("Downstream cancelled publisher")
-      context.stop(self)
-    case ActorPublisherMessage.SubscriptionTimeoutExceeded =>
-      log.debug("Subscription timeout was exceeded")
-      context.stop(self)
-  }
-
-  private def handleBasicActorRefSinkMessages(logHeader: String): Receive = {
-    case OnInit =>
-      log.debug(s"[$logHeader] Stream initialized")
-      sender() ! Ack
-    case Status.Failure(t) =>
-      sender() ! Ack
-      log.error(t,s"[$logHeader] Failure while streaming eventsByPersistenceId for id $persistenceId, stopping stream")
-      context.stop(self)
-  }
-
-  private def past(nextSequenceNr: Long, buffered: Seq[Event]): Receive =
-    handleShutdownPublisherMessages orElse
-      handleBasicActorRefSinkMessages("past") orElse {
-        case ActorPublisherMessage.Request(_) =>
-          if (nextSequenceNr > -1L) {
-            val (next,buf) = trySend(nextSequenceNr, buffered, strictContiguous = false)
-            context.become(past(next, buf))
-          }
-        case e:Event =>
-          val startingProblemSn = if (nextSequenceNr == -1L) e.sn else nextSequenceNr
-          sender() ! Ack
-          val (next,buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = false)
-          context.become(past(next, buf))
-        case Complete =>
-          sender() ! Ack
-          runStream(realtimeSource,nextSequenceNr)
-          log.debug(s"Past completed for $persistenceId, transitioning to live @$nextSequenceNr with buffer of size ${buffered.size}")
-          context.become(live(nextSequenceNr, buffered)) // transition to realtime, maintaining last sn
-      }
-
-  private def live(nextSequenceNr: Long, buffered: Seq[Event]): Receive =
-    handleShutdownPublisherMessages orElse
-      handleBasicActorRefSinkMessages("current") orElse {
-      case ActorPublisherMessage.Request(_) =>
-        val (next,buf) = trySend(nextSequenceNr, buffered, strictContiguous = true)
-        context.become(live(next, buf))
-      case e:Event =>
-        val startingProblemSn = if (nextSequenceNr == -1L) e.sn else nextSequenceNr
-        sender() ! Ack
-        val (next,buf) = trySend(startingProblemSn, buffered :+ e, strictContiguous = true)
-        context.become(live(next, buf))
-      case Complete =>
-        log.debug(s"Upstream completed - stopping publisher for persistenceId $persistenceId")
-        sender() ! Ack
-        context.stop(self)
-    }
-
-  private def runStream(source: Source[Event,NotUsed], minSn: Long) = {
-    source
-      .filter(_.pid == persistenceId)
-      .filter(_.sn >= minSn)
-      .runWith(Sink.actorRefWithAck(self, OnInit, Ack, Complete, Status.Failure))
-    ()
-  }
+  def stopAllStreams(): Unit = killSwitch.shutdown()
 }
 
 class StopAtSeq(to: Long) extends GraphStage[FlowShape[Event, Event]] {
@@ -415,20 +291,50 @@ trait MongoPersistenceReadJournallingApi {
 
   def checkOffsetIsSupported(offset: Offset): Boolean
 
-  def subscribeJournalEvents(subscriber: ActorRef): Unit
+  def liveEvents(implicit m: Materializer): Source[Event, NotUsed]
+
+  def livePersistenceIds(implicit m: Materializer): Source[String, NotUsed]
+
+  def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer): Source[Event, NotUsed]
+
+  def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed]
 }
 
-// TODO: Replace with GraphStage
-trait SyncActorPublisher[A, Cursor] extends ActorPublisher[A] with ActorLogging {
+trait SyncActorPublisher[A, Cursor] extends GraphStage[SourceShape[A]] {
 
-  import ActorPublisherMessage._
+  private val BUFSZ = 100L // TODO: Make configurable?
+  private val out = Outlet[A]("out")
+  override val shape: SourceShape[A] = SourceShape(out)
 
-  override def preStart(): Unit = {
-    context.become(streaming(initialCursor, 0))
-    super.preStart()
-  }
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+    new GraphStageLogic(shape) with OutHandler {
+      private var cursor = initialCursor
+      private var buffered = Vector.empty[A]
 
-  protected def driver: MongoPersistenceDriver
+      override def onPull(): Unit = {
+        if (buffered.isEmpty) {
+          if (isCompleted(cursor)) {
+            completeStage()
+            discard(cursor)
+          }
+          else {
+            val (batch, nextCursor) = next(cursor, BUFSZ)
+            cursor = nextCursor
+            buffered = batch
+          }
+        }
+        buffered.headOption.foreach(push(out, _))
+        buffered =
+          if (buffered.nonEmpty) buffered.tail
+          else buffered
+      }
+
+      override def onDownstreamFinish(): Unit = {
+        discard(cursor)
+      }
+
+      setHandler(out, this)
+    }
 
   protected def initialCursor: Cursor
 
@@ -437,21 +343,4 @@ trait SyncActorPublisher[A, Cursor] extends ActorPublisher[A] with ActorLogging 
   protected def isCompleted(c: Cursor): Boolean
 
   protected def discard(c: Cursor): Unit
-
-  def receive: Receive = Actor.emptyBehavior
-
-  def streaming(cursor: Cursor, offset: Long): Receive = {
-    case _: Cancel | SubscriptionTimeoutExceeded =>
-      discard(cursor)
-      context.stop(self)
-    case Request(_) =>
-      val (filled, remaining) = next(cursor, totalDemand)
-      filled foreach onNext
-      if (isCompleted(remaining)) {
-        onCompleteThenStop()
-        discard(remaining)
-      }
-      else
-        context.become(streaming(remaining, offset + filled.size))
-  }
 }
