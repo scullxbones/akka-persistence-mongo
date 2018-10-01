@@ -1,5 +1,8 @@
 ## Changelog for 2.x major version
 
+### 2.1.0
+* Change live queries to be directly connected to database (#202)
+
 ### 2.0.12
 * Merge pull request #201 from scullxbones/wip-200
 * Fix for case when query is run before collections exist
