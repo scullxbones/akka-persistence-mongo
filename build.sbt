@@ -6,7 +6,7 @@ scalaVersion := scalaV
 
 crossScalaVersions := Seq("2.11.8", "2.12.2")
 
-val AkkaV = "2.5.1"
+val AkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
 
 def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV % "provided")

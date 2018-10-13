@@ -163,7 +163,7 @@ object Payload {
   implicit def bytes2payload(buf: Array[Byte]): Bin = Bin(buf, Set.empty[String])
 
   def apply[D](payload: Any, tags: Set[String] = Set.empty)(implicit ser: Serialization, ev: Manifest[D], dt: DocumentType[D], loadClass: LoadClass): Payload = {
-    SerializationHelper.withTransportInformation[Payload](ser.system) {
+    Serialization.withTransportInformation[Payload](ser.system) { () =>
       payload match {
         case tg: Tagged => Payload(tg.payload, tg.tags)
         case pr: PersistentRepr => Legacy(pr, tags)
