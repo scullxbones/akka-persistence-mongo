@@ -17,7 +17,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.WriteResult
-import reactivemongo.bson._
+import reactivemongo.bson.{BSONDocument, _}
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
@@ -46,7 +46,8 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
   private[this] implicit val system: ActorSystem = driver.actorSystem
   private[this] implicit val materializer: Materializer = ActorMaterializer()
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = {   //Enumerator.flatten
+
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = { //Enumerator.flatten
     val journal = driver.getJournal(pid)
     val source =
       Source
@@ -60,11 +61,11 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
         )
 
     val flow = Flow[BSONDocument]
-      .mapConcat(_.getAs[BSONArray](EVENTS).map(_.values.collect{
+      .mapConcat(_.getAs[BSONArray](EVENTS).map(_.values.collect {
         case d: BSONDocument => driver.deserializeJournal(d)
       }).getOrElse(Stream.empty[Event]))
       .filter(_.sn >= from)
-      .filter(_.sn <= to )
+      .filter(_.sn <= to)
 
     source.via(flow)
   }
@@ -137,7 +138,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
     for {
       md <- metadata
-      _  <- md.update(
+      _ <- md.update(
         BSONDocument(PROCESSOR_ID -> persistenceId),
         BSONDocument(
           "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
@@ -146,7 +147,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
         upsert = true,
         multi = false
       )
-      _  <- md.update(
+      _ <- md.update(
         BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
         BSONDocument(
           "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
@@ -159,31 +160,38 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
   }
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
-    val journal = driver.getJournal(persistenceId)
-    val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
-    val update = BSONDocument(
-      "$pull" -> BSONDocument(
-        EVENTS -> BSONDocument(
-          PROCESSOR_ID -> persistenceId,
-          SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr))),
-      "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
-    val remove = BSONDocument("$and" ->
-      BSONArray(
-        BSONDocument(PROCESSOR_ID -> persistenceId),
-        BSONDocument(EVENTS -> BSONDocument("$size" -> 0))))
     for {
+      journal <- driver.getJournal(persistenceId)
       ms <- findMaxSequence(persistenceId, toSequenceNr)
-      j <- journal
-      wrUpdate <- j.update(query, update, writeConcern, upsert = false, multi = true)
-      if wrUpdate.ok
       _ <- ms.fold(Future.successful(()))(setMaxSequenceMetadata(persistenceId, _))
-      wr <- j.remove(remove, writeConcern)
+
+
+      //first remove docs that have to be removed, it avoid settings some docs with from > to and trying to set same from on several docs
+      docWithAllEventsToRemove = BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> toSequenceNr))
+      removed <- journal.remove(docWithAllEventsToRemove)
+      if (removed.ok)
+
+
+      //then update the (potential) doc that should have only one (not all) event removed
+      //note the query: we exclude documents that have to < toSequenceNr, it should have been deleted just before,
+      // but we avoid here some potential race condition that would lead to have from > to and several documents with same from
+      query = journalRangeQuery(persistenceId, toSequenceNr, toSequenceNr)
+      update = BSONDocument(
+        "$pull" -> BSONDocument(
+          EVENTS -> BSONDocument(
+            PROCESSOR_ID -> persistenceId,
+            SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr))),
+        "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
+
+      wrUpdate <- journal.update(query, update, writeConcern, upsert = false, multi = true)
+      if wrUpdate.ok
+
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
         for {
-          n <- j.count()
+          n <- journal.count()
           if n == 0
-          _ <- j.drop(failIfNotFound = false)
+          _ <- journal.drop(failIfNotFound = false)
           _ = driver.removeJournalInCache(persistenceId)
         } yield ()
       ()
