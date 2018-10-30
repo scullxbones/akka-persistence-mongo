@@ -16,7 +16,7 @@ import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands.WriteResult
+import reactivemongo.api.commands.{LastError, WriteResult}
 import reactivemongo.bson.{BSONDocument, _}
 
 import scala.collection.immutable.{Seq => ISeq}
@@ -183,8 +183,13 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
             SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr))),
         "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
 
-      wrUpdate <- journal.update(query, update, writeConcern, upsert = false, multi = true)
-      if wrUpdate.ok
+      duplicateKeyCodes = Seq(11000,11001,12582)
+      _ <- journal.update(query, update, writeConcern, upsert = false, multi = true) recover {
+        case le : LastError if le.code.exists(duplicateKeyCodes.contains) || le.writeErrors.exists(we => duplicateKeyCodes.contains(we.code)) =>
+        // Duplicate key error:
+        // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
+        // (dup key => Same (pid,from,to) => Same targeted "from" in mongo document => it was the same toSequenceNr value)
+      }
 
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
