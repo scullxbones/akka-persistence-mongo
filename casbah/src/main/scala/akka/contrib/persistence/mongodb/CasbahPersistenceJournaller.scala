@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2018 Brian Scully
  * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
+ * Copyright (c) 2018      Gael Breard, Orange: fix Race condition on deleteFrom. #203
  *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
@@ -110,19 +111,37 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     )
   }
 
+
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
     val journal = driver.getJournal(persistenceId)
-    val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
+
+
+    val maxSn = findMaxSequence(persistenceId, toSequenceNr)
+    maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
+
+    //first remove docs that have to be removed, it avoid settings some docs with from > to and trying to set same from on several docs
+    val docWithAllEventsToRemove = (PROCESSOR_ID $eq persistenceId) ++ (TO $lte toSequenceNr)
+    journal.remove(docWithAllEventsToRemove)
+
+    //then update the (potential) doc that should have only one (not all) event removed
+    //note the query: we exclude documents that have to < toSequenceNr, it should have been deleted just before,
+    // but we avoid here some potential race condition that would lead to have from > to and several documents with same from
+    val query = journalRangeQuery(persistenceId, toSequenceNr, toSequenceNr)
     val update: DBObject = MongoDBObject(
       "$pull" -> MongoDBObject(
         EVENTS -> MongoDBObject(
           PROCESSOR_ID -> persistenceId,
           SEQUENCE_NUMBER -> MongoDBObject("$lte" -> toSequenceNr))),
       "$set" -> MongoDBObject(FROM -> (toSequenceNr + 1)))
-    val maxSn = findMaxSequence(persistenceId, toSequenceNr)
-    journal.update(query, update, upsert = false, multi = true, writeConcern)
-    maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
-    journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
+    try {
+      journal.update(query, update, upsert = false, multi = true, writeConcern)
+
+    } catch {
+      case _: DuplicateKeyException =>
+      // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
+      // (dup key => Same (pid,from,to) => Same targeted "from" in mongo document => it was the same toSequenceNr value)
+    }
+
     if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && journal.count() == 0) {
       journal.dropCollection()
       driver.removeJournalInCache(persistenceId)
