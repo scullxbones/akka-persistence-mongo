@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.1.1
+* fix: Race condition on deleteFrom #203 (#205)
+* fix: replace fix #179 with akka/akka #24321 (#206)
+
 ### 2.1.0
 * Change live queries to be directly connected to database (#202)
 
