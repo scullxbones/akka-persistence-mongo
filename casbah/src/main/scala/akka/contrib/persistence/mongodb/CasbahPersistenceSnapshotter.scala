@@ -4,6 +4,7 @@
  *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * Florian FENDT: optimization, solution collection cache
  * ...
  */
 
@@ -104,16 +105,20 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
     val snaps = driver.getSnaps(pid)
     val criteria = Seq(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq) ++ Option(TIMESTAMP $eq ts).filter(_ => ts > 0).toList
     snaps.remove($and(criteria : _*), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0)
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0) {
       snaps.dropCollection()
+      driver.removeSnapsInCache(pid)
+    }
     ()
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
     val snaps = driver.getSnaps(pid)
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0)
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0) {
       snaps.dropCollection()
+      driver.removeSnapsInCache(pid)
+    }
     ()
   }
 }

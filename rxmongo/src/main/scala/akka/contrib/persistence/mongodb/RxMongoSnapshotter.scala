@@ -51,6 +51,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
           n <- s.count()
             if n == 0
           _ <- s.drop(failIfNotFound = false)
+          _ = driver.removeSnapsInCache(pid)
         } yield ()
       ()
     }
@@ -69,6 +70,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
           n <- s.count()
             if n == 0
           _ <- s.drop(failIfNotFound = false)
+          _ = driver.removeSnapsInCache(pid)
         } yield ()
       ()
     }
