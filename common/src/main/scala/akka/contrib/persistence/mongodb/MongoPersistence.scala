@@ -19,6 +19,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
@@ -104,10 +105,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C
 
   private[mongodb] def closeConnections(): Unit
-
-  private[mongodb] def upgradeJournalIfNeeded(): Unit
-
-  private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit
 
   /**
    * retrieve suffix from persistenceId
@@ -198,12 +195,6 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def journal(persistenceId: String): C = {
     val collectionName = getJournalCollectionName(persistenceId)
     journalMap.getOrElseUpdate(collectionName, {
-      if (settings.JournalAutomaticUpgrade) {
-        logger.debug("Journal automatic upgrade is enabled, executing upgrade process")
-        upgradeJournalIfNeeded(persistenceId)
-        logger.debug("Journal automatic upgrade process has completed")
-      }
-
       val journalCollection = collection(collectionName)
 
       indexes.foldLeft(journalCollection) { (acc, index) =>
@@ -242,35 +233,35 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   // useful in some methods in each driver
-  def useSuffixedCollectionNames = suffixBuilderClassOption.isDefined
+  def useSuffixedCollectionNames: Boolean = suffixBuilderClassOption.isDefined
 
-  def databaseName = settings.Database
-  def snapsCollectionName = settings.SnapsCollection
-  def snapsIndexName = settings.SnapsIndex
+  def databaseName: Option[String] = settings.Database
+  def snapsCollectionName: String = settings.SnapsCollection
+  def snapsIndexName: String = settings.SnapsIndex
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
-  def snapsWTimeout = settings.SnapsWTimeout
-  def snapsFsync = settings.SnapsFSync
-  def journalCollectionName = settings.JournalCollection
-  def journalIndexName = settings.JournalIndex
-  def journalSeqNrIndexName = settings.JournalSeqNrIndex
-  def journalTagIndexName = settings.JournalTagIndex
+  def snapsWTimeout: FiniteDuration = settings.SnapsWTimeout
+  def snapsFsync: Boolean = settings.SnapsFSync
+  def journalCollectionName: String = settings.JournalCollection
+  def journalIndexName: String = settings.JournalIndex
+  def journalSeqNrIndexName: String = settings.JournalSeqNrIndex
+  def journalTagIndexName: String = settings.JournalTagIndex
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
-  def journalWTimeout = settings.JournalWTimeout
-  def journalFsync = settings.JournalFSync
-  def realtimeEnablePersistence = settings.realtimeEnablePersistence
-  def realtimeCollectionName = settings.realtimeCollectionName
-  def realtimeCollectionSize = settings.realtimeCollectionSize
-  def metadataCollectionName = settings.MetadataCollection
-  def mongoUri = settings.MongoUri
-  def useLegacySerialization = settings.UseLegacyJournalSerialization
+  def journalWTimeout: FiniteDuration = settings.JournalWTimeout
+  def journalFsync: Boolean = settings.JournalFSync
+  def realtimeEnablePersistence: Boolean = settings.realtimeEnablePersistence
+  def realtimeCollectionName: String = settings.realtimeCollectionName
+  def realtimeCollectionSize: Long = settings.realtimeCollectionSize
+  def metadataCollectionName: String = settings.MetadataCollection
+  def mongoUri: String = settings.MongoUri
+  def useLegacySerialization: Boolean = settings.UseLegacyJournalSerialization
 
-  def suffixBuilderClassOption = Option(settings.SuffixBuilderClass).filter(_.trim.nonEmpty)
-  def suffixSeparator = settings.SuffixSeparator match {
+  def suffixBuilderClassOption: Option[String] = Option(settings.SuffixBuilderClass).filter(_.trim.nonEmpty)
+  def suffixSeparator: String = settings.SuffixSeparator match {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
     case _                   => "_"
   }
-  def suffixDropEmpty = settings.SuffixDropEmptyCollections
+  def suffixDropEmpty: Boolean = settings.SuffixDropEmptyCollections
 
-  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]) = ev.deserializeDocument(dbo)
-  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]) = ev.serializeAtom(aw)
+  def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]): Event = ev.deserializeDocument(dbo)
+  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]): D = ev.serializeAtom(aw)
 }

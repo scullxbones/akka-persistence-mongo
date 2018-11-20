@@ -40,7 +40,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
       testCode(extendedDriver)
       ()
     } finally {
-      extendedDriver.getJournalCollections().foreach(_.dropCollection())
+      extendedDriver.getJournalCollections.foreach(_.dropCollection())
       extendedDriver.metadata.dropCollection()
     }
   }
@@ -50,7 +50,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
       testCode(extendedDriver)
       ()
     } finally {
-      extendedDriver.getSnapshotCollections().foreach(_.dropCollection())
+      extendedDriver.getSnapshotCollections.foreach(_.dropCollection())
     }
   }
 

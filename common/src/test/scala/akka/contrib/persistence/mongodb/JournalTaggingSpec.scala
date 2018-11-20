@@ -29,7 +29,7 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
 
   override def embedDB = s"tagging-test-$database"
 
-  override def afterAll(): Unit = cleanup()
+  override def beforeAll(): Unit = cleanup()
 
   def config(extensionClass: Class[_]): Config =
     ConfigFactory.parseString(s"""

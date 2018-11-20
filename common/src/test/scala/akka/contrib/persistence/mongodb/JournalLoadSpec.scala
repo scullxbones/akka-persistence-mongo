@@ -25,7 +25,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   override def embedDB = s"load-test-$database"
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -50,6 +50,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   sealed trait Command
   case class SetTarget(ar: ActorRef) extends Command
+  case object TargetIsSet
   case class IncBatch(n: Int) extends Command
   case object Stop extends Command
 
@@ -96,6 +97,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
     override def receiveCommand: Receive = {
       case SetTarget(ar) =>
+        sender() ! TargetIsSet
         accumulator = Option(ar)
         context.setReceiveTimeout(atMost)
       case IncBatch(count) =>
@@ -142,10 +144,12 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
+    val probe = TestProbe()
     val actors = startPersistentActors(as, commandsPerBatch * batches, 10.seconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
-    actors.foreach(_ ! SetTarget(accumulator))
+    actors.foreach(ar => probe.send(ar, SetTarget(accumulator)))
+    probe.receiveN(actors.size, 30.seconds.dilated)
 
     val start = System.currentTimeMillis
     (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
@@ -174,11 +178,13 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   it should "recover in less than 20 seconds" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
+    val probe = TestProbe()
+    val result = Promise[Long]()
     val start = System.currentTimeMillis
     val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds.dilated)
-    val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
-    actors.foreach(_ ! SetTarget(accumulator))
+    actors.foreach(ar => probe.send(ar, SetTarget(accumulator)))
+    probe.receiveN(actors.size, 30.seconds.dilated)
 
     val total = Try(Await.result(result.future, 10.seconds.dilated)).recoverWith {
       case t: Throwable =>

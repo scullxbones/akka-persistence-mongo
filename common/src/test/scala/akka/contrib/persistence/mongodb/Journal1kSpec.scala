@@ -18,7 +18,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
 
   override def embedDB = s"1k-test-$database"
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
@@ -45,7 +45,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
 
   import concurrent.duration._
 
-  "A counter" should "persist the counter to 1000" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test") { case (as,config) =>
+  "A counter" should "persist the counter to 1000" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test-persist") { case (as,config) =>
     implicit val askTimeout = Timeout(2.minutes)
     val counter = as.actorOf(Counter.props, id)
     (1 to 1000).foreach(_ => counter ! Inc)
@@ -55,7 +55,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
     }
   }
 
-  it should "restore the counter back to 1000"  taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test") { case (as, config) =>
+  it should "restore the counter back to 1000"  taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test-restore") { case (as, config) =>
     implicit val askTimeout = Timeout(2.minutes)
     val counter = as.actorOf(Counter.props, id)
     val result = (counter ? GetCounter).mapTo[Int]

@@ -110,7 +110,6 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
     val liveSource = pastSource.concat(realtimeSource)
 
     liveSource
-      .mapMaterializedValue(_ => NotUsed)
       .via(stages).toEventEnvelopes
   }
 

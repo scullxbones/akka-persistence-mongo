@@ -59,7 +59,7 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
 
   override def embedDB = s"serializable-spec-$database"
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -78,21 +78,23 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
     $extendedConfig
     |""".stripMargin)
 
-  "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
+  "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "ser-spec-write") { case (as,_) =>
     implicit val system = as
     implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
+    val probe = TestProbe()
 
     val pa = as.actorOf(OrderIdActor.props)
-    pa ! Increment
-    pa ! Increment
-    pa ! Increment
-    pa ! Increment
+    probe.send(pa, Increment)
+    probe.send(pa, Increment)
+    probe.send(pa, Increment)
+    probe.send(pa, Increment)
+    probe.receiveN(4, 5.seconds.dilated)
     whenReady((pa ? Increment)(5.second.dilated)) {
       _ shouldBe 5
     }
   }
 
-  it should "support restoring serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal") { case (as,_) =>
+  it should "support restoring serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "ser-spec-restore") { case (as,_) =>
     implicit val system = as
     implicit def patienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
