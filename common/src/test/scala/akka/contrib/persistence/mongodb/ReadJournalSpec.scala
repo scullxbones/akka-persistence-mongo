@@ -172,7 +172,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
           case (i,p) if i == id =>
             val ar = as.actorOf(props(i, p, 5), s"current-all-events-$i")
             probe.send(ar, RUAlive)
-            probe.expectMsg(1.second.dilated, IMAlive)
+            probe.expectMsg(2.second.dilated, IMAlive)
             evs map Append.apply foreach (ar ! _)
             ar ! Append("END")
         }
