@@ -24,9 +24,9 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
   private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
   private[this] implicit val materializer: Materializer = ActorMaterializer()(system)
 
-  override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl,system.settings.config)
+  override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl)
 
-  override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl, system.settings.config))
+  override def javadslReadJournal(): javadsl.ReadJournal = new JavaDslMongoReadJournal(new ScalaDslMongoReadJournal(impl))
 }
 
 object ScalaDslMongoReadJournal {
@@ -48,7 +48,7 @@ object ScalaDslMongoReadJournal {
   }
 }
 
-class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config: Config)(implicit m: Materializer)
+class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implicit m: Materializer)
   extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
@@ -58,10 +58,6 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi, config:
     with EventsByTagQuery {
 
   import ScalaDslMongoReadJournal._
-
-  val streamBufferSizeMaxConfig: Config = config.getConfig("akka.contrib.persistence.stream-buffer-max-size")
-
-
 
   def currentAllEvents(): Source[EventEnvelope, NotUsed] = impl.currentAllEvents.toEventEnvelopes
 

@@ -39,10 +39,10 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   override private[mongodb] def closeConnections(): Unit = client.close()
 
-  private[this] val casbahSettings = CasbahDriverSettings(system.settings)
+  private[this] val casbahSettings = CasbahDriverSettings(system)
 
   private[this] val url = {
-    val underlying =  new JavaMongoClientURI(mongoUri,casbahSettings.mongoClientOptionsBuilder)
+    val underlying =  new JavaMongoClientURI(mongoUri,casbahSettings.configure(new MongoClientOptions.Builder()))
     MongoClientURI(underlying)
   }
 
@@ -82,7 +82,12 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   }
 
   private[mongodb] def getCollections(collectionName: String): List[C] = {
-    db.collectionNames().filter(_.startsWith(collectionName)).map(collection).toList
+    def excludeNames(name: String): Boolean =
+      name == realtimeCollectionName ||
+        name == metadataCollectionName ||
+        name.startsWith("system.")
+
+    db.collectionNames().filterNot(excludeNames).filter(_.startsWith(collectionName)).map(collection).toList
   }
 
   private[mongodb] def getJournalCollections: List[C] = getCollections(journalCollectionName)

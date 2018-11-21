@@ -20,9 +20,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   override type D = Document
 
   val ScalaSerializers: ScalaDriverSerializers = ScalaDriverSerializersExtension(system)
+  val scalaDriverSettings = ScalaDriverSettings(system)
 
   private def mongoClientSettings: MongoClientSettings =
-    MongoClientSettings.builder()
+    scalaDriverSettings
+      .configure(MongoClientSettings.builder())
       .applyConnectionString(new ConnectionString(mongoUri))
       .applicationName("akka-persistence-mongodb")
       .build()
@@ -81,6 +83,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
+        name == metadataCollectionName ||
         name.startsWith("system.")
 
     def passAll(name: String): Boolean = true

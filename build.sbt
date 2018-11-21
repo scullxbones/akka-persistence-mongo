@@ -94,9 +94,12 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2" % "provided",
-      "org.mongodb.scala" %% "mongo-scala-bson" % "2.4.2" % "provided",
-      "org.reactivestreams" % "reactive-streams" % "1.0.2"
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"        % "provided",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.4.2"        % "provided",
+      "io.netty"          % "netty-buffer"        % "4.1.17.Final" % "provided",
+      "io.netty"          % "netty-transport"     % "4.1.17.Final" % "provided",
+      "io.netty"          % "netty-handler"       % "4.1.17.Final" % "provided",
+      "org.reactivestreams" % "reactive-streams"  % "1.0.2"
     )
   )
   .configs(Travis)

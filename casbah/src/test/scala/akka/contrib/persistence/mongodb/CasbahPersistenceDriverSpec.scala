@@ -1,19 +1,18 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import com.typesafe.config.ConfigFactory
+import akka.contrib.persistence.mongodb.ConfigLoanFixture._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
-
-import ConfigLoanFixture._
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMongo {
 
-  val shutdownConfig = ConfigFactory.parseString(
+  val shutdownConfig: Config = ConfigFactory.parseString(
     s"""|akka.contrib.persistence.mongodb.mongo {
         | mongouri = "mongodb://$host:$noAuthPort/shutdown-spec"
         | db = "shutdown-spec"
@@ -48,7 +47,7 @@ class CasbahPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMon
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo {
 
-  val authConfig = ConfigFactory.parseString(
+  val authConfig: Config = ConfigFactory.parseString(
     s"""
     |akka.contrib.persistence.mongodb.mongo {
     | mongouri = "mongodb://admin:password@$host:$authPort/admin"

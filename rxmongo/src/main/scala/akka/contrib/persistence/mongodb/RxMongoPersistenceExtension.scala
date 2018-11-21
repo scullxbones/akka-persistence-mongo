@@ -84,28 +84,6 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
-  def walk(collection: Future[BSONCollection])(previous: Seq[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Future[Seq[WriteResult]] = {
-    import DefaultBSONHandlers._
-    import Producer._
-    import RxMongoSerializers._
-
-    import scala.collection.immutable.{Seq => ISeq}
-
-    val id = doc.getAs[BSONObjectID]("_id").get
-    val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
-    val q = BSONDocument("_id" -> id)
-
-    val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))
-    val results = collection.flatMap(_.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
-      previous :+ wr
-    })
-    results.onComplete {
-      case Success(s) => logger.debug(s"update completed ... ${s.size - 1} so far")
-      case Failure(t) => logger.error(s"update failure", t)
-    }
-    results
-  }
-
   private[mongodb] def closeConnections(): Unit = {
     driver.close(5.seconds)
   }
@@ -164,12 +142,15 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
+        name == metadataCollectionName ||
         name.startsWith("system.")
+
+    def allPass(name: String): Boolean = true
 
     for {
       database  <- db
       names     <- database.collectionNames
-      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
+      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(allPass _)).map(collection))
     } yield list
   }
 
