@@ -54,7 +54,7 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   private val NamespaceExistsErrorCode = 48
   private[mongodb] override def ensureCollection(name: String): MongoCollection = {
-    if (db.collectionExists(name)) {
+    if (!db.collectionExists(name)) {
       try {
         db.createCollection(name, BasicDBObjectBuilder.start().get()).asScala
       } catch {

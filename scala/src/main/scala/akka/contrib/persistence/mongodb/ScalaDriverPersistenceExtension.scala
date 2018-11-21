@@ -41,6 +41,16 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   override private[mongodb] def collection(name: String): C =
     Future.successful(db.getCollection(name))
 
+  override private[mongodb] def ensureCollection(name: String): C = {
+    implicit val ec: ExecutionContext = system.dispatcher
+    db.listCollectionNames().toFuture().flatMap {
+      case xs if xs.contains(name) =>
+        collection(name)
+      case _ =>
+        db.createCollection(name).toFuture().flatMap(_ => collection(name))
+    }
+  }
+
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
