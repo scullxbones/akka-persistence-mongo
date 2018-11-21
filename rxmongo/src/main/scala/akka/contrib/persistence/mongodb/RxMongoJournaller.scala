@@ -80,7 +80,7 @@ class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournalli
 
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
-      collection.flatMap(_.bulkInsert(collected, ordered = true, writeConcern).map(_ => batch.map(_.map(_ => ()))))
+      collection.flatMap(_.insert[BSONDocument](ordered = true, writeConcern).many(collected).map(_ => batch.map(_.map(_ => ()))))
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>

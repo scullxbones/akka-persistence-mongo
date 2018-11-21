@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{BasicDBObjectBuilder, WriteConcern, MongoClientURI => JavaMongoClientURI}
+import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
