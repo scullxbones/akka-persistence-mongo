@@ -147,6 +147,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
 
   def config(extensionClass: Class[_]): Config =
     ConfigFactory.parseString(s"""
+      |include "/application.conf"
       |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
       |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
       |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -162,7 +163,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
       |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
       |}
       $extendedConfig
-      |""".stripMargin)
+      |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   "A mongo persistence driver" should
     "support persistent FSM purchase sequence" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "persistent-fsm") { case (as, config) =>

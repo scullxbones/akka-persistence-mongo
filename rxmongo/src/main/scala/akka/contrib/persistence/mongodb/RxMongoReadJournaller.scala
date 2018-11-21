@@ -9,8 +9,10 @@ package akka.contrib.persistence.mongodb
 import akka.NotUsed
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.persistence.query.{NoOffset, Offset}
-import akka.stream.Materializer
+import akka.stream.{Attributes, Materializer, Outlet, SourceShape}
 import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
+import org.reactivestreams.{Publisher, Subscriber, Subscription}
 import reactivemongo.akkastream._
 import reactivemongo.api.QueryOpts
 import reactivemongo.bson._
@@ -141,6 +143,87 @@ object CurrentEventsByTag {
   }
 }
 
+class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory: Option[BSONObjectID] => Publisher[BSONDocument])
+  extends GraphStage[SourceShape[BSONDocument]] {
+
+  private val out = Outlet[BSONDocument]("out")
+
+  override def shape: SourceShape[BSONDocument] = SourceShape(out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+    new GraphStageLogic(shape) {
+      private var lastId: Option[BSONObjectID] = None
+      private var subscription: Option[Subscription] = None
+      private var cursor: Option[Publisher[BSONDocument]] = None
+      private var buffer: List[BSONDocument] = Nil
+
+      override def preStart(): Unit = {
+        cursor = Option(buildCursor(buildSubscriber()))
+      }
+
+      private def subAc = getAsyncCallback[Subscription] { s =>
+        s.request(bufsz.toLong)
+        subscription = Option(s)
+      }
+
+      private def nxtAc = getAsyncCallback[BSONDocument] { doc =>
+        if (isAvailable(out)) {
+          push(out, doc)
+          subscription.foreach(_.request(1L))
+        }
+        else
+          buffer = buffer ::: List(doc)
+        lastId = doc.getAs[BSONObjectID]("_id")
+      }
+
+      private def errAc = getAsyncCallback[Throwable](failStage)
+
+      private def cmpAc = getAsyncCallback[Unit]{ _ =>
+        subscription.foreach(_.cancel())
+        cursor = None
+        cursor = Option(buildCursor(buildSubscriber()))
+      }
+
+      private def buildSubscriber(): Subscriber[BSONDocument] = new Subscriber[BSONDocument] {
+        private val subAcImpl = subAc
+        private val nxtAcImpl = nxtAc
+        private val errAcImpl = errAc
+        private val cmpAcImpl = cmpAc
+
+        override def onSubscribe(s: Subscription): Unit = subAcImpl.invoke(s)
+
+        override def onNext(t: BSONDocument): Unit = nxtAcImpl.invoke(t)
+
+        override def onError(t: Throwable): Unit = errAcImpl.invoke(t)
+
+        override def onComplete(): Unit = cmpAcImpl.invoke(())
+      }
+
+      setHandler(out, new OutHandler {
+        override def onPull(): Unit = {
+          while (buffer.nonEmpty && isAvailable(out)){
+            val head :: tail = buffer
+            push(out, head)
+            buffer = tail
+            subscription.foreach(_.request(1L))
+          }
+        }
+
+        override def onDownstreamFinish(): Unit = {
+          subscription.foreach(_.cancel())
+          completeStage()
+        }
+      })
+
+      private def buildCursor(subscriber: Subscriber[BSONDocument]): Publisher[BSONDocument] = {
+        subscription.foreach(_.cancel())
+        val c = factory(lastId)
+        c.subscribe(subscriber)
+        c
+      }
+    }
+}
+
 class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[(Event, Offset), NotUsed]] {
   import driver.RxMongoSerializers._
 
@@ -150,17 +233,29 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
     if (driver.realtimeEnablePersistence)
       Source.fromFuture(driver.realtime)
         .flatMapConcat { rt =>
-          rt.find(query.getOrElse(BSONDocument.empty))
-            .options(QueryOpts().tailable.awaitData)
-            .cursor[BSONDocument]()
-            .documentSource()
-            .via(killSwitch.flow)
-            .mapConcat { d =>
-              val id = d.getAs[BSONObjectID](ID).get
-              d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
-                case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
-              }).getOrElse(Nil)
-            }
+          Source.fromGraph(
+            new RxMongoRealtimeGraphStage(driver)(maybeId => {
+              ((query, maybeId) match {
+                case (None, None) =>
+                  rt.find(BSONDocument.empty)
+                case (None, Some(id)) =>
+                  rt.find(BSONDocument(ID -> BSONDocument("$gt" -> id)))
+                case (Some(q), None) =>
+                  rt.find(q)
+                case (Some(q), Some(id)) =>
+                  rt.find(q ++ BSONDocument(ID -> BSONDocument("$gt" -> id)))
+              }).options(QueryOpts().tailable.awaitData)
+                .cursor[BSONDocument]()
+                .documentPublisher()
+            })
+          )
+          .via(killSwitch.flow)
+          .mapConcat { d =>
+            val id = d.getAs[BSONObjectID](ID).get
+            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+              case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
+            }).getOrElse(Nil)
+          }
         }
     else
       Source.empty

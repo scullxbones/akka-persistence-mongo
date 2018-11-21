@@ -13,7 +13,9 @@ import org.scalatest.BeforeAndAfterAll
 
 object JournalTckSpec extends ContainerMongo {
 
-  def config(extensionClass: Class[_], database: String, extendedConfig: String = "|") = ConfigFactory.parseString(s"""
+  def config(extensionClass: Class[_], database: String, extendedConfig: String = "|") =
+    ConfigFactory.parseString(s"""
+     |include "/application.conf"
      |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
      |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
      |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort"
@@ -23,7 +25,7 @@ object JournalTckSpec extends ContainerMongo {
      |  class = "akka.contrib.persistence.mongodb.MongoJournal"
      |}
      $extendedConfig
-     |""".stripMargin)
+     |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
 }
 

@@ -47,6 +47,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   }
 
   def config(extensionClass: Class[_]): Config = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
@@ -64,7 +65,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     |  class = "akka.contrib.persistence.mongodb.MongoReadJournal"
     |}
     $extendedConfig
-    |""".stripMargin).withFallback(ConfigFactory.defaultReference())
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   def suffixCollNamesEnabled: Boolean = config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") != null &&
     !config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").trim.isEmpty

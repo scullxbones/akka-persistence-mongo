@@ -28,6 +28,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
   override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -43,7 +44,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     $extendedConfig
-    |""".stripMargin)
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   def actorProps(id: String, eventCount: Int, atMost: FiniteDuration = 60.seconds): Props =
     Props(new CounterPersistentActor(id, eventCount, atMost))

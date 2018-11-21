@@ -62,6 +62,7 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
   override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -76,7 +77,7 @@ abstract class JournalSerializableSpec(extensionClass: Class[_], database: Strin
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     }
     $extendedConfig
-    |""".stripMargin)
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   "A journal" should "support writing serializable events" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "ser-spec-write") { case (as,_) =>
     implicit val system = as

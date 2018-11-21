@@ -21,6 +21,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
   override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
@@ -36,7 +37,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     $extendedConfig
-    |""".stripMargin)
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   val id = "123"
   import TestStubActors._
