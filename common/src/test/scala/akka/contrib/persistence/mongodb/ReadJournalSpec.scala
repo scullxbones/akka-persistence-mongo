@@ -387,6 +387,44 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       ks.shutdown()
   }
 
+  it should "support a long running events by id query" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal", "events-by-id") {
+    case (as, _) =>
+      import concurrent.duration._
+      implicit val system: ActorSystem = as
+      implicit val mat: ActorMaterializer = ActorMaterializer()
+
+      val probe = TestProbe()
+
+      val readJournal =
+        PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
+
+      val promise = Promise[Unit]()
+      val ar = as.actorOf(props("foo-long-running", promise, 3))
+      probe.send(ar, RUAlive)
+      probe.expectMsg(IMAlive)
+
+      val events = ("foo" :: "bar" :: "bar2" :: Nil) map Append.apply
+
+      val ks = readJournal
+        .eventsByPersistenceId("foo-long-running", 2L, 3L)
+        .viaMat(KillSwitches.single)(Keep.right)
+        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .run()
+
+      Thread.sleep(1.minute.toMillis)
+
+      probe.expectNoMessage()
+
+      events foreach (ar ! _)
+
+      probe.receiveN(2, 3.seconds.dilated)
+        .collect { case msg: EventEnvelope => msg }
+        .toList
+        .map(_.event) should contain inOrderOnly("bar", "bar2")
+
+      ks.shutdown()
+  }
+
   it should "support the events by id query with multiple persistent actors" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-readjournal", "event-by-id-multiple-pa") {
     case (as, _) =>
       import concurrent.duration._
