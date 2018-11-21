@@ -24,7 +24,7 @@ case class MultiCursor(driver: CasbahMongoDriver, query: DBObject) {
   import driver.CasbahSerializers._
 
   private val cursors: List[driver.C#CursorType] =
-    driver.getJournalCollections().map(_.find(query))
+    driver.getJournalCollections.map(_.find(query))
 
   def isCompleted: Boolean =
     cursors.forall(_.isEmpty)
@@ -56,7 +56,7 @@ class CurrentPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPubl
   val temporaryCollection: MongoCollection = driver.collection(temporaryCollectionName)
 
   override protected def initialCursor: Stream[String] = {
-    driver.getJournalCollections().toStream
+    driver.getJournalCollections.toStream
       .flatMap { journal =>
         journal.aggregate(
           MongoDBObject("$project" -> MongoDBObject(PROCESSOR_ID -> 1)) ::
@@ -133,7 +133,7 @@ class CurrentEventsByTagCursorSource(driver: CasbahMongoDriver, tag: String, fro
   private val outlet = Outlet[(Event, Offset)]("out")
 
   private def collectionCursor =
-    driver.getJournalCollections().toStream
+    driver.getJournalCollections.toStream
 
   private def buildCursor(coll: MongoCollection, query: DBObject) = {
     val cursor = coll.find(query).sort(MongoDBObject(ID -> 1))

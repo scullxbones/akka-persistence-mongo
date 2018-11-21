@@ -84,94 +84,6 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
-  def walk(collection: Future[BSONCollection])(previous: Seq[WriteResult], doc: BSONDocument)(implicit ec: ExecutionContext): Future[Seq[WriteResult]] = {
-    import DefaultBSONHandlers._
-    import Producer._
-    import RxMongoSerializers._
-
-    import scala.collection.immutable.{Seq => ISeq}
-
-    val id = doc.getAs[BSONObjectID]("_id").get
-    val ev = Event[BSONDocument](useLegacySerialization)(deserializeJournal(doc).toRepr)
-    val q = BSONDocument("_id" -> id)
-
-    val atom = serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))
-    val results = collection.flatMap(_.update(q, atom, journalWriteConcern, upsert = false, multi = false).map { wr =>
-      previous :+ wr
-    })
-    results.onComplete {
-      case Success(s) => logger.debug(s"update completed ... ${s.size - 1} so far")
-      case Failure(t) => logger.error(s"update failure", t)
-    }
-    results
-  }
-
-  override private[mongodb] def upgradeJournalIfNeeded(): Unit = upgradeJournalIfNeeded("")
-
-  override private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit = {
-    import JournallingFieldNames._
-
-    import scala.concurrent.ExecutionContext.Implicits.global
-
-    val j = getJournal(persistenceId)
-    val walker = walk(j) _
-    val q = BSONDocument(VERSION -> BSONDocument("$exists" -> 0))
-    val empty: Seq[WriteResult] = DefaultWriteResult(
-      ok = true, n = 0,
-      writeErrors = Seq.empty, writeConcernError = None,
-      code = None, errmsg = None) :: Nil
-
-    def traverse(count: Int): Future[Seq[WriteResult]] = {
-      logger.info(s"Journal automatic upgrade found $count records needing upgrade")
-      if (count > 0) {
-        j.flatMap(_.find(q)
-                    .cursor[BSONDocument]()
-                    .enumerate()
-                    .run(Iteratee.foldM(empty)(walker)))
-      } else Future.successful(empty)
-    }
-
-    val eventuallyUpgrade = for {
-      journal <- j
-      _ <- journal.remove(BSONDocument(PROCESSOR_ID -> BSONRegex("^/user/sharding/[^/]+Coordinator/singleton/coordinator", "")))
-        .map(wr => logger.info(s"Successfully removed ${wr.n} legacy cluster sharding records"))
-        .recover { case t => logger.error(s"Error while removing legacy cluster sharding records", t) }
-      indices <- journal.indexesManager.list()
-      _ <- indices
-        .find(_.key.sortBy(_._1) == Seq(DELETED -> IndexType.Ascending, PROCESSOR_ID -> IndexType.Ascending, SEQUENCE_NUMBER -> IndexType.Ascending))
-        .map(_.eventualName)
-        .map(n => journal.indexesManager.drop(n).transform(
-          _ => logger.info("Successfully dropped legacy index"),
-          { t =>
-            logger.error("Error received while dropping legacy index", t)
-            t
-          }))
-        .getOrElse(Future.successful(()))
-      count <- journal.count(Option(q))
-      wr <- traverse(count)
-    } yield wr
-
-    eventuallyUpgrade.onComplete {
-      case Success(wrs) if wrs.exists(w => w.writeErrors.nonEmpty || w.writeConcernError.nonEmpty) =>
-        val errors = wrs.flatMap(_.writeConcernError).map(r => s"${r.code} - ${r.errmsg}").mkString("\n")
-        logger.error("Upgrade did not complete successfully")
-        logger.error(s"Errors during journal auto-upgrade:\n$errors")
-        val writeErrors = wrs.flatMap(_.writeErrors).map(we => s"${we.code} - ${we.errmsg}").mkString("\n")
-        logger.error(s"Received ${wrs.count(_.writeErrors.nonEmpty)} write errors during journal auto-upgrade:\n$writeErrors")
-      case Success(wrs) =>
-        val successCount = wrs.foldLeft(0)((sum, wr) => sum + wr.n)
-        logger.info(s"Successfully upgraded $successCount records")
-      case Failure(t) =>
-        logger.error(s"Upgrade did not complete successfully", t)
-    }
-
-    logger.debug("Waiting on upgrade to complete...")
-
-    Await.result(eventuallyUpgrade, 2.minutes) // ouch
-
-    ()
-  }
-
   private[mongodb] def closeConnections(): Unit = {
     driver.close(5.seconds)
   }
@@ -230,12 +142,15 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
+        name == metadataCollectionName ||
         name.startsWith("system.")
+
+    def allPass(name: String): Boolean = true
 
     for {
       database  <- db
       names     <- database.collectionNames
-      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
+      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(allPass _)).map(collection))
     } yield list
   }
 
@@ -255,7 +170,7 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
 
     lazy val driver = new RxMongoDriver(actorSystem, config, driverProvider)
 
-    override lazy val journaler = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics {
+    override lazy val journaler: MongoPersistenceJournallingApi = new RxMongoJournaller(driver) with MongoPersistenceJournalMetrics {
       override def driverName = "rxmongo"
     }
 

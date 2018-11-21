@@ -12,7 +12,9 @@ import org.scalatest.BeforeAndAfterAll
 
 object SnapshotTckSpec extends ContainerMongo {
 
-  def config(extensionClass: Class[_], database: String, extendedConfig: String = "|") = ConfigFactory.parseString(s"""
+  def config(extensionClass: Class[_], database: String, extendedConfig: String = "|") =
+    ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snapshot"
     |akka.persistence.journal.leveldb.native = off
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
@@ -23,7 +25,7 @@ object SnapshotTckSpec extends ContainerMongo {
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     $extendedConfig
-    """.stripMargin)
+    """.stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 }
 
 abstract class SnapshotTckSpec(extensionClass: Class[_], dbName: String, extendedConfig: String = "|")

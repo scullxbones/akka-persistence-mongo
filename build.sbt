@@ -19,7 +19,7 @@ def commonDeps(sv:String) = Seq(
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12"),
   "com.typesafe.akka"         %% "akka-persistence-query"   % AkkaV     % "provided",
-  "org.mongodb"               % "mongodb-driver"            % "3.6.3"   % "test",
+  "org.mongodb"               % "mongodb-driver"            % "3.8.2"   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
@@ -37,6 +37,7 @@ lazy val Travis = config("travis").extend(Test)
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
+  dependencyOverrides += "org.mongodb" % "mongodb-driver" % "3.8.2" ,
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   version := releaseV,
   organization := "com.github.scullxbones",
@@ -83,8 +84,22 @@ lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.1" % "provided",
-      "org.mongodb" %  "mongo-java-driver" % "3.6.3" % "test"
+      "org.mongodb" %% "casbah" % "3.1.1" % "provided"
+    )
+  )
+  .configs(Travis)
+
+lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
+  .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
+  .settings(commonSettings:_*)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"        % "provided",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.4.2"        % "provided",
+      "io.netty"          % "netty-buffer"        % "4.1.17.Final" % "provided",
+      "io.netty"          % "netty-transport"     % "4.1.17.Final" % "provided",
+      "io.netty"          % "netty-handler"       % "4.1.17.Final" % "provided",
+      "org.reactivestreams" % "reactive-streams"  % "1.0.2"
     )
   )
   .configs(Travis)
@@ -117,7 +132,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .configs(Travis)
 
 lazy val `akka-persistence-mongo` = (project in file("."))
-  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-tools`)
+  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
   .settings(commonSettings:_*)
   .settings(
     packagedArtifacts in file(".") := Map.empty,
