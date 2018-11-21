@@ -15,6 +15,7 @@ import akka.testkit._
 import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.bson.Document
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.tagobjects.Slow
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
@@ -448,18 +449,17 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       probe.expectMsg(IMAlive)
       probe.expectMsg(IMAlive)
 
-      val ks = readJournal
+      val (ks,sq) = readJournal
         .eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue)
         .viaMat(KillSwitches.single)(Keep.right)
         .take(events2.size.toLong)
-        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .toMat(Sink.seq[EventEnvelope])(Keep.both)
         .run()
 
       events foreach (ar ! _)
       events2 foreach (ar2 ! _)
 
-      probe.receiveN(events2.size, 3.seconds.dilated)
-        .collect { case msg: EventEnvelope => msg }
+      sq.futureValue(Timeout(3.seconds.dilated))
         .toList
         .map(_.event) should be(events2.map(_.s))
 
