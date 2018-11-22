@@ -27,16 +27,16 @@
 
 (Official Scala)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "2.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "2.2.0"
 ```
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.2.0"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.2.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -545,7 +545,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.1.1",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.2.0",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
