@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{BasicDBObjectBuilder, WriteConcern, MongoClientURI => JavaMongoClientURI}
+import com.mongodb.{BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
@@ -51,6 +51,23 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   private[mongodb] lazy val db = client(databaseName.getOrElse(url.database.getOrElse(DEFAULT_DB_NAME)))
 
   private[mongodb] def collection(name: String) = db(name)
+
+  private val NamespaceExistsErrorCode = 48
+  private[mongodb] override def ensureCollection(name: String): MongoCollection = {
+    if (!db.collectionExists(name)) {
+      try {
+        db.createCollection(name, BasicDBObjectBuilder.start().get()).asScala
+      } catch {
+        // Between the time of checking collectionExists and calling createCollection the collection may have been created already
+        case ex: MongoCommandException if ex.getErrorCode == NamespaceExistsErrorCode =>
+          db(name)
+      }
+
+    } else {
+      db(name)
+    }
+  }
+
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)

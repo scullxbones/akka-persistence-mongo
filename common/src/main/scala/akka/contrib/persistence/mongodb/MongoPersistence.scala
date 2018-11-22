@@ -100,6 +100,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] def collection(name: String): C
 
+  private[mongodb] def ensureCollection(name: String): C
+
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
   private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C
@@ -195,7 +197,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def journal(persistenceId: String): C = {
     val collectionName = getJournalCollectionName(persistenceId)
     journalMap.getOrElseUpdate(collectionName, {
-      val journalCollection = collection(collectionName)
+      val journalCollection = ensureCollection(collectionName)
 
       indexes.foldLeft(journalCollection) { (acc, index) =>
         import index._
@@ -212,7 +214,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] lazy val snaps: C = snaps("")
 
   private[mongodb] def snaps(persistenceId: String): C = {
-    val snapsCollection = collection(getSnapsCollectionName(persistenceId))
+    val snapsCollection = ensureCollection(getSnapsCollectionName(persistenceId))
     ensureIndex(snapsIndexName, unique = true, sparse = false,
       SnapshottingFieldNames.PROCESSOR_ID -> 1,
       SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
@@ -226,7 +228,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
 
   private[mongodb] lazy val metadata: C = {
-    val metadataCollection = collection(metadataCollectionName)
+    val metadataCollection = ensureCollection(metadataCollectionName)
     ensureIndex("akka_persistence_metadata_pid",
       unique = true, sparse = true,
       JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)

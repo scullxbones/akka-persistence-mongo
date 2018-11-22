@@ -9,8 +9,8 @@ docker pull scullxbones/mongodb:$MONGODB_VERSION
 docker ps -a | grep scullxbones/mongodb | awk '{print $1}' | xargs docker rm -f
 sleep 3
 
-docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
-docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth $MONGODB_OPTS
+docker run --rm --name mongo_noauth -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --noauth $MONGODB_OPTS
+docker run --rm --name mongo_auth -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:$MONGODB_VERSION --auth $MONGODB_OPTS
 
 sleep 3
-docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
+docker exec mongo_auth mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"

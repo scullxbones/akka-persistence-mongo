@@ -34,7 +34,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   import ConfigLoanFixture._
 
-  override def embedDB = s"read-journal-test-$dbName"
+  override def embedDB = s"rd-j-test-$dbName"
 
   override def beforeAll(): Unit = cleanup()
 
