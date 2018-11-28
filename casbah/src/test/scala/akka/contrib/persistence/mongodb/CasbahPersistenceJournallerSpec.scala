@@ -677,7 +677,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         val buf = mutable.Buffer[PersistentRepr]()
         underTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
 
-        val registry = MongoPersistenceDriver.registry
+        val registry = DropwizardMetrics.metricRegistry
         registry.getTimers() should have size 4
         registry.getTimers().keySet() should contain("akka-persistence-mongo.journal.casbah.read.max-seq.timer")
         registry.getTimers().get("akka-persistence-mongo.journal.casbah.read.max-seq.timer").getCount should be > 0L
@@ -698,7 +698,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
 
-        val registry = MongoPersistenceDriver.registry
+        val registry = DropwizardMetrics.metricRegistry
         registry.getTimers() should have size 4
         registry.getTimers().keySet() should contain("akka-persistence-mongo.journal.casbah.read.max-seq.timer")
         registry.getTimers().get("akka-persistence-mongo.journal.casbah.read.max-seq.timer").getCount should be > 0L

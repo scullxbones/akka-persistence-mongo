@@ -49,7 +49,7 @@ trait ConfiguredExtension {
   def journaler: MongoPersistenceJournallingApi
   def snapshotter: MongoPersistenceSnapshottingApi
   def readJournal: MongoPersistenceReadJournallingApi
-  def registry: MetricRegistry = MongoPersistenceDriver.registry
+  def registry: MetricRegistry = DropwizardMetrics.metricRegistry
 }
 
 object MongoSettings {
@@ -112,5 +112,6 @@ class MongoSettings(val config: Config) {
   val SuffixBuilderClass: String = config.getString("suffix-builder.class")
   val SuffixSeparator: String = config.getString("suffix-builder.separator")
   val SuffixDropEmptyCollections: Boolean = config.getBoolean("suffix-drop-empty-collections")
-  
+
+  val MongoMetricsBuilderClass: String = config.getString("metrics-builder.class")
 }

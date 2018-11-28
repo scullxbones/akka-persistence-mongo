@@ -24,7 +24,7 @@ import scala.concurrent._
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success, Try}
 
-class RxMongoJournaller(driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
+class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJournallingApi {
 
   import JournallingFieldNames._
   import driver.RxMongoSerializers._

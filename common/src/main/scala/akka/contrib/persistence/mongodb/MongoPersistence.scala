@@ -12,9 +12,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
-import com.codahale.metrics.{MetricRegistry, SharedMetricRegistries}
 import com.typesafe.config.Config
-import nl.grons.metrics.scala.InstrumentedBuilder
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.concurrent.TrieMap
@@ -42,12 +40,6 @@ object MongoPersistenceDriver {
     case "journaled"           => Journaled
     case "replicaacknowledged" => ReplicaAcknowledged
   }
-
-  private[mongodb] val registry = SharedMetricRegistries.getOrCreate("mongodb")
-}
-
-trait Instrumented extends InstrumentedBuilder {
-  override val metricRegistry: MetricRegistry = MongoPersistenceDriver.registry
 }
 
 trait CanSerializeJournal[D] {

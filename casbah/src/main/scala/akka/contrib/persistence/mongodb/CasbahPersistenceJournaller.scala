@@ -19,7 +19,7 @@ import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
+class CasbahPersistenceJournaller(val driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
 
   import driver.CasbahSerializers._
 
