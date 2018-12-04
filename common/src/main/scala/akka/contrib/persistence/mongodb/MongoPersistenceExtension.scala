@@ -104,6 +104,7 @@ class MongoSettings(val config: Config) {
   val realtimeEnablePersistence: Boolean = config.getBoolean("realtime-enable-persistence")
   val realtimeCollectionName: String = config.getString("realtime-collection")
   val realtimeCollectionSize: Long = config.getLong("realtime-collection-size")
+  val realtimeIndex: String = config.getString("realtime-index")
 
   val MetadataCollection: String = config.getString("metadata-collection")
 

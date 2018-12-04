@@ -222,7 +222,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   private[mongodb] lazy val realtime: C = {
-    cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.global)
+    val realtimeCollection = cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.global)
+    ensureIndex(realtimeIndexName,unique=false,sparse = false,
+      JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(realtimeCollection)
   }
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
@@ -253,6 +255,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   def realtimeEnablePersistence: Boolean = settings.realtimeEnablePersistence
   def realtimeCollectionName: String = settings.realtimeCollectionName
   def realtimeCollectionSize: Long = settings.realtimeCollectionSize
+  def realtimeIndexName:String = settings.realtimeIndex
   def metadataCollectionName: String = settings.MetadataCollection
   def mongoUri: String = settings.MongoUri
   def useLegacySerialization: Boolean = settings.UseLegacyJournalSerialization
