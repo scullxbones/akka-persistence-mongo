@@ -1,5 +1,21 @@
 ## Changelog for 2.x major version
 
+### 2.2.0
+* Merge pull request #208 from scullxbones/wip-184
+* Fix off-by-1 in casbah; update official scala to support ensureCollection
+* Try rxm 0.16 against latest master
+* Bump to reactive-mongo 0.15.1
+* Use the defined failoverStrategy for authenticated connection
+* Add akka.test.timefactor=3 option by default to tests
+* Re-enable parallel-execution
+* Use new ensureCollection method in MongoPersistenceExtension
+* Add an 'ensureCollection' method in MongoPersistenceExtension to be implemented in subclasses
+* JournalTckSpec: Run the DB cleanup after all the tests rather than before
+* Fix compilation error due to API change after upgrading to rxmongo 0.15
+* Upgraded to reactivemongo 0.15
+* Updated docker conf to delete the containers
+* Add mongodb official scala driver support (#207)
+
 ### 2.1.1
 * fix: Race condition on deleteFrom #203 (#205)
 * fix: replace fix #179 with akka/akka #24321 (#206)

@@ -29,10 +29,11 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
 
   override def embedDB = s"tagging-test-$database"
 
-  override def afterAll(): Unit = cleanup()
+  override def beforeAll(): Unit = cleanup()
 
   def config(extensionClass: Class[_]): Config =
-    ConfigFactory.parseString(s"""
+    ConfigFactory.parseString(s"""|
+      |include "/application.conf"
       |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
       |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
       |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -48,7 +49,7 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
       |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
       |}
       $extendedConfig
-      |""".stripMargin)
+      |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   implicit def fn2j8cls[A,B](fn: A => B): com.mongodb.Function[A, B] = {
     new com.mongodb.Function[A, B] {

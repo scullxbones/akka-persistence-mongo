@@ -18,7 +18,7 @@ trait MongoPersistenceSpec[D,C] extends BaseUnitTest with ContainerMongo with Be
     def execute(runnable: Runnable): Unit = { runnable.run() }
   }
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def driver:D
   

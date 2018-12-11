@@ -1,9 +1,10 @@
 ## A MongoDB plugin for [akka-persistence](http://akka.io)
 
- * Three projects, a core and two driver implementations.  To use you must pull jars for *only one* of the drivers. Common will be pulled in as a transitive dependency:
+ * Four projects, a core and three driver implementations.  To use you must pull jars for *only one* of the drivers. Common will be pulled in as a transitive dependency:
    * common provides integration with Akka persistence, implementing the plugin API
    * casbah provides an implementation against the casbah driver
    * rxmongo provides an implementation against the ReactiveMongo driver
+   * scala provides an implementation against the MongoDB official driver
  * The tests expect two mongods running, with and without authentication.  A utility script will boot these as docker containers.
    * A `CONTAINER_HOST` environment variable must be set with the docker host endpoint. The default is `localhost`
      * If using `docker-machine`, `export CONTAINER_HOST=$(docker-machine ip default)` should set the variable correctly for the machine named "default"
@@ -17,19 +18,25 @@
 
 ### Quick Start
 
-* Choose a driver - Casbah and ReactiveMongo are currently supported
+* Choose a driver - MongoDB official Scala, Casbah, and ReactiveMongo are currently supported
 * Driver dependencies are `provided`, meaning they must be included in the application project's dependencies.
+  * Please note that scala also requires the `"org.mongodb.scala" %% "mongo-scala-bson"` project.
+  * If you are planning on using SSL with the official scala driver, please also include netty dependencies 4.x or higher [per official documentation](http://mongodb.github.io/mongo-scala-driver/2.5/reference/connecting/ssl/)
   * Please note that rxmongo also requires the `"org.reactivemongo" %% "reactivemongo-akkastream"` project.
 * Add the following to sbt:
 
+(Official Scala)
+```scala
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "2.2.0"
+```
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.2.0"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.1.1"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.2.0"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -50,7 +57,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Legacy Serialization](#legacyser)
    * [Metrics](#metrics)
    * [Multiple plugins](#multiplugin)
-   * [Casbah Client Settings](#casbahsettings)
+   * [Casbah/Official Scala Client Settings](#officialsettings)
 1. [Suffixed collection names](#suffixcollection)
    * [Overview](#suffixoverview)
    * [Usage](#suffixusage)
@@ -88,7 +95,7 @@ akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@local
 akka.contrib.persistence.mongodb.mongo.database = "storage-db"
 ```
 
-Proper MongoDB user permissions must be in place of course for the user to be able to access `storage-db` in this case
+Proper MongoDB user permissions must be in place for the user to be able to access `storage-db` in this case
 
 <a name="mongocollection"/>
 ##### Mongo Collection, Index settings
@@ -161,13 +168,19 @@ See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.12/docume
 <a name="buffer-size"/>
 ##### Configuring size of buffer for read stream
 
-Akka persitence mongo uses streams to feed the read side with events. By default, the buffer's size is fixed at `1000
-To modify the default value for a specific use case, you can add the following configuration lines in your `application.conf`.
-  
- akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.event-by-pid = [your value]
- akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.all-events = [your value]
- akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.events-by-tag = [your value]
- akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-sizepid = [your value]
+This functionality has effectively been removed with the change of live streams to open a cursor on the realtime collection with every read query.
+
+The `.dropTail` behavior addressed by [#192](https://github.com/scullxbones/akka-persistence-mongo/pull/192) is no longer present.
+
+~~`akka-persistence-mongo` uses streams to feed the read side with events. By default, the buffer's size is fixed at `1000`
+To modify the default value for a specific use case, you can add the following configuration lines in your `application.conf`.~~
+
+```  
+akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.event-by-pid = [your value]
+akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.all-events = [your value]
+akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.events-by-tag = [your value]
+akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.pid = [your value]
+```
 
 <a name="dispatcher"/>
 ##### Configuring the dispatcher used
@@ -184,7 +197,11 @@ akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
 <a name="passthru"/>
 ##### Passing DB objects directly into journal collection
 
-If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONDocument` (using reactivemongo).
+If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with a specific type that corresponds to the driver you use:
+
+* `org.scala.bson.BsonDocument` (using native scala driver)
+* `DBObject` (using casbah driver)
+* `BSONDocument` (using reactivemongo).
 
 ```scala
 case class Command(value: String)
@@ -323,13 +340,33 @@ In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persisten
 
 Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
 
-<a name="casbahsettings"/>
-##### Casbah Client Settings
-The Java MongoDB Driver, Casbah is based on, supports various connection related settings, which can be overriden in
-`application.conf`:
+<a name="officialsettings"/>
+##### Casbah / Official Scala Client Settings
+The Official MongoDB Drivers that are used support various connection related settings, which can be overriden via typesafe config e.g. `application.conf`:
 
+(Official Scala)
 ```
-akka.contrib.persistence.mongodb.casbah{
+akka.contrib.persistence.mongodb.official {
+  minpoolsize = 0
+  maxpoolsize = 100
+  waitqueuemultiple = 5
+  serverselectiontimeout = 30seconds
+  waitqueuetimeout = 2minutes
+  maxidletime = 0
+  maxlifetime = 0
+  connecttimeout = 10seconds
+  sockettimeout = 0seconds
+  ssl = false
+  sslinvalidhostnameallowed = false
+  heartbeatfrequency = 10seconds
+  minheartbeatfrequency = 500ms
+}
+```
+
+
+(Casbah)
+```
+akka.contrib.persistence.mongodb.casbah {
   minpoolsize = 0
   maxpoolsize = 100
   waitqueuemultiple = 5
@@ -349,8 +386,7 @@ akka.contrib.persistence.mongodb.casbah{
 }
 ```
 
-Be aware that some of them can be set via the MongoURI as well, in that case settings from MongoURI override the explicit
-settings.
+Any settings provided in the configured `mongouri` connection string will override explicit settings.
 
 <a name="eventsbytag"/>
 ### EventsByTag queries
@@ -509,7 +545,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.1.1",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.2.0",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
