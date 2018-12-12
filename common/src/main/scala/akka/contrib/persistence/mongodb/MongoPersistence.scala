@@ -4,6 +4,7 @@
  *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * Florian FENDT: optimization, solution collection cache
  * ...
  */
 
@@ -213,12 +214,22 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] lazy val snaps: C = snaps("")
 
+  private[mongodb] val snapsMap = TrieMap.empty[String, C]
+
   private[mongodb] def snaps(persistenceId: String): C = {
-    val snapsCollection = ensureCollection(getSnapsCollectionName(persistenceId))
-    ensureIndex(snapsIndexName, unique = true, sparse = false,
-      SnapshottingFieldNames.PROCESSOR_ID -> 1,
-      SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-      TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
+    val collectionName = getSnapsCollectionName(persistenceId)
+    snapsMap.getOrElseUpdate(collectionName, {
+      val snapsCollection = ensureCollection(getSnapsCollectionName(persistenceId))
+      ensureIndex(snapsIndexName, unique = true, sparse = false,
+        SnapshottingFieldNames.PROCESSOR_ID -> 1,
+        SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
+        TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
+    })
+  }
+
+  private[mongodb] def removeSnapsInCache(persistenceId: String) = {
+    val collectionName = getSnapsCollectionName(persistenceId)
+    snapsMap.remove(collectionName)
   }
 
   private[mongodb] lazy val realtime: C = {
