@@ -20,7 +20,7 @@ import JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class ScalaDriverPersistenceJournaller(driver: ScalaMongoDriver) extends MongoPersistenceJournallingApi {
+class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends MongoPersistenceJournallingApi {
 
   import driver.ScalaSerializers._
   import RxStreamsInterop._

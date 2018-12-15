@@ -243,7 +243,7 @@ This will fully delegate serialization to `akka-serialization` by directly persi
 <a name="metrics"/>
 ##### Metrics (optional functionality)
 
-Depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
+By default metrics depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
 
 For this implementation, no assumptions are made about how the results are reported.  Unfortunately this means you need to inject your own reporters.  This will require you to refer to the extension in your own code, e.g.:
 
@@ -269,6 +269,15 @@ Timers:
 
 Histograms:
  - Batch sizes used for appends
+
+##### Use another Metrics Library
+If you don't want to use the default metrics library, you can also provide your own implementation of
+`akka.contrib.persistence.mongodb.MetricsBuilder` which will then be used to build your implementation of
+`akka.contrib.persistence.mongodb.MongoTimer` and `akka.contrib.persistence.mongodb.MongoHistogram`.
+
+To make akka-persistence-mongo use your `akka.contrib.persistence.mongodb.MetricsBuilder` implementation you need to
+specify the property: `akka.contrib.persistence.mongodb.mongo.metrics-builder.class` with the full qualified class name
+of your implementation of `akka.contrib.persistence.mongodb.MetricsBuilder`.
 
 #### Future plans?
  - Adding metrics to snapshotter

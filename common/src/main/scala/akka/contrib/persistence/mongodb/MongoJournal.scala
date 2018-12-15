@@ -4,7 +4,7 @@ import akka.actor.Actor
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import com.typesafe.config.Config
-import nl.grons.metrics.scala.{MetricName, Timer}
+import nl.grons.metrics.scala.MetricName
 
 import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -153,32 +153,32 @@ trait MongoPersistenceJournallingApi {
   private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
 }
 
-trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with Instrumented {
-  override lazy val metricBaseName = MetricName(s"akka-persistence-mongo.journal.$driverName")
+trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with MongoMetrics {
+
+  def driver: MongoPersistenceDriver
 
   def driverName: String
-  
-  private def timerName(metric: String) = MetricName(metric,"timer").name
-  private def histName(metric: String) = MetricName(metric, "histo").name
-  
-  // Timers
-  private val appendTimer = metrics.timer(timerName("write.append"))
-  private val deleteTimer = metrics.timer(timerName("write.delete-range"))
-  private val replayTimer = metrics.timer(timerName("read.replay"))
-  private val maxTimer = metrics.timer(timerName("read.max-seq"))
-  
-  // Histograms
-  private val writeBatchSize = metrics.histogram(histName("write.append.batch-size"))
 
-  private def timeIt[A](timer: Timer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
-    val ctx = timer.timerContext()
+  override lazy val metricBaseName = MetricName(s"akka-persistence-mongo.journal.$driverName")
+
+  // Timers
+  private val appendTimer = timer("write.append")
+  private val deleteTimer = timer("write.delete-range")
+  private val replayTimer = timer("read.replay")
+  private val maxTimer = timer("read.max-seq")
+
+  // Histograms
+  private val writeBatchSize = histogram("write.append.batch-size")
+
+  private def timeIt[A](timer: MongoTimer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
+    val startedTimer = timer.start()
     val result = block
-    result.onComplete(_ => ctx.stop())
+    result.onComplete(_ => startedTimer.stop())
     result
   }
   
   private[mongodb] abstract override def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = timeIt (appendTimer) {
-    writeBatchSize += writes.map(_.size).sum
+    writeBatchSize.record(writes.map(_.size).sum)
     super.batchAppend(writes)
   }
 
