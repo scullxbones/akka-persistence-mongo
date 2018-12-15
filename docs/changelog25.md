@@ -1,5 +1,11 @@
 ## Changelog for 2.x major version
 
+### 2.2.1
+* Allows to provide a custom MetricsBuilder (#211)
+* Merge pull request #212 from bsinno/optimize-snapshot-collection-cache
+* Merge branch 'master' into optimize-snapshot-collection-cache
+* Optimization: snapshot collection cache
+
 ### 2.2.0
 * Merge pull request #208 from scullxbones/wip-184
 * Fix off-by-1 in casbah; update official scala to support ensureCollection
