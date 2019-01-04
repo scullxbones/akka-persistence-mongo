@@ -112,19 +112,18 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
           EVENTS -> atom.events.map(serializeEvent),
           VERSION -> 1
         )
-      ){ case(o,tags) => o.append(TAGS, BsonArray(tags.toSeq))}
+      ){ case(o,tags) => o.append(TAGS, serializeTags(tags))}
     }
 
     private def serializeEvent(event: Event): BsonValue = {
       val b = serializePayload(event.payload)(BsonDocument(
           VERSION -> 1,
           PROCESSOR_ID -> event.pid,
-          SEQUENCE_NUMBER -> event.sn,
-          TAGS -> event.tags.toSeq
+          SEQUENCE_NUMBER -> event.sn
         ))
       (for {
         doc <- Option(b)
-        doc <- Option(event.tags).filter(_.nonEmpty).map(tags => doc.append(TAGS, BsonArray(tags.toSeq))).orElse(Option(doc))
+        doc <- Option(event.tags).filter(_.nonEmpty).map(tags => doc.append(TAGS, serializeTags(tags))).orElse(Option(doc))
         doc <- event.manifest.map(s => doc.append(MANIFEST, BsonString(s))).orElse(Option(doc))
         doc <- event.writerUuid.map(s => doc.append(WRITER_UUID, BsonString(s))).orElse(Option(doc))
         doc <- event.sender
@@ -133,6 +132,9 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
           .map(s => doc.append(SenderKey, BsonBinary(s))).orElse(Option(doc))
       } yield doc).getOrElse(b)
     }
+
+    private def serializeTags(tags: Set[String]): BsonArray =
+      BsonArray(tags.map(BsonString(_)))
 
     private def serializePayload(payload: Payload)(doc: BsonDocument): BsonDocument = {
       val withType = doc.append(TYPE, BsonString(payload.hint))
