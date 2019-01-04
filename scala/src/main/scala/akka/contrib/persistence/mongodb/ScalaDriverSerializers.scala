@@ -27,7 +27,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
 
   object Version {
     def unapply(doc: BsonDocument): Option[(Int,BsonDocument)] = {
-      Option(doc.get(VERSION)).map(_.asInt32()).map(_.intValue()).orElse(Option(0)).map(_ -> doc)
+      Option(doc.get(VERSION)).filter(_.isInt32).map(_.asInt32).map(_.intValue).orElse(Option(0)).map(_ -> doc)
     }
   }
 
@@ -40,12 +40,12 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
     }
 
     private def extractTags(d: BsonDocument): Seq[String] =
-      Option(d.get(TAGS)).map(_.asArray())
+      Option(d.get(TAGS)).filter(_.isArray).map(_.asArray)
         .map(_.getValues.asScala.collect{ case s:bson.BsonString => s.getValue })
         .getOrElse(Seq.empty[String])
 
     private def extractSender(d: BsonDocument): Option[ActorRef] =
-      Option(d.get(SenderKey)).map(_.asBinary())
+      Option(d.get(SenderKey)).filter(_.isBinary).map(_.asBinary)
         .map(_.getData)
         .flatMap(serialization.deserialize(_, classOf[ActorRef]).toOption)
 
@@ -68,13 +68,13 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
         hint = d.getString(TYPE).getValue,
         any = Option(d.get(PayloadKey)).collect(extractPayloadContent).get,
         tags = Set.empty[String] ++ extractTags(d),
-        clazzName = Option(d.get(HINT)).map(_.asString).map(_.getValue),
-        serId = Option(d.get(SER_ID)).map(_.asInt32()).map(_.getValue),
-        serManifest = Option(d.get(SER_MANIFEST)).map(_.asString()).map(_.getValue)
+        clazzName = Option(d.get(HINT)).filter(_.isString).map(_.asString).map(_.getValue),
+        serId = Option(d.get(SER_ID)).filter(_.isInt32).map(_.asInt32).map(_.getValue),
+        serManifest = Option(d.get(SER_MANIFEST)).filter(_.isString).map(_.asString).map(_.getValue)
       ),
       sender = extractSender(d),
-      manifest = Option(d.get(MANIFEST)).map(_.asString()).map(_.getValue),
-      writerUuid = Option(d.get(WRITER_UUID)).map(_.asString()).map(_.getValue)
+      manifest = Option(d.get(MANIFEST)).filter(_.isString).map(_.asString).map(_.getValue),
+      writerUuid = Option(d.get(WRITER_UUID)).filter(_.isString).map(_.asString).map(_.getValue)
     )
 
     private def deserializeDocumentLegacy(d: BsonDocument) = {
@@ -92,7 +92,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
           )
         case _ =>
           val repr = (for {
-            content <- Option(d.get(SERIALIZED)).map(_.asBinary())
+            content <- Option(d.get(SERIALIZED)).filter(_.isBinary).map(_.asBinary)
             buf = content.getData
             pr <- serialization.deserialize(buf, classOf[PersistentRepr]).toOption
           } yield pr).get

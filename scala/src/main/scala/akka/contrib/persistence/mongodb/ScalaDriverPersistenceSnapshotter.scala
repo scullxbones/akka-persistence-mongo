@@ -31,7 +31,7 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
   def deserializeSnapshot(document: BsonDocument)(implicit serialization: Serialization): SelectedSnapshot = {
     if (document.contains(V1.SERIALIZED)) {
       (for {
-        content <- Option(document.get(V1.SERIALIZED)).map(_.asBinary()).map(_.getData)
+        content <- Option(document.get(V1.SERIALIZED)).filter(_.isBinary).map(_.asBinary).map(_.getData)
         ss      <- serialization.deserialize(content, classOf[SelectedSnapshot]).toOption
       } yield ss).get
     } else {
@@ -40,7 +40,7 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
           o
         case _ =>
           (for {
-            content <- Option(document.get(V2.SERIALIZED)).map(_.asBinary()).map(_.getData)
+            content <- Option(document.get(V2.SERIALIZED)).filter(_.isBinary).map(_.asBinary).map(_.getData)
             snap    <- serialization.deserialize(content, classOf[Snapshot]).toOption
           } yield snap.data).get
       }

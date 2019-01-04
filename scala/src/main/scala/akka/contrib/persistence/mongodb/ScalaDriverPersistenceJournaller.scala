@@ -59,7 +59,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
 
     val flow = Flow[BsonValue]
       .mapConcat[Event](e =>
-        Option(e.asDocument().get(EVENTS)).map(_.asArray()).map(_.getValues.asScala.toList.collect {
+        Option(e.asDocument().get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.toList.collect {
           case d: BsonValue => driver.deserializeJournal(d)
         }).getOrElse(immutable.Seq.empty[Event])
       )
@@ -139,7 +139,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
         Nil
       ).toFuture()
       .map(_.headOption)
-      .map(_.flatMap(l => Option(l.asDocument().get("max")).map(_.asInt64()).map(_.getValue)))
+      .map(_.flatMap(l => Option(l.asDocument().get("max")).filter(_.isInt64).map(_.asInt64).map(_.getValue)))
     }
 
     for {
@@ -198,7 +198,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
         .projection(BsonDocument(MAX_SN -> 1))
         .first()
         .toFutureOption()
-        .map(d => d.flatMap(l => Option(l.asDocument().get(MAX_SN)).map(_.asInt64()).map(_.getValue)))))(l => Future.successful(Option(l)))
+        .map(d => d.flatMap(l => Option(l.asDocument().get(MAX_SN)).filter(_.isInt64).map(_.asInt64).map(_.getValue)))))(l => Future.successful(Option(l)))
   }
 
   override private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) = {
@@ -208,7 +208,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
       .sort(BsonDocument(TO -> -1))
       .first()
       .toFutureOption()
-      .map(d => d.flatMap(a => Option(a.asDocument().get(TO)).map(_.asInt64()).map(_.getValue)))
+      .map(d => d.flatMap(a => Option(a.asDocument().get(TO)).filter(_.isInt64).map(_.asInt64).map(_.getValue)))
       .flatMap(maxSequenceFromMetadata(pid)(_))
       .map(_.getOrElse(0L)))
   }

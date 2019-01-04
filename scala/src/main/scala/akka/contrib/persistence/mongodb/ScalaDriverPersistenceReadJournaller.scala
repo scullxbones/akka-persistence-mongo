@@ -33,7 +33,7 @@ object CurrentAllEvents {
           .projection(include(EVENTS))
           .asAkka
           .map(e =>
-            Option(e.asDocument().get(EVENTS)).map(_.asArray())
+            Option(e.asDocument().get(EVENTS)).filter(_.isArray).map(_.asArray)
               .map(
                 _.getValues.asScala.collect{
                   case d:BsonValue => driver.deserializeJournal(d)
@@ -100,7 +100,7 @@ object CurrentEventsByPersistenceId {
           .asAkka
       ).map(_.asDocument)
        .map(doc =>
-        Option(doc.get(EVENTS)).map(_.asArray())
+        Option(doc.get(EVENTS)).filter(_.isArray).map(_.asArray)
           .map(_.getValues
             .asScala
             .collect{
@@ -133,7 +133,7 @@ object CurrentEventsByTag {
       ).map(_.asDocument)
        .map{ doc =>
         val id = doc.getObjectId(ID).getValue
-        Option(doc.get(EVENTS)).map(_.asArray())
+        Option(doc.get(EVENTS)).filter(_.isArray).map(_.asArray)
           .map(_.getValues
                 .asScala
                 .collect{
@@ -266,7 +266,7 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materialize
           .via(killSwitch.flow)
           .mapConcat[(Event, Offset)] { d =>
             val id = d.getObjectId(ID).getValue
-            Option(d.get(EVENTS)).map(_.asArray()).map(_.getValues.asScala.collect {
+            Option(d.get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.collect {
               case d: BsonValue =>
                 driver.deserializeJournal(d) -> ObjectIdOffset(id.toHexString, id.getDate.getTime)
             }.toList).getOrElse(Nil)
