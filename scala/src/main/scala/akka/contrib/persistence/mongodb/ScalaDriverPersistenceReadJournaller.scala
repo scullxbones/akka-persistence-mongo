@@ -32,11 +32,11 @@ object CurrentAllEvents {
         _.find()
           .projection(include(EVENTS))
           .asAkka
-          .map(
-            _.get[BsonArray](EVENTS)
+          .map(e =>
+            Option(e.asDocument().get(EVENTS)).map(_.asArray())
               .map(
                 _.getValues.asScala.collect{
-                  case d:BsonDocument => driver.deserializeJournal(d)
+                  case d:BsonValue => driver.deserializeJournal(d)
                 })
               .getOrElse(Nil)
           ).mapConcat(xs => Seq(xs:_*))
@@ -67,8 +67,7 @@ object CurrentPersistenceIds {
       tmps         <- Future.sequence(tmpNames.map(driver.collection))
     } yield tmps )
     .flatMapConcat(_.map(_.find().asAkka).reduceLeftOption(_ ++ _).getOrElse(Source.empty))
-    .mapConcat(_.get[BsonString]("_id").toList)
-    .map(_.getValue)
+    .mapConcat(c => List(c.asDocument().getString("_id").getValue))
     .alsoTo(Sink.onComplete{ _ =>
       driver
         .getCollectionsAsFuture(temporaryCollectionName)
@@ -99,8 +98,9 @@ object CurrentEventsByPersistenceId {
           .sort(ascending(TO))
           .projection(include(EVENTS))
           .asAkka
-      ).map( doc =>
-        doc.get[BsonArray](EVENTS)
+      ).map(_.asDocument)
+       .map(doc =>
+        Option(doc.get(EVENTS)).map(_.asArray())
           .map(_.getValues
             .asScala
             .collect{
@@ -130,13 +130,14 @@ object CurrentEventsByTag {
         _.map(_.find(query).sort(ascending(ID)).asAkka)
          .reduceLeftOption(_ ++ _)
          .getOrElse(Source.empty[driver.D])
-      ).map{ doc =>
-        val id = doc.get[BsonObjectId](ID).get.getValue
-        doc.get[BsonArray](EVENTS)
+      ).map(_.asDocument)
+       .map{ doc =>
+        val id = doc.getObjectId(ID).getValue
+        Option(doc.get(EVENTS)).map(_.asArray())
           .map(_.getValues
                 .asScala
                 .collect{
-                  case d:BsonDocument =>
+                  case d:BsonValue =>
                     driver.deserializeJournal(d) -> ObjectIdOffset(id.toHexString, id.getDate.getTime)
                 }
                 .filter{
@@ -147,19 +148,19 @@ object CurrentEventsByTag {
   }
 }
 
-class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(factory: Option[BsonObjectId] => FindObservable[Document])
-  extends GraphStage[SourceShape[Document]] {
+class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(factory: Option[BsonObjectId] => FindObservable[BsonDocument])
+  extends GraphStage[SourceShape[BsonDocument]] {
 
-  private val out = Outlet[Document]("out")
+  private val out = Outlet[BsonDocument]("out")
 
-  override def shape: SourceShape[Document] = SourceShape(out)
+  override def shape: SourceShape[BsonDocument] = SourceShape(out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) {
       @volatile private var lastId: Option[BsonObjectId] = None
       @volatile private var subscription: Option[Subscription] = None
-      @volatile private var buffer: List[Document] = Nil
-      private var currentCursor: Option[FindObservable[Document]] = None
+      @volatile private var buffer: List[BsonDocument] = Nil
+      private var currentCursor: Option[FindObservable[BsonDocument]] = None
 
       override def preStart(): Unit = {
         currentCursor = Option(buildCursor(buildObserver))
@@ -168,14 +169,14 @@ class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(f
       override def postStop(): Unit =
         subscription.foreach(s => if (!s.isUnsubscribed) s.unsubscribe())
 
-      private def onNextAc = getAsyncCallback[Document] { result =>
+      private def onNextAc = getAsyncCallback[BsonDocument] { result =>
         if (isAvailable(out)) {
           push(out, result)
           subscription.foreach(_.request(1L))
         }
         else
           buffer = buffer ::: List(result)
-        lastId = result.get[BsonObjectId]("_id")
+        lastId = Option(result.get("_id")).map(_.asObjectId())
       }
 
       private def onSubAc = getAsyncCallback[Subscription]{ _subscription =>
@@ -191,7 +192,7 @@ class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(f
         currentCursor = Option(buildCursor(buildObserver))
       }
 
-      def buildObserver: Observer[Document] = new Observer[Document] {
+      def buildObserver: Observer[BsonDocument] = new Observer[BsonDocument] {
         private val nextAc = onNextAc
         private val errAc = onErrAc
         private val subAc = onSubAc
@@ -200,7 +201,7 @@ class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(f
         override def onSubscribe(subscription: Subscription): Unit =
           subAc.invoke(subscription)
 
-        override def onNext(result: Document): Unit =
+        override def onNext(result: BsonDocument): Unit =
           nextAc.invoke(result)
 
         override def onError(e: Throwable): Unit =
@@ -226,7 +227,7 @@ class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(f
         }
       })
 
-      private def buildCursor(observer: Observer[Document]): FindObservable[Document] = {
+      private def buildCursor(observer: Observer[BsonDocument]): FindObservable[BsonDocument] = {
         subscription.foreach(s => if (!s.isUnsubscribed) s.unsubscribe())
         val c = factory(lastId)
         c.subscribe(observer)
@@ -241,7 +242,7 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materialize
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-  private val cursorBuilder: FindObservable[driver.D] => FindObservable[driver.D] =
+  private val cursorBuilder: FindObservable[BsonDocument] => FindObservable[BsonDocument] =
     _.cursorType(CursorType.TailableAwait)
      .maxAwaitTime(30.seconds)
 
@@ -264,9 +265,9 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materialize
           }).named("rt-graph-stage").async)
           .via(killSwitch.flow)
           .mapConcat[(Event, Offset)] { d =>
-            val id = d.get[BsonObjectId](ID).get.getValue
-            d.get[BsonArray](EVENTS).map(_.getValues.asScala.collect {
-              case d: BsonDocument =>
+            val id = d.getObjectId(ID).getValue
+            Option(d.get(EVENTS)).map(_.asArray()).map(_.getValues.asScala.collect {
+              case d: BsonValue =>
                 driver.deserializeJournal(d) -> ObjectIdOffset(id.toHexString, id.getDate.getTime)
             }.toList).getOrElse(Nil)
           }

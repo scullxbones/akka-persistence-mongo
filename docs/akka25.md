@@ -199,9 +199,9 @@ akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
 
 If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with a specific type that corresponds to the driver you use:
 
-* `org.scala.bson.BsonDocument` (using native scala driver)
-* `DBObject` (using casbah driver)
-* `BSONDocument` (using reactivemongo).
+* `org.bson.BsonValue` (using native scala driver)
+* `com.mongodb.DBObject` (using casbah driver)
+* `reactivemongo.bson.BSONDocument` (using reactivemongo).
 
 ```scala
 case class Command(value: String)

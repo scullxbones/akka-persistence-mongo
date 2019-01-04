@@ -12,40 +12,40 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
 
-  def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): Document = {
-    val obj = Document(
+  def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): BsonValue = {
+    val obj = BsonDocument(
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp
     )
     snapshot.snapshot match {
-      case o: Document =>
-        obj + (V2.SERIALIZED -> o)
+      case o: BsonValue =>
+        obj.append(V2.SERIALIZED, o)
       case _ =>
         Serialization.withTransportInformation(serialization.system) { () =>
-          obj + (V2.SERIALIZED -> serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
+          obj.append(V2.SERIALIZED, BsonBinary(serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot))))
         }
     }
   }
 
-  def deserializeSnapshot(document: Document)(implicit serialization: Serialization): SelectedSnapshot = {
+  def deserializeSnapshot(document: BsonDocument)(implicit serialization: Serialization): SelectedSnapshot = {
     if (document.contains(V1.SERIALIZED)) {
       (for {
-        content <- document.get[BsonBinary](V1.SERIALIZED).map(_.getData)
+        content <- Option(document.get(V1.SERIALIZED)).map(_.asBinary()).map(_.getData)
         ss      <- serialization.deserialize(content, classOf[SelectedSnapshot]).toOption
       } yield ss).get
     } else {
-      val content = document.get[BsonValue](V2.SERIALIZED) match {
+      val content = Option(document.get(V2.SERIALIZED)) match {
         case Some(o: BsonDocument) =>
           o
         case _ =>
           (for {
-            content <- document.get[BsonBinary](V2.SERIALIZED).map(_.getData)
+            content <- Option(document.get(V2.SERIALIZED)).map(_.asBinary()).map(_.getData)
             snap    <- serialization.deserialize(content, classOf[Snapshot]).toOption
           } yield snap.data).get
       }
 
-      val pid = document.getString(PROCESSOR_ID)
+      val pid = document.getString(PROCESSOR_ID).getValue
       val sn = document.getLong(SEQUENCE_NUMBER)
       val ts = document.getLong(TIMESTAMP)
       SelectedSnapshot(SnapshotMetadata(pid, sn, ts), content)
@@ -53,8 +53,8 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
   }
 
   @deprecated("Use v2 write instead", "0.3.0")
-  def legacySerializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): Document =
-    Document(PROCESSOR_ID -> snapshot.metadata.persistenceId,
+  def legacySerializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): BsonDocument =
+    BsonDocument(PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp,
       V1.SERIALIZED -> serialization.serializerFor(classOf[SelectedSnapshot]).toBinary(snapshot))
@@ -75,7 +75,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
       .sort(descending(SnapshottingFieldNames.SEQUENCE_NUMBER, SnapshottingFieldNames.TIMESTAMP))
       .first()
       .toFutureOption()
-      .map(_.map(deserializeSnapshot))
+      .map(_.map(_.asDocument()).map(deserializeSnapshot))
       .recoverWith{
         case t: Throwable =>
           t.printStackTrace()
@@ -94,7 +94,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
       .flatMap(
         _.replaceOne(
           query,
-          serializeSnapshot(snapshot).toBsonDocument,
+          serializeSnapshot(snapshot),
           new ReplaceOptions().upsert(true)
         ).toFuture()
       ).map(_ => ())

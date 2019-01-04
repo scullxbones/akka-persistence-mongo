@@ -4,7 +4,6 @@ import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.stream.scaladsl._
 import com.mongodb.ErrorCategory
-import org.bson.{BsonArray, BsonDocument}
 import org.mongodb.scala._
 import model.Filters._
 import model.Updates._
@@ -12,7 +11,7 @@ import model.Aggregates._
 import model.{Accumulators, BulkWriteOptions, InsertOneModel, UpdateOptions}
 import model.Sorts._
 import model.Projections._
-import org.mongodb.scala.bson.BsonInt64
+import org.mongodb.scala.bson.{BsonDocument, BsonValue}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.{JavaConverters, immutable}
@@ -58,10 +57,10 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
             .take(max.toLong)
         )
 
-    val flow = Flow[Document]
-      .mapConcat[Event](
-        _.get[BsonArray](EVENTS).map(_.getValues.asScala.toList.collect {
-          case d: BsonDocument => driver.deserializeJournal(Document(d))
+    val flow = Flow[BsonValue]
+      .mapConcat[Event](e =>
+        Option(e.asDocument().get(EVENTS)).map(_.asArray()).map(_.getValues.asScala.toList.collect {
+          case d: BsonValue => driver.deserializeJournal(d)
         }).getOrElse(immutable.Seq.empty[Event])
       )
       .filter(_.sn >= from)
@@ -71,7 +70,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
   }
 
   private[this] def doBatchAppend(writes: immutable.Seq[AtomicWrite], collection: driver.C)(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = {
-    val batch = writes.map(aw => Try(driver.serializeJournal(Atom[Document](aw, driver.useLegacySerialization))))
+    val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BsonValue](aw, driver.useLegacySerialization))))
 
     if (batch.forall(_.isSuccess)) {
       val collected: Seq[InsertOneModel[driver.D]] = batch.collect { case Success(doc) => InsertOneModel(doc) }
@@ -80,7 +79,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
         .map(_ => batch.map(_.map(_ => ()))))
     } else {
       Future.sequence(batch.map {
-        case Success(document: Document) =>
+        case Success(document: BsonValue) =>
           collection.flatMap(_.withWriteConcern(writeConcern).insertOne(document).toFuture().map(_ => Success(())))
         case f: Failure[_] =>
           Future.successful(Failure[Unit](f.exception))
@@ -140,7 +139,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
         Nil
       ).toFuture()
       .map(_.headOption)
-      .map(_.flatMap(_.get[BsonInt64]("max").map(_.getValue)))
+      .map(_.flatMap(l => Option(l.asDocument().get("max")).map(_.asInt64()).map(_.getValue)))
     }
 
     for {
@@ -195,21 +194,21 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
 
   private[this] def maxSequenceFromMetadata(pid: String)(previous: Option[Long])(implicit ec: ExecutionContext): Future[Option[Long]] = {
     previous.fold(
-      metadata.flatMap(_.find(Document(PROCESSOR_ID -> pid))
-        .projection(Document(MAX_SN -> 1))
+      metadata.flatMap(_.find(BsonDocument(PROCESSOR_ID -> pid))
+        .projection(BsonDocument(MAX_SN -> 1))
         .first()
         .toFutureOption()
-        .map(d => d.flatMap(_.get[BsonInt64](MAX_SN).map(_.getValue)))))(l => Future.successful(Option(l)))
+        .map(d => d.flatMap(l => Option(l.asDocument().get(MAX_SN)).map(_.asInt64()).map(_.getValue)))))(l => Future.successful(Option(l)))
   }
 
   override private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext) = {
     val journal = driver.getJournal(pid)
-    journal.flatMap(_.find(Document(PROCESSOR_ID -> pid))
-      .projection(Document(TO -> 1))
-      .sort(Document(TO -> -1))
+    journal.flatMap(_.find(BsonDocument(PROCESSOR_ID -> pid))
+      .projection(BsonDocument(TO -> 1))
+      .sort(BsonDocument(TO -> -1))
       .first()
       .toFutureOption()
-      .map(d => d.flatMap(_.get[BsonInt64](TO).map(_.getValue)))
+      .map(d => d.flatMap(a => Option(a.asDocument().get(TO)).map(_.asInt64()).map(_.getValue)))
       .flatMap(maxSequenceFromMetadata(pid)(_))
       .map(_.getOrElse(0L)))
   }
