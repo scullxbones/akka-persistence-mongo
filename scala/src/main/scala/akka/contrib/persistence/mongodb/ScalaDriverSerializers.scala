@@ -85,7 +85,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
           Event(
             pid = persistenceId,
             sn = sequenceNr,
-            payload = Bson[BsonValue](b.getDocument(PayloadKey), Set()),
+            payload = Bson[BsonValue](b.get(PayloadKey), Set()),
             sender = extractSender(b),
             manifest = None,
             writerUuid = None
