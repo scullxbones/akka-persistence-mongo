@@ -3,7 +3,7 @@ import akka.persistence.serialization.Snapshot
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata}
 import akka.serialization.Serialization
 import org.mongodb.scala._
-import org.mongodb.scala.bson.{BsonBinary, BsonDocument, BsonValue}
+import org.mongodb.scala.bson.{BsonBinary, BsonDocument}
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.model.{IndexOptions, ReplaceOptions}
@@ -12,14 +12,14 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
 
-  def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): BsonValue = {
+  def serializeSnapshot(snapshot: SelectedSnapshot)(implicit serialization: Serialization): BsonDocument = {
     val obj = BsonDocument(
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp
     )
     snapshot.snapshot match {
-      case o: BsonValue =>
+      case o: BsonDocument =>
         obj.append(V2.SERIALIZED, o)
       case _ =>
         Serialization.withTransportInformation(serialization.system) { () =>

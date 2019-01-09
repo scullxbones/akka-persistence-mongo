@@ -129,7 +129,7 @@ object CurrentEventsByTag {
       .flatMapConcat(
         _.map(_.find(query).sort(ascending(ID)).asAkka)
          .reduceLeftOption(_ ++ _)
-         .getOrElse(Source.empty[driver.D])
+         .getOrElse(Source.empty[BsonDocument])
       ).map(_.asDocument)
        .map{ doc =>
         val id = doc.getObjectId(ID).getValue

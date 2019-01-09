@@ -16,7 +16,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
-  override type C = Future[MongoCollection[D]]
+  override type C = Future[MongoCollection[BsonDocument]]
   override type D = BsonValue
 
   val ScalaSerializers: ScalaDriverSerializers = ScalaDriverSerializersExtension(system)
@@ -86,11 +86,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     }
   }
 
-  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
+  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[MongoCollection[BsonDocument]]] = {
     getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
 
-  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
+  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[BsonDocument]]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
         name == metadataCollectionName ||

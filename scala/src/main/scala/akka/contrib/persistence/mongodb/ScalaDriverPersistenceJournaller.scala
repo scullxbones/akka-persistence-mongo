@@ -73,13 +73,13 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BsonValue](aw, driver.useLegacySerialization))))
 
     if (batch.forall(_.isSuccess)) {
-      val collected: Seq[InsertOneModel[driver.D]] = batch.collect { case Success(doc) => InsertOneModel(doc) }
+      val collected: Seq[InsertOneModel[BsonDocument]] = batch.collect { case Success(doc: BsonDocument) => InsertOneModel(doc) }
       collection.flatMap(_.withWriteConcern(writeConcern).bulkWrite(collected, new BulkWriteOptions().ordered(true))
         .toFuture()
         .map(_ => batch.map(_.map(_ => ()))))
     } else {
       Future.sequence(batch.map {
-        case Success(document: BsonValue) =>
+        case Success(document: BsonDocument) =>
           collection.flatMap(_.withWriteConcern(writeConcern).insertOne(document).toFuture().map(_ => Success(())))
         case f: Failure[_] =>
           Future.successful(Failure[Unit](f.exception))
@@ -132,7 +132,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
   }
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
-    def performAggregation(j: MongoCollection[driver.D]): Future[Option[Long]] = {
+    def performAggregation(j: MongoCollection[BsonDocument]): Future[Option[Long]] = {
       j.aggregate(
         `match`(and(equal(PROCESSOR_ID,persistenceId), lte(TO, maxSequenceNr))) ::
         group(s"$$$PROCESSOR_ID", Accumulators.max("max", s"$$$TO")) ::
