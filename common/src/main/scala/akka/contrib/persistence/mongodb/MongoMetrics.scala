@@ -124,7 +124,7 @@ private class DropwizardHistogram(dropwizardHistogram: Histogram) extends MongoH
 private[mongodb] object DropwizardMetrics extends MetricsBuilder with InstrumentedBuilder {
 
   override lazy val metricBaseName: MetricName = MetricName("")
-  override val metricRegistry: MetricRegistry = SharedMetricRegistries.getOrCreate("mongodb")
+  override lazy val metricRegistry: MetricRegistry = SharedMetricRegistries.getOrCreate("mongodb")
 
   private def timerName(metric: String) = MetricName(metric, "timer").name
 
