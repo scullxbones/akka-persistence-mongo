@@ -41,7 +41,8 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
             content <- Option(b).filter(_.isBinary).map(_.asBinary).map(_.getData)
             snap    <- serialization.deserialize(content, classOf[Snapshot]).toOption
           } yield snap.data).get
-        case x => x
+        case Some(b: BsonValue) => b
+        case _ => null
       }
 
       val pid = document.getString(PROCESSOR_ID).getValue
