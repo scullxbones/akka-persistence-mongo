@@ -8,19 +8,19 @@ import akka.stream.ActorMaterializer
 import com.mongodb.ConnectionString
 import com.mongodb.client.model.{CreateCollectionOptions, IndexOptions}
 import com.typesafe.config.Config
+import org.mongodb.scala.bson.{BsonBoolean, BsonDocument}
+import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.{MongoClientSettings, _}
-import model.Indexes._
-import org.mongodb.scala.bson.{BsonBoolean, BsonDocument, BsonValue}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
-  override type C = Future[MongoCollection[BsonDocument]]
-  override type D = BsonValue
+  override type C = Future[MongoCollection[D]]
+  override type D = BsonDocument
 
   val ScalaSerializers: ScalaDriverSerializers = ScalaDriverSerializersExtension(system)
-  val scalaDriverSettings = ScalaDriverSettings(system)
+  val scalaDriverSettings: ScalaDriverSettings = ScalaDriverSettings(system)
 
   private def mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
@@ -86,11 +86,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     }
   }
 
-  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[MongoCollection[BsonDocument]]] = {
+  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
     getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
 
-  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[BsonDocument]]] = {
+  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
         name == metadataCollectionName ||

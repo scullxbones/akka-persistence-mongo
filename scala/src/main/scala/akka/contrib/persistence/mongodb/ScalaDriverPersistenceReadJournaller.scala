@@ -36,7 +36,7 @@ object CurrentAllEvents {
             Option(e.asDocument().get(EVENTS)).filter(_.isArray).map(_.asArray)
               .map(
                 _.getValues.asScala.collect{
-                  case d:BsonValue => driver.deserializeJournal(d)
+                  case d:BsonDocument => driver.deserializeJournal(d)
                 })
               .getOrElse(Nil)
           ).mapConcat(xs => Seq(xs:_*))
@@ -137,7 +137,7 @@ object CurrentEventsByTag {
           .map(_.getValues
                 .asScala
                 .collect{
-                  case d:BsonValue =>
+                  case d:BsonDocument =>
                     driver.deserializeJournal(d) -> ObjectIdOffset(id.toHexString, id.getDate.getTime)
                 }
                 .filter{
@@ -267,7 +267,7 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materialize
           .mapConcat[(Event, Offset)] { d =>
             val id = d.getObjectId(ID).getValue
             Option(d.get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.collect {
-              case d: BsonValue =>
+              case d: BsonDocument =>
                 driver.deserializeJournal(d) -> ObjectIdOffset(id.toHexString, id.getDate.getTime)
             }.toList).getOrElse(Nil)
           }

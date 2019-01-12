@@ -3,7 +3,7 @@ import akka.persistence.serialization.Snapshot
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata}
 import akka.serialization.Serialization
 import org.mongodb.scala._
-import org.mongodb.scala.bson.{BsonBinary, BsonDocument}
+import org.mongodb.scala.bson.{BsonBinary, BsonDocument, BsonValue}
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.model.{IndexOptions, ReplaceOptions}
@@ -19,7 +19,7 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
       TIMESTAMP -> snapshot.metadata.timestamp
     )
     snapshot.snapshot match {
-      case o: BsonDocument =>
+      case o: BsonValue =>
         obj.append(V2.SERIALIZED, o)
       case _ =>
         Serialization.withTransportInformation(serialization.system) { () =>
@@ -36,13 +36,12 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
       } yield ss).get
     } else {
       val content = Option(document.get(V2.SERIALIZED)) match {
-        case Some(o: BsonDocument) =>
-          o
-        case _ =>
+        case Some(b: BsonBinary) =>
           (for {
-            content <- Option(document.get(V2.SERIALIZED)).filter(_.isBinary).map(_.asBinary).map(_.getData)
+            content <- Option(b).filter(_.isBinary).map(_.asBinary).map(_.getData)
             snap    <- serialization.deserialize(content, classOf[Snapshot]).toOption
           } yield snap.data).get
+        case x => x
       }
 
       val pid = document.getString(PROCESSOR_ID).getValue

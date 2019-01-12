@@ -32,8 +32,8 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
   }
 
 
-  implicit object Deserializer extends CanDeserializeJournal[BsonValue] {
-    override def deserializeDocument(dbo: BsonValue): Event = dbo match {
+  implicit object Deserializer extends CanDeserializeJournal[BsonDocument] {
+    override def deserializeDocument(dbo: BsonDocument): Event = dbo match {
       case Version(1,d) => deserializeVersionOne(d.asDocument())
       case Version(0,d) => deserializeDocumentLegacy(d.asDocument())
       case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
@@ -102,8 +102,8 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
     }
   }
 
-  implicit object Serializer extends CanSerializeJournal[BsonValue] with DefaultBsonTransformers {
-    override def serializeAtom(atom: Atom): BsonValue = {
+  implicit object Serializer extends CanSerializeJournal[BsonDocument] with DefaultBsonTransformers {
+    override def serializeAtom(atom: Atom): BsonDocument = {
       Option(atom.tags).filter(_.nonEmpty).foldLeft(
         BsonDocument(
           PROCESSOR_ID -> atom.pid,
@@ -115,7 +115,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
       ){ case(o,tags) => o.append(TAGS, serializeTags(tags))}
     }
 
-    private def serializeEvent(event: Event): BsonValue = {
+    private def serializeEvent(event: Event): BsonDocument = {
       val b = serializePayload(event.payload)(BsonDocument(
           VERSION -> 1,
           PROCESSOR_ID -> event.pid,

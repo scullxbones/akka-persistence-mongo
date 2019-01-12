@@ -57,10 +57,10 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
             .take(max.toLong)
         )
 
-    val flow = Flow[BsonValue]
+    val flow = Flow[BsonDocument]
       .mapConcat[Event](e =>
-        Option(e.asDocument().get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.toList.collect {
-          case d: BsonValue => driver.deserializeJournal(d)
+        Option(e.get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.toList.collect {
+          case d: BsonDocument => driver.deserializeJournal(d)
         }).getOrElse(immutable.Seq.empty[Event])
       )
       .filter(_.sn >= from)
@@ -73,7 +73,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
     val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BsonValue](aw, driver.useLegacySerialization))))
 
     if (batch.forall(_.isSuccess)) {
-      val collected: Seq[InsertOneModel[BsonDocument]] = batch.collect { case Success(doc: BsonDocument) => InsertOneModel(doc) }
+      val collected: Seq[InsertOneModel[driver.D]] = batch.collect { case Success(doc) => InsertOneModel(doc) }
       collection.flatMap(_.withWriteConcern(writeConcern).bulkWrite(collected, new BulkWriteOptions().ordered(true))
         .toFuture()
         .map(_ => batch.map(_.map(_ => ()))))
