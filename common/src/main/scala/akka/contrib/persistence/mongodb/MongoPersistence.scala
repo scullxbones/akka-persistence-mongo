@@ -16,7 +16,6 @@ import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
 import com.typesafe.config.Config
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
@@ -185,33 +184,37 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
   private[mongodb] lazy val journal: C = journal("")
 
-  private[mongodb] val journalMap = TrieMap.empty[String, C]
+  private[mongodb] val journalCache = MongoCollectionCache[C](config, "collection-cache.journal")
 
   private[mongodb] def journal(persistenceId: String): C = {
     val collectionName = getJournalCollectionName(persistenceId)
-    journalMap.getOrElseUpdate(collectionName, {
-      val journalCollection = ensureCollection(collectionName)
+
+    journalCache.getOrElseCreate(collectionName, theCollectionName => {
+      val journalCollection = ensureCollection(theCollectionName)
 
       indexes.foldLeft(journalCollection) { (acc, index) =>
         import index._
+        // TODO: replace global execution context by the one configured for the persistence plugin
         ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
       }
     })
   }
 
-  private[mongodb] def removeJournalInCache(persistenceId:String) = {
+  private[mongodb] def removeJournalInCache(persistenceId: String): Unit = {
     val collectionName = getJournalCollectionName(persistenceId)
-    journalMap.remove(collectionName)
+    journalCache.invalidate(collectionName)
   }
 
   private[mongodb] lazy val snaps: C = snaps("")
 
-  private[mongodb] val snapsMap = TrieMap.empty[String, C]
+  private[mongodb] val snapsCache = MongoCollectionCache[C](config, "collection-cache.snaps")
 
   private[mongodb] def snaps(persistenceId: String): C = {
     val collectionName = getSnapsCollectionName(persistenceId)
-    snapsMap.getOrElseUpdate(collectionName, {
-      val snapsCollection = ensureCollection(getSnapsCollectionName(persistenceId))
+    snapsCache.getOrElseCreate(collectionName, theCollectionName => {
+      val snapsCollection = ensureCollection(theCollectionName)
+
+      // TODO: replace global execution context by the one configured for the persistence plugin
       ensureIndex(snapsIndexName, unique = true, sparse = false,
         SnapshottingFieldNames.PROCESSOR_ID -> 1,
         SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
@@ -219,12 +222,14 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     })
   }
 
-  private[mongodb] def removeSnapsInCache(persistenceId: String) = {
+  private[mongodb] def removeSnapsInCache(persistenceId: String): Unit = {
     val collectionName = getSnapsCollectionName(persistenceId)
-    snapsMap.remove(collectionName)
+    snapsCache.invalidate(collectionName)
   }
 
   private[mongodb] lazy val realtime: C = {
+
+    // TODO: replace global execution context by the one configured for the persistence plugin
     cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.global)
   }
 
