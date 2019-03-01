@@ -43,12 +43,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
 
   override private[mongodb] def ensureCollection(name: String): C = {
     implicit val ec: ExecutionContext = system.dispatcher
-    db.listCollectionNames().toFuture().flatMap {
-      case xs if xs.contains(name) =>
-        collection(name)
-      case _ =>
-        db.createCollection(name).toFuture().flatMap(_ => collection(name))
-    }
+
+    for {
+      _ <- db.createCollection(name).toFuture().recover { case MongoErrors.NamespaceExists() => Completed }
+      mongoCollection <- collection(name)
+    } yield mongoCollection
   }
 
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
@@ -67,6 +66,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       val options = new CreateCollectionOptions().capped(true).sizeInBytes(realtimeCollectionSize)
       db.createCollection(name, options)
         .toFuture()
+        .recover({ case MongoErrors.NamespaceExists() => Completed })
         .flatMap(_ => collection(name))
     }
 
