@@ -98,10 +98,10 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
   private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
-  private[mongodb] override def collection(name: String) = db.map(_[BSONCollection](name))(system.dispatcher)
+  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))(system.dispatcher)
 
   private val NamespaceExistsErrorCode = 48
-  private[mongodb] override def ensureCollection(name: String): Future[BSONCollection] = {
+  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] = {
     implicit val ec: ExecutionContext = system.dispatcher
     for {
       coll <- collection(name)

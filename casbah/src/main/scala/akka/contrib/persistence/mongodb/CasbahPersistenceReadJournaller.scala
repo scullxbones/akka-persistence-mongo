@@ -20,7 +20,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 import scala.{util => su}
 
-case class MultiCursor(driver: CasbahMongoDriver, query: DBObject) {
+case class MultiCursor(driver: CasbahMongoDriver, query: DBObject)(implicit ec: ExecutionContext) {
   import driver.CasbahSerializers._
 
   private val cursors: List[driver.C#CursorType] =
@@ -49,7 +49,7 @@ case class MultiCursor(driver: CasbahMongoDriver, query: DBObject) {
 
 }
 
-class CurrentPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPublisher[String, Stream[String]] {
+class CurrentPersistenceIds(val driver: CasbahMongoDriver)(implicit ec: ExecutionContext) extends SyncActorPublisher[String, Stream[String]] {
   import driver.CasbahSerializers._
 
   val temporaryCollectionName = s"persistenceids-${System.currentTimeMillis()}-${su.Random.nextInt(1000)}"
@@ -82,7 +82,7 @@ class CurrentPersistenceIds(val driver: CasbahMongoDriver) extends SyncActorPubl
   }
 }
 
-class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher[Event, MultiCursor] {
+class CurrentAllEvents(val driver: CasbahMongoDriver)(implicit ec: ExecutionContext) extends SyncActorPublisher[Event, MultiCursor] {
   override protected def initialCursor: MultiCursor =
     MultiCursor(driver, MongoDBObject())
 
@@ -99,7 +99,7 @@ class CurrentAllEvents(val driver: CasbahMongoDriver) extends SyncActorPublisher
   override protected def discard(c: MultiCursor): Unit = c.close()
 }
 
-class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)
+class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit ec: ExecutionContext)
   extends SyncActorPublisher[Event, Stream[Event]] {
   import driver.CasbahSerializers._
 
@@ -124,7 +124,7 @@ class CurrentEventsByPersistenceId(val driver: CasbahMongoDriver, persistenceId:
   override protected def discard(c: Stream[Event]): Unit = ()
 }
 
-class CurrentEventsByTagCursorSource(driver: CasbahMongoDriver, tag: String, fromOffset: Offset)
+class CurrentEventsByTagCursorSource(driver: CasbahMongoDriver, tag: String, fromOffset: Offset)(implicit ec: ExecutionContext)
   extends GraphStage[SourceShape[(Event, Offset)]]
     with JournallingFieldNames {
 
@@ -263,16 +263,16 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
     stream
   }
 
-  override def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed] =
+  override def currentAllEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     Source.fromGraph(new CurrentAllEvents(driver)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
+  override def currentPersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] =
     Source.fromGraph(new CurrentPersistenceIds(driver)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     Source.fromGraph(new CurrentEventsByPersistenceId(driver, persistenceId, fromSeq, toSeq)).mapMaterializedValue(_ => NotUsed)
 
-  override def currentEventsByTag(tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
+  override def currentEventsByTag(tag: String, fromOffset: Offset)(implicit m: Materializer, ec: ExecutionContext): Source[(Event, Offset), NotUsed] = {
     Source.fromGraph(new CurrentEventsByTagCursorSource(driver, tag, fromOffset))
   }
 
@@ -282,21 +282,21 @@ class CasbahPersistenceReadJournaller(driver: CasbahMongoDriver) extends MongoPe
       case ObjectIdOffset(hexStr, _) => ObjectId.isValid(hexStr)
     }
 
-  override def livePersistenceIds(implicit m: Materializer): Source[String, NotUsed] = {
+  override def livePersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] = {
     journalStreaming.cursorSource(None).map{ case(ev, _) => ev.pid }
   }
 
-  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer): Source[Event, NotUsed] = {
+  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] = {
    journalStreaming.cursorSource(
      Option(BasicDBObjectBuilder.start().append(driver.CasbahSerializers.PROCESSOR_ID, persistenceId).get())
    ).map{ case(ev,_) => ev}
   }
 
-  override def liveEvents(implicit m: Materializer): Source[Event, NotUsed] = {
+  override def liveEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] = {
     journalStreaming.cursorSource(None).map{ case(ev, _) => ev}
   }
 
-  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] = {
+  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] = {
     journalStreaming.cursorSource(
       Option(BasicDBObjectBuilder.start().append(driver.CasbahSerializers.TAGS, tag).get())
     )

@@ -35,9 +35,9 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
-  private[this] def realtime = driver.realtime
+  private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
 
-  private[this] def metadata = driver.metadata
+  private[this] def metadata(implicit ec: ExecutionContext) = driver.metadata
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) = BSONDocument(
     PROCESSOR_ID -> pid,

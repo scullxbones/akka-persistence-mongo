@@ -13,13 +13,14 @@ import akka.stream.{javadsl => _, scaladsl => _, _}
 import com.typesafe.config.Config
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 
 object MongoReadJournal {
   val Identifier = "akka-contrib-mongodb-persistence-readjournal"
 }
 
-class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends ReadJournalProvider {
-
+class MongoReadJournal(system: ExtendedActorSystem, config: Config)
+  extends WithMongoPersistencePluginDispatcher(system, config) with ReadJournalProvider {
 
   private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
   private[this] implicit val materializer: Materializer = ActorMaterializer()(system)
@@ -32,10 +33,10 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config) extends Read
 object ScalaDslMongoReadJournal {
 
   val eventToEventEnvelope: Flow[Event, EventEnvelope, NotUsed] =
-    Flow[Event].zipWithIndex.map{ case (event, offset) => event.toEnvelope(Offset.sequence(offset)) }
+    Flow[Event].zipWithIndex.map { case (event, offset) => event.toEnvelope(Offset.sequence(offset)) }
 
   val eventPlusOffsetToEventEnvelope: Flow[(Event, Offset), EventEnvelope, NotUsed] =
-    Flow[(Event,Offset)].map{ case(event, offset) => event.toEnvelope(offset) }
+    Flow[(Event, Offset)].map { case (event, offset) => event.toEnvelope(offset) }
 
   implicit class RichFlow[Mat](source: Source[Event, Mat]) {
     def toEventEnvelopes: Source[EventEnvelope, Mat] =
@@ -46,9 +47,10 @@ object ScalaDslMongoReadJournal {
     def toEventEnvelopes: Source[EventEnvelope, Mat] =
       source.via(eventPlusOffsetToEventEnvelope)
   }
+
 }
 
-class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implicit m: Materializer)
+class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implicit m: Materializer, ec: ExecutionContext)
   extends scaladsl.ReadJournal
     with CurrentPersistenceIdsQuery
     with CurrentEventsByPersistenceIdQuery
@@ -77,9 +79,9 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   def allEvents(): Source[EventEnvelope, NotUsed] = {
     val pastSource = impl.currentAllEvents
     val realtimeSource = impl.liveEvents
-//      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("all-events"), OverflowStrategy.dropTail)
-//            .mapMaterializedValue(impl.subscribeJournalEvents)
-//            .map{ case(e,_) => e }
+    //      Source.actorRef[(Event, Offset)](streamBufferSizeMaxConfig.getInt("all-events"), OverflowStrategy.dropTail)
+    //            .mapMaterializedValue(impl.subscribeJournalEvents)
+    //            .map{ case(e,_) => e }
     (pastSource ++ realtimeSource).via(new RemoveDuplicatedEventsByPersistenceId).toEventEnvelopes
   }
 
@@ -209,6 +211,7 @@ class RemoveDuplicatedEventsByPersistenceId extends GraphStage[FlowShape[Event, 
           pull(in)
       }
     }
+
     override def onPull(): Unit = pull(in)
 
     setHandlers(in, out, this)
@@ -240,6 +243,7 @@ class RemoveDuplicatedEventEnvelopes extends GraphStage[FlowShape[EventEnvelope,
           pull(in)
       }
     }
+
     override def onPull(): Unit = pull(in)
 
     setHandlers(in, out, this)
@@ -260,7 +264,7 @@ class RemoveDuplicates[T] extends GraphStage[FlowShape[T, T]] {
 
     override def onPush(): Unit = {
       val element = grab(in)
-      if(processed.contains(element)) {
+      if (processed.contains(element)) {
         pull(in)
       } else {
         processed += element
@@ -276,23 +280,23 @@ class RemoveDuplicates[T] extends GraphStage[FlowShape[T, T]] {
 }
 
 trait MongoPersistenceReadJournallingApi {
-  def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed]
+  def currentAllEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed]
 
-  def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed]
+  def currentPersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed]
 
-  def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed]
+  def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed]
 
-  def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed]
+  def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext): Source[(Event, Offset), NotUsed]
 
   def checkOffsetIsSupported(offset: Offset): Boolean
 
-  def liveEvents(implicit m: Materializer): Source[Event, NotUsed]
+  def liveEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed]
 
-  def livePersistenceIds(implicit m: Materializer): Source[String, NotUsed]
+  def livePersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed]
 
-  def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer): Source[Event, NotUsed]
+  def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed]
 
-  def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed]
+  def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed]
 }
 
 trait SyncActorPublisher[A, Cursor] extends GraphStage[SourceShape[A]] {

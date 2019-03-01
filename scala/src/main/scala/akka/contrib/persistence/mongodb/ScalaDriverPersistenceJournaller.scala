@@ -30,7 +30,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
 
   private[this] def journal(implicit ec: ExecutionContext): driver.C = driver.journal.map(_.withWriteConcern(driver.journalWriteConcern))
 
-  private[this] def realtime: driver.C = driver.realtime
+  private[this] def realtime(implicit ec: ExecutionContext): driver.C = driver.realtime
 
   private[this] def metadata(implicit ec: ExecutionContext): driver.C = driver.metadata.map(_.withWriteConcern(driver.metadataWriteConcern))
 

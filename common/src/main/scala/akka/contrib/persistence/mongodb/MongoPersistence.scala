@@ -18,7 +18,6 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
-import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
 object MongoPersistenceDriver {
@@ -34,10 +33,10 @@ object MongoPersistenceDriver {
   case object ReplicaAcknowledged extends WriteSafety
 
   implicit def string2WriteSafety(fromConfig: String): WriteSafety = fromConfig.toLowerCase match {
-    case "errorsignored"       => throw new IllegalArgumentException("Errors ignored is no longer supported as a write safety option")
-    case "unacknowledged"      => Unacknowledged
-    case "acknowledged"        => Acknowledged
-    case "journaled"           => Journaled
+    case "errorsignored" => throw new IllegalArgumentException("Errors ignored is no longer supported as a write safety option")
+    case "unacknowledged" => Unacknowledged
+    case "acknowledged" => Acknowledged
+    case "journaled" => Journaled
     case "replicaacknowledged" => ReplicaAcknowledged
   }
 }
@@ -52,6 +51,7 @@ trait CanDeserializeJournal[D] {
 
 trait CanSuffixCollectionNames {
   def getSuffixFromPersistenceId(persistenceId: String): String
+
   def validateMongoCharacters(input: String): String
 }
 
@@ -59,7 +59,9 @@ trait JournalFormats[D] extends CanSerializeJournal[D] with CanDeserializeJourna
 
 private case class IndexSettings(name: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)
 
-abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
+abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
+  extends WithMongoPersistencePluginDispatcher(as, config) {
+
   import MongoPersistenceDriver._
 
   // Collection type
@@ -90,9 +92,9 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     closeConnections()
   }
 
-  private[mongodb] def collection(name: String): C
+  private[mongodb] def collection(name: String)(implicit ec: ExecutionContext): C
 
-  private[mongodb] def ensureCollection(name: String): C
+  private[mongodb] def ensureCollection(name: String)(implicit ec: ExecutionContext): C
 
   private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
 
@@ -101,8 +103,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   private[mongodb] def closeConnections(): Unit
 
   /**
-   * retrieve suffix from persistenceId
-   */
+    * retrieve suffix from persistenceId
+    */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
@@ -113,8 +115,8 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * validate characters in collection name
-   */
+    * validate characters in collection name
+    */
   private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val builderClass = Class.forName(suffixBuilderClass)
@@ -125,56 +127,56 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
   }
 
   /**
-   * retrieve collection from persistenceId
-   */
-  private[this] def getSuffixedCollection(persistenceId: String)(build: String => String): C = {
+    * retrieve collection from persistenceId
+    */
+  private[this] def getSuffixedCollection(persistenceId: String)(build: String => String)(implicit ec: ExecutionContext): C = {
     val name = build(getSuffixFromPersistenceId(persistenceId))
     logger.debug(s"Name used to build collection is $name")
     collection(name)
   }
 
   /**
-   * build name of a collection by appending separator and suffix to usual name in settings
-   */
+    * build name of a collection by appending separator and suffix to usual name in settings
+    */
   private[this] def appendSuffixToName(nameInSettings: String)(suffix: String): String = {
     val name =
       suffix match {
         case "" => nameInSettings
-        case _  => s"$nameInSettings$suffixSeparator${validateMongoCharacters(suffix)}"
+        case _ => s"$nameInSettings$suffixSeparator${validateMongoCharacters(suffix)}"
       }
     logger.debug(s"""Suffixed name for value "$nameInSettings" in settings and suffix "$suffix" is "$name"""")
     name
   }
 
   /**
-   * Convenient methods to retrieve journal name from persistenceId
-   */
+    * Convenient methods to retrieve journal name from persistenceId
+    */
   private[mongodb] def getJournalCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => journalCollectionName
-      case _  => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
+      case _ => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
     }
 
   /**
-   * Convenient methods to retrieve snapshot name from persistenceId
-   */
+    * Convenient methods to retrieve snapshot name from persistenceId
+    */
   private[mongodb] def getSnapsCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => snapsCollectionName
-      case _  => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
+      case _ => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
     }
 
   /**
-   * Convenient methods to retrieve EXISTING journal collection from persistenceId.
-   * CAUTION: this method does NOT create the journal and its indexes.
-   */
-  private[mongodb] def getJournal(persistenceId: String): C = collection(getJournalCollectionName(persistenceId))
+    * Convenient methods to retrieve EXISTING journal collection from persistenceId.
+    * CAUTION: this method does NOT create the journal and its indexes.
+    */
+  private[mongodb] def getJournal(persistenceId: String)(implicit ec: ExecutionContext): C = collection(getJournalCollectionName(persistenceId))
 
   /**
-   * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
-   * CAUTION: this method does NOT create the snapshot and its indexes.
-   */
-  private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
+    * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
+    * CAUTION: this method does NOT create the snapshot and its indexes.
+    */
+  private[mongodb] def getSnaps(persistenceId: String)(implicit ec: ExecutionContext): C = collection(getSnapsCollectionName(persistenceId))
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
@@ -182,11 +184,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     IndexSettings(journalTagIndexName, unique = false, sparse = true, TAGS -> 1)
   )
 
-  private[mongodb] lazy val journal: C = journal("")
+  private[this] val journalCache = MongoCollectionCache[C](config, "collection-cache.journal")
 
-  private[mongodb] val journalCache = MongoCollectionCache[C](config, "collection-cache.journal")
+  private[mongodb] def journal(implicit ec: ExecutionContext): C = journal("")
 
-  private[mongodb] def journal(persistenceId: String): C = {
+  private[mongodb] def journal(persistenceId: String)(implicit ec: ExecutionContext): C = {
     val collectionName = getJournalCollectionName(persistenceId)
 
     journalCache.getOrElseCreate(collectionName, theCollectionName => {
@@ -194,8 +196,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
 
       indexes.foldLeft(journalCollection) { (acc, index) =>
         import index._
-        // TODO: replace global execution context by the one configured for the persistence plugin
-        ensureIndex(name, unique, sparse, fields: _*)(concurrent.ExecutionContext.global)(acc)
+        ensureIndex(name, unique, sparse, fields: _*)(ec)(acc)
       }
     })
   }
@@ -205,20 +206,19 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     journalCache.invalidate(collectionName)
   }
 
-  private[mongodb] lazy val snaps: C = snaps("")
+  private[this] val snapsCache = MongoCollectionCache[C](config, "collection-cache.snaps")
 
-  private[mongodb] val snapsCache = MongoCollectionCache[C](config, "collection-cache.snaps")
+  private[mongodb] def snaps(implicit ec: ExecutionContext): C = snaps("")
 
-  private[mongodb] def snaps(persistenceId: String): C = {
+  private[mongodb] def snaps(persistenceId: String)(implicit ec: ExecutionContext): C = {
     val collectionName = getSnapsCollectionName(persistenceId)
     snapsCache.getOrElseCreate(collectionName, theCollectionName => {
       val snapsCollection = ensureCollection(theCollectionName)
 
-      // TODO: replace global execution context by the one configured for the persistence plugin
       ensureIndex(snapsIndexName, unique = true, sparse = false,
         SnapshottingFieldNames.PROCESSOR_ID -> 1,
         SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-        TIMESTAMP -> -1)(concurrent.ExecutionContext.global)(snapsCollection)
+        TIMESTAMP -> -1)(ec)(snapsCollection)
     })
   }
 
@@ -227,51 +227,74 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
     snapsCache.invalidate(collectionName)
   }
 
-  private[mongodb] lazy val realtime: C = {
+  private[this] val realtimeCache = MongoCollectionCache[C](config, "collection-cache.realtime")
 
-    // TODO: replace global execution context by the one configured for the persistence plugin
-    cappedCollection(realtimeCollectionName)(concurrent.ExecutionContext.global)
-  }
+  private[mongodb] def realtime(implicit ec: ExecutionContext): C =
+    realtimeCache.getOrElseCreate(realtimeCollectionName, collectionName => cappedCollection(collectionName))
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
 
-  private[mongodb] lazy val metadata: C = {
-    val metadataCollection = ensureCollection(metadataCollectionName)
-    ensureIndex("akka_persistence_metadata_pid",
-      unique = true, sparse = true,
-      JournallingFieldNames.PROCESSOR_ID -> 1)(concurrent.ExecutionContext.global)(metadataCollection)
-  }
+  private[this] val metadataCache = MongoCollectionCache[C](config, "collection-cache.metadata")
+
+  private[mongodb] def metadata(implicit ec: ExecutionContext): C =
+    metadataCache.getOrElseCreate(metadataCollectionName, collectionName => {
+      val metadataCollection = ensureCollection(collectionName)
+      ensureIndex("akka_persistence_metadata_pid",
+        unique = true, sparse = true,
+        JournallingFieldNames.PROCESSOR_ID -> 1)(ec)(metadataCollection)
+    })
 
   // useful in some methods in each driver
   def useSuffixedCollectionNames: Boolean = suffixBuilderClassOption.isDefined
 
   def databaseName: Option[String] = settings.Database
+
   def snapsCollectionName: String = settings.SnapsCollection
+
   def snapsIndexName: String = settings.SnapsIndex
+
   def snapsWriteSafety: WriteSafety = settings.SnapsWriteConcern
+
   def snapsWTimeout: FiniteDuration = settings.SnapsWTimeout
+
   def snapsFsync: Boolean = settings.SnapsFSync
+
   def journalCollectionName: String = settings.JournalCollection
+
   def journalIndexName: String = settings.JournalIndex
+
   def journalSeqNrIndexName: String = settings.JournalSeqNrIndex
+
   def journalTagIndexName: String = settings.JournalTagIndex
+
   def journalWriteSafety: WriteSafety = settings.JournalWriteConcern
+
   def journalWTimeout: FiniteDuration = settings.JournalWTimeout
+
   def journalFsync: Boolean = settings.JournalFSync
+
   def realtimeEnablePersistence: Boolean = settings.realtimeEnablePersistence
+
   def realtimeCollectionName: String = settings.realtimeCollectionName
+
   def realtimeCollectionSize: Long = settings.realtimeCollectionSize
+
   def metadataCollectionName: String = settings.MetadataCollection
+
   def mongoUri: String = settings.MongoUri
+
   def useLegacySerialization: Boolean = settings.UseLegacyJournalSerialization
 
   def suffixBuilderClassOption: Option[String] = Option(settings.SuffixBuilderClass).filter(_.trim.nonEmpty)
+
   def suffixSeparator: String = settings.SuffixSeparator match {
     case str if !str.isEmpty => validateMongoCharacters(settings.SuffixSeparator).substring(0, 1)
-    case _                   => "_"
+    case _ => "_"
   }
+
   def suffixDropEmpty: Boolean = settings.SuffixDropEmptyCollections
 
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]): Event = ev.deserializeDocument(dbo)
+
   def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]): D = ev.serializeAtom(aw)
 }

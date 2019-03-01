@@ -50,10 +50,10 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   private[mongodb] lazy val db = client(databaseName.getOrElse(url.database.getOrElse(DEFAULT_DB_NAME)))
 
-  private[mongodb] def collection(name: String) = db(name)
+  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db(name)
 
   private val NamespaceExistsErrorCode = 48
-  private[mongodb] override def ensureCollection(name: String): MongoCollection = {
+  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): MongoCollection = {
     if (!db.collectionExists(name)) {
       try {
         db.createCollection(name, BasicDBObjectBuilder.start().get()).asScala
@@ -98,7 +98,7 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     }
   }
 
-  private[mongodb] def getCollections(collectionName: String): List[C] = {
+  private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): List[C] = {
     def excludeNames(name: String): Boolean =
       name == realtimeCollectionName ||
         name == metadataCollectionName ||
@@ -107,9 +107,9 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
     db.collectionNames().filterNot(excludeNames).filter(_.startsWith(collectionName)).map(collection).toList
   }
 
-  private[mongodb] def getJournalCollections: List[C] = getCollections(journalCollectionName)
+  private[mongodb] def getJournalCollections(implicit ec: ExecutionContext): List[C] = getCollections(journalCollectionName)
 
-  private[mongodb] def getSnapshotCollections: List[C] = getCollections(snapsCollectionName)
+  private[mongodb] def getSnapshotCollections(implicit ec: ExecutionContext): List[C] = getCollections(snapsCollectionName)
 
 }
 

@@ -38,10 +38,10 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     client.getDatabase(dbName)
   }
 
-  override private[mongodb] def collection(name: String): C =
+  override private[mongodb] def collection(name: String)(implicit ec: ExecutionContext): C =
     Future.successful(db.getCollection(name))
 
-  override private[mongodb] def ensureCollection(name: String): C = {
+  override private[mongodb] def ensureCollection(name: String)(implicit ec: ExecutionContext): C = {
     implicit val ec: ExecutionContext = system.dispatcher
 
     for {

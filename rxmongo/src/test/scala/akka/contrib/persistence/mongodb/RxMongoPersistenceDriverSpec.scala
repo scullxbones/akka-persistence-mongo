@@ -7,7 +7,6 @@ import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
@@ -61,6 +60,8 @@ class RxMongoPersistenceDriverShutdownSpec extends BaseUnitTest with ContainerMo
 
 @RunWith(classOf[JUnitRunner])
 class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
+
+  import ExecutionContext.Implicits.global
 
   val authMode: String = if( envMongoVersion.contains("2.6") ) "?authMode=mongocr" else "?authMode=scram-sha1"
 
