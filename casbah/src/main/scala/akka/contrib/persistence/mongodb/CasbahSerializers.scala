@@ -5,6 +5,7 @@ import akka.persistence.PersistentRepr
 import akka.serialization.{Serialization, SerializationExtension}
 import com.mongodb.DBObject
 import com.mongodb.casbah.Imports._
+import org.bson.types.ObjectId
 
 object CasbahSerializersExtension extends ExtensionId[CasbahSerializers] with ExtensionIdProvider {
   override def lookup = CasbahSerializersExtension
@@ -80,6 +81,7 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
     override def serializeAtom(atom: Atom): DBObject = {
       Option(atom.tags).filter(_.nonEmpty).foldLeft(
         MongoDBObject(
+          ID -> ObjectId.get(),
           PROCESSOR_ID -> atom.pid,
           FROM -> atom.from,
           TO -> atom.to,
