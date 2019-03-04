@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{BasicDBObjectBuilder, WriteConcern, MongoClientURI => JavaMongoClientURI}
+import com.mongodb.{BasicDBObjectBuilder, DBCollection, WriteConcern, MongoClientURI => JavaMongoClientURI}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
@@ -54,12 +54,14 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db(name)
 
   private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): MongoCollection =
-    ensureCollection(name, BasicDBObjectBuilder.start().get())
+    ensureCollection(name, collectionName => db.createCollection(collectionName, BasicDBObjectBuilder.start().get()))
 
-  private[mongodb] def ensureCollection(name: String, options: DBObject)(implicit ec: ExecutionContext): MongoCollection =
-    Try(db.createCollection(name, BasicDBObjectBuilder.start().get()).asScala) match {
+  private[this] def ensureCollection(name: String, collectionCreator: String => DBCollection)
+                                    (implicit ec: ExecutionContext): MongoCollection =
+    Try(collectionCreator(name).asScala) match {
       case Success(collection) => collection
       case Failure(MongoErrors.NamespaceExists()) => db(name)
+      case Failure(error) => throw error
     }
 
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
@@ -74,20 +76,20 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
-    lazy val options = BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get()
-    if (db.collectionExists(name)) {
-      val collection = db(name)
-      if (!collection.isCapped) {
-        collection.drop()
-        ensureCollection(name, options)
-      } else {
-        collection
-      }
+    val collection = ensureCollection(name, createNewCappedCollection)
+    if (collection.isCapped) {
+      collection
     } else {
-      val c = ensureCollection(name, options)
-      c.insert(MongoDBObject("x" -> "x")) // casbah cannot tail empty collections
-      c
+      collection.drop()
+      ensureCollection(name, createNewCappedCollection)
     }
+  }
+
+  private[this] def createNewCappedCollection(name: String): DBCollection = {
+    val collection = db.createCollection(name,
+      BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get())
+    collection.insert(MongoDBObject("x" -> "x")) // casbah cannot tail empty collections
+    collection
   }
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): List[C] = {

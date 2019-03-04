@@ -184,7 +184,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     IndexSettings(journalTagIndexName, unique = false, sparse = true, TAGS -> 1)
   )
 
-  private[this] val journalCache = MongoCollectionCache[C](config, "collection-cache.journal")
+  private[this] val journalCache = MongoCollectionCache[C](settings.CollectionCache, "journal")
 
   private[mongodb] def journal(implicit ec: ExecutionContext): C = journal("")
 
@@ -206,7 +206,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     journalCache.invalidate(collectionName)
   }
 
-  private[this] val snapsCache = MongoCollectionCache[C](config, "collection-cache.snaps")
+  private[this] val snapsCache = MongoCollectionCache[C](settings.CollectionCache, "snaps")
 
   private[mongodb] def snaps(implicit ec: ExecutionContext): C = snaps("")
 
@@ -227,14 +227,14 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     snapsCache.invalidate(collectionName)
   }
 
-  private[this] val realtimeCache = MongoCollectionCache[C](config, "collection-cache.realtime")
+  private[this] val realtimeCache = MongoCollectionCache[C](settings.CollectionCache, "realtime")
 
   private[mongodb] def realtime(implicit ec: ExecutionContext): C =
     realtimeCache.getOrElseCreate(realtimeCollectionName, collectionName => cappedCollection(collectionName))
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
 
-  private[this] val metadataCache = MongoCollectionCache[C](config, "collection-cache.metadata")
+  private[this] val metadataCache = MongoCollectionCache[C](settings.CollectionCache, "metadata")
 
   private[mongodb] def metadata(implicit ec: ExecutionContext): C =
     metadataCache.getOrElseCreate(metadataCollectionName, collectionName => {

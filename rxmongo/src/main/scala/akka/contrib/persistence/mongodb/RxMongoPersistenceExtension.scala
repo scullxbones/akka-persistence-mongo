@@ -103,8 +103,8 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] =
     ensureCollection(name, _.create())
 
-  private[mongodb] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit])
-                                       (implicit ec: ExecutionContext): Future[BSONCollection] = {
+  private[this] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit])
+                                    (implicit ec: ExecutionContext): Future[BSONCollection] = {
     for {
       coll <- collection(name)
       _ <- collectionCreator(coll).recover { case CommandError.Code(MongoErrors.NamespaceExists.code) => coll }
