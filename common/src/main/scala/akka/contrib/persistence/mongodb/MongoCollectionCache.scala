@@ -1,6 +1,8 @@
 package akka.contrib.persistence.mongodb
 
 import java.time.{Duration, Instant}
+import java.util.concurrent.atomic.AtomicReference
+import java.util.function.BinaryOperator
 
 import com.typesafe.config.Config
 
@@ -76,6 +78,51 @@ object MongoCollectionCache {
       trieMap.remove(collectionName)
   }
 
+  /**
+    * Naive implementation of a cache that holds a single entry.
+    *
+    * @param config Cache configuration.
+    * @tparam C Collection type.
+    */
+  case class Single[C](config: Config) extends MongoCollectionCache[C] {
+
+    private[this] type CacheEntry = (Option[Instant], C)
+
+    // protect cached collection by atomic reference
+    // shouldn't be much slower than lazy val, which is not lock-free
+    // consider using a lock-free queue of bounded size if this becomes a problem
+    private[this] val box: AtomicReference[CacheEntry] = new AtomicReference()
+
+    private[this] val expireAfterWrite: Option[Duration] = Try(config.getDuration("expire-after-write")).toOption
+
+    override def getOrElseCreate(collectionName: String, collectionCreator: String => C): C =
+      box.accumulateAndGet(null, JavaBinOp {
+        case (entry, _) if isEntryValid(entry) => entry
+        case _ => (expireAfterWrite.map(_ => Instant.now), collectionCreator(collectionName))
+      })._2
+
+    override def invalidate(collectionName: String): Unit =
+      box.set(null)
+
+    private[this] def isEntryValid(entry: CacheEntry): Boolean = {
+      if (entry == null)
+        false
+      else {
+        val didNotExpire =
+          for {
+            ttl <- expireAfterWrite
+            expired = entry._1.forall(createdAt => createdAt.plus(ttl).isBefore(Instant.now))
+          } yield !expired
+        didNotExpire.getOrElse(true)
+      }
+    }
+
+    private[this] case class JavaBinOp(scalaBinOp: (CacheEntry, CacheEntry) => CacheEntry) extends BinaryOperator[CacheEntry] {
+      override def apply(t: CacheEntry, u: CacheEntry): CacheEntry = scalaBinOp(t, u)
+    }
+
+  }
+
   private[this] def loadCacheConstructor[C](className: String): Try[Config => MongoCollectionCache[C]] =
     for {
       nonEmptyClassName <- Success(className.trim).filter(_.nonEmpty)
@@ -88,8 +135,13 @@ object MongoCollectionCache {
   private[this] def getExpectedConstructor[T](cacheClass: Class[T]): Try[Config => T] =
     Try(cacheClass.getConstructor(classOf[Config])).map(constructor => x => constructor.newInstance(x))
 
-  private[this] def createDefaultCache[C](config: Config, path: String): MongoCollectionCache[C] =
-    Try(config.getDuration(s"$path.expire-after-write"))
-      .map[MongoCollectionCache[C]](Expiring.apply)
-      .getOrElse(Default())
+  private[this] def createDefaultCache[C](config: Config, path: String): MongoCollectionCache[C] = {
+    val maxSizePath = s"$path.max-size"
+    val ttlPath = s"$path.expire-after-write"
+    (Try(config.getConfig(path)), Try(config.getInt(maxSizePath)), Try(config.getDuration(ttlPath))) match {
+      case (Success(cacheConfig), Success(1), _) => Single(cacheConfig)
+      case (_, _, Success(ttl)) => Expiring(ttl)
+      case _ => Default()
+    }
+  }
 }
