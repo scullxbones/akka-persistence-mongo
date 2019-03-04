@@ -100,12 +100,14 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))(system.dispatcher)
 
-  private val NamespaceExistsErrorCode = 48
-  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] = {
-    implicit val ec: ExecutionContext = system.dispatcher
+  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] =
+    ensureCollection(name, _.create())
+
+  private[mongodb] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit])
+                                       (implicit ec: ExecutionContext): Future[BSONCollection] = {
     for {
       coll <- collection(name)
-      _ <- coll.create().recover { case CommandError.Code(NamespaceExistsErrorCode) => coll }
+      _ <- collectionCreator(coll).recover { case CommandError.Code(MongoErrors.NamespaceExists.code) => coll }
     } yield coll
   }
 
@@ -123,16 +125,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       name = Some(indexName))).map(_ => c))
   }
 
-  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
-    collection(name).flatMap { cc =>
-      cc.stats().flatMap { s =>
-        if (!s.capped) cc.convertToCapped(realtimeCollectionSize, None)
-        else Future.successful(())
-      }.recoverWith {
-        case _ => cc.createCapped(realtimeCollectionSize, None)
-      }.map(_ => cc)
-    }
-  }
+  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) =
+    for {
+      cc <- ensureCollection(name, _.createCapped(realtimeCollectionSize, None))
+      s <- cc.stats
+      _ <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
+    } yield cc
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
     val fut = for {
