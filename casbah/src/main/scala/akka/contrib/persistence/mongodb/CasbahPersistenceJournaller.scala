@@ -12,10 +12,13 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence._
+import com.mongodb.casbah.Imports
 import com.mongodb.{DBObject, DuplicateKeyException}
 import com.mongodb.casbah.Imports._
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.annotation.tailrec
+import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -24,6 +27,8 @@ class CasbahPersistenceJournaller(val driver: CasbahMongoDriver) extends MongoPe
   import driver.CasbahSerializers._
 
   private implicit val system: ActorSystem = driver.actorSystem
+
+  private[this] val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
@@ -49,35 +54,49 @@ class CasbahPersistenceJournaller(val driver: CasbahMongoDriver) extends MongoPe
       .map(driver.deserializeJournal)
   }
 
-  import collection.immutable.{ Seq => ISeq }
-  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: MongoCollection)(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
-    val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
+  private[this] def buildBatch(writes: Seq[AtomicWrite]): Seq[Try[Imports.DBObject]] =
+    writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
 
+  private[this] def doBatchAppend(batch: Seq[Try[Imports.DBObject]], collection: MongoCollection)(implicit ec: ExecutionContext): Seq[Try[Imports.DBObject]] = {
     if (batch.forall(_.isSuccess)) {
       val bulk = collection.initializeOrderedBulkOperation
       batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
       bulk.execute(writeConcern)
-      batch.map(t => t.map(_ => ()))
+      batch
     } else { // degraded performance, can't batch
-      batch.map(_.map { serialized => collection.insert(serialized)(identity, writeConcern) }.map(_ => ()))
+      batch.map(_.map { serialized => serialized -> collection.insert(serialized)(identity, writeConcern) })
+        .map{_.map{case (ser,_) => ser}}
     }
   }
 
-  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
-    val batchFuture = Future {
+  private[mongodb] override def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = {
+    val batchFuture =
       if (driver.useSuffixedCollectionNames) {
-        writes.groupBy(write => driver.getJournalCollectionName(write.persistenceId)).flatMap {
-          case (_, writeSeq) => doBatchAppend(writeSeq, driver.journal(writeSeq.head.persistenceId))
-        }.to[collection.immutable.Seq]
+        writes
+          .groupBy(write => driver.getJournalCollectionName(write.persistenceId))
+          .foldLeft(Future.successful(Seq.empty[Try[Imports.DBObject]])) { case(future, (_, hunk)) =>
+            for {
+              prev <- future
+              batch = buildBatch(hunk)
+              next <- Future { doBatchAppend(batch, driver.journal(hunk.head.persistenceId)) }
+            } yield prev ++ next
+        }
       } else {
-        doBatchAppend(writes, journal)
+        val batch = buildBatch(writes)
+        Future { doBatchAppend(batch, journal) }
       }
-    }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.flatMap { _ => Future { doBatchAppend(writes, realtime) } }
+      batchFuture.flatMap { batch =>
+        val f = Future { doBatchAppend(batch, realtime) }
+        f.onFailure {
+          case t =>
+            logger.error("Error during write to realtime collection", t)
+        }
+        f.map(squashToUnit)
+      }
     else
-      batchFuture
+      batchFuture.map(squashToUnit)
   }
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Option[Long] = {

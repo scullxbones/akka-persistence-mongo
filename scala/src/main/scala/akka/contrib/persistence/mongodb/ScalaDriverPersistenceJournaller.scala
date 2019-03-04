@@ -1,4 +1,10 @@
+/*
+ * Copyright (c) 2018-2019 Brian Scully
+ *
+ */
+
 package akka.contrib.persistence.mongodb
+
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.stream.{ActorMaterializer, Materializer}
@@ -14,8 +20,8 @@ import model.Projections._
 import org.mongodb.scala.bson.{BsonDocument, BsonValue}
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.collection.{JavaConverters, immutable}
-import JavaConverters._
+import scala.collection.JavaConverters._
+import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -61,7 +67,7 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
       .mapConcat[Event](e =>
         Option(e.get(EVENTS)).filter(_.isArray).map(_.asArray).map(_.getValues.asScala.toList.collect {
           case d: BsonDocument => driver.deserializeJournal(d)
-        }).getOrElse(immutable.Seq.empty[Event])
+        }).getOrElse(Seq.empty[Event])
       )
       .filter(_.sn >= from)
       .filter(_.sn <= to)
@@ -69,28 +75,28 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
     source.via(flow)
   }
 
-  private[this] def doBatchAppend(writes: immutable.Seq[AtomicWrite], collection: driver.C)(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = {
-    val batch = writes.map(aw => Try(driver.serializeJournal(Atom[BsonValue](aw, driver.useLegacySerialization))))
+  private[this] def buildBatch(writes: Seq[AtomicWrite]): Seq[Try[BsonDocument]] =
+    writes.map(aw => Try(driver.serializeJournal(Atom[BsonValue](aw, driver.useLegacySerialization))))
 
+  private[this] def doBatchAppend(batch: Seq[Try[BsonDocument]], collection: driver.C)(implicit ec: ExecutionContext): Future[Seq[Try[BsonDocument]]] = {
     if (batch.forall(_.isSuccess)) {
       val collected: Seq[InsertOneModel[driver.D]] = batch.collect { case Success(doc) => InsertOneModel(doc) }
       collection.flatMap(_.withWriteConcern(writeConcern).bulkWrite(collected, new BulkWriteOptions().ordered(true))
         .toFuture()
-        .map(_ => batch.map(_.map(_ => ()))))
+        .map(_ => batch))
     } else {
       Future.sequence(batch.map {
         case Success(document: BsonDocument) =>
-          collection.flatMap(_.withWriteConcern(writeConcern).insertOne(document).toFuture().map(_ => Success(())))
+          collection.flatMap(_.withWriteConcern(writeConcern).insertOne(document).toFuture().map(_ => Success(document)))
         case f: Failure[_] =>
-          Future.successful(Failure[Unit](f.exception))
+          Future.successful(Failure[BsonDocument](f.exception))
       })
     }
   }
 
-
-  override private[mongodb] def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = {
+  override private[mongodb] def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = {
     val batchFuture = if (driver.useSuffixedCollectionNames) {
-      val fZero = Future.successful(immutable.Seq.empty[Try[Unit]])
+      val fZero = Future.successful(Seq.empty[Try[BsonDocument]])
 
       // this should guarantee that futures are performed sequentially...
       writes
@@ -98,18 +104,28 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
         .foldLeft(fZero) { case (future, (_, hunk)) =>
           for {
             prev <- future
-            next <- doBatchAppend(hunk, driver.journal(hunk.head.persistenceId))
+            batch = buildBatch(hunk)
+            next <- doBatchAppend(batch, driver.journal(hunk.head.persistenceId))
           } yield prev ++ next
         }
 
     } else {
-      doBatchAppend(writes, journal)
+      val batch = buildBatch(writes)
+      doBatchAppend(batch, journal)
     }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.andThen { case _ => doBatchAppend(writes, realtime) }
+      batchFuture.andThen {
+        case Success(batch) =>
+          val f = doBatchAppend(batch, realtime)
+          f.onFailure {
+            case t =>
+              logger.error("Error during write to realtime collection", t)
+          }
+          f
+      }.map(squashToUnit)
     else
-      batchFuture
+      batchFuture.map(squashToUnit)
   }
 
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
