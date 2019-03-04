@@ -6,7 +6,7 @@ import akka.persistence.{AtomicWrite, PersistentRepr}
 import com.typesafe.config.Config
 import nl.grons.metrics.scala.MetricName
 
-import scala.collection.immutable
+import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -58,7 +58,7 @@ class MongoJournal(config: Config) extends AsyncWriteJournal {
    * Note that it is possible to reduce number of allocations by
    * caching some result `Seq` for the happy path, i.e. when no messages are rejected.
    */
-  override def asyncWriteMessages(messages: immutable.Seq[AtomicWrite]): Future[immutable.Seq[Try[Unit]]] =
+  override def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] =
     impl.batchAppend(messages)
 
   /**
@@ -144,13 +144,15 @@ trait JournallingFieldNames {
 object JournallingFieldNames extends JournallingFieldNames
 
 trait MongoPersistenceJournallingApi {
-  private[mongodb] def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]]
+  private[mongodb] def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]]
 
   private[mongodb] def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit]
 
   private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
+
+  protected def squashToUnit[T](seq: Seq[Try[T]]): Seq[Try[Unit]] = seq.map(_.map(_ => ()))
 }
 
 trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with MongoMetrics {
@@ -177,7 +179,7 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
     result
   }
   
-  private[mongodb] abstract override def batchAppend(writes: immutable.Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[immutable.Seq[Try[Unit]]] = timeIt (appendTimer) {
+  private[mongodb] abstract override def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = timeIt (appendTimer) {
     writeBatchSize.record(writes.map(_.size).sum)
     super.batchAppend(writes)
   }
