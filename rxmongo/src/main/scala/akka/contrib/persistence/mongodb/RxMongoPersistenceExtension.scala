@@ -67,8 +67,8 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     // create unauthenticated connection, there is no direct way to wait for authentication this way
     // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
     driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
-      .database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
-      .map(_.connection)(system.dispatcher)
+      .database(name = dbName, failoverStrategy = failoverStrategy)
+      .map(_.connection)
   }
 
   private[mongodb] lazy val connection: MongoConnection =
@@ -78,7 +78,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     }
 
   private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse(""), failoverStrategy)(system.dispatcher))
+    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse(""), failoverStrategy))
     conn
   }
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
@@ -98,7 +98,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
   private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
 
-  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))(system.dispatcher)
+  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))
 
   private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] =
     ensureCollection(name, _.create())
