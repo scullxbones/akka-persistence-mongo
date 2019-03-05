@@ -1,5 +1,12 @@
 ## Changelog for 2.x major version
 
+### 2.2.3
+* Merge pull request #223 from bsinno/bugfix/213
+* Merge branch 'master' into bugfix/213
+* Merge pull request #222 from scullxbones/wip-219
+* Issue #219 - IDs should match between journal & realtime
+* recover from NamespaceExists in ScalaDriverPE.ensureCollection
+
 ### 2.2.1
 * Allows to provide a custom MetricsBuilder (#211)
 * Merge pull request #212 from bsinno/optimize-snapshot-collection-cache
