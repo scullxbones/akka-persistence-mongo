@@ -49,6 +49,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 1. [Configuration Details](#config)
    * [Mongo URI](#mongouri)
    * [Collection and Index](#mongocollection)
+   * [Collection Caches](#collectioncaches)
    * [Write Concerns](#writeconcern)
    * [ReactiveMongo Failover](#rxmfailover)
    * [Stream buffer size](#buffer-size)
@@ -108,6 +109,65 @@ akka.contrib.persistence.mongodb.mongo.journal-index = "my_journal_index"
 akka.contrib.persistence.mongodb.mongo.snaps-collection = "my_persistent_snapshots"
 akka.contrib.persistence.mongodb.mongo.snaps-index = "my_snaps_index"
 akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
+```
+
+<a name="collectioncaches"/>
+##### Collection Caches
+
+The persistence plugin caches all collections it creates. As long as a collection remains in cache, the plugin will not re-create or re-index it for each access, which would cause unnecessary write-locks. By default, collection caches keep their entries forever and have unbounded memory consumption. It is best to implement your own collection cache if you enable [suffixed collection names](#suffixcollection).
+
+Collection cache implementations should extend the trait `MongoCollectionCache` and have a public constructor receiving a `Config` object as argument. There are separate configurations for caches of journal, snapshot, realtime and metadata collections.
+
+Default caches keep collections no longer than the duration specified in the configuration `expire-after-write`; setting it to a finite duration ensures that collections are eventually created with the correct options and indexes. Setting `max-size=1` restricts the number of cached collections to 1; this is useful for realtime and metadata collections or when [suffixed collection names](#suffixcollection) is disabled.
+
+```
+akka.contrib.persistence.mongodb.mongo {
+  # Caches of collections created by the plugin
+  collection-cache {
+
+    # Cache of journal collections
+    journal {
+      # Implementation of the cache.
+      # - Must be a subtype of MongoCollectionCache.
+      # - Must have a public constructor taking a Config object as argument.
+      # - Must be able to store the collection type of the chosen driver.
+      #
+      # If left empty, a default naive implementation with unbound memory consumption is used.
+      class = ""
+
+      # How long to retain the collection. Invalid or missing durations are treated as eternity.
+      expire-after-write = Infinity
+    }
+
+    # Cache of snapshot collections
+    snaps {
+      class = ""
+      expire-after-write = Infinity
+    }
+
+    # Cache of one realtime collection
+    realtime {
+      class = ""
+      expire-after-write = Infinity
+
+      # maximum size of the cache
+      # 1 because the realtime collection is unique
+      # default caches do not honor size bounds bigger than 1
+      max-size = 1
+    }
+
+    # Cache of one metadata collection
+    metadata {
+      class = ""
+      expire-after-write = Infinity
+
+      # maximum size of the cache
+      # 1 because the metadata collection is unique
+      # default caches do not honor size bounds bigger than 1
+      max-size = 1
+    }
+  }
+}
 ```
 
 <a name="writeconcern"/>
