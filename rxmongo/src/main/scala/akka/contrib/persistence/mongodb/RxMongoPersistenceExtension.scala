@@ -96,7 +96,8 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
-  private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
+  private[mongodb] def db(implicit ec: ExecutionContext): Future[DefaultDB] =
+    connection.database(name = dbName, failoverStrategy = failoverStrategy)
 
   private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))
 
