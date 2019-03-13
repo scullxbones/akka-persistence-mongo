@@ -114,4 +114,6 @@ class MongoSettings(val config: Config) {
   val SuffixDropEmptyCollections: Boolean = config.getBoolean("suffix-drop-empty-collections")
 
   val MongoMetricsBuilderClass: String = config.getString("metrics-builder.class")
+
+  val CollectionCache: Config = config.getConfig("collection-cache")
 }

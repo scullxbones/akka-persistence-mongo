@@ -49,8 +49,15 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
   def config(extensionClass: Class[_]): Config = ConfigFactory.parseString(s"""
     |include "/application.conf"
-    |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
-    |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
+    |akka.contrib.persistence.mongodb.mongo {
+    |  driver = "${extensionClass.getName}"
+    |  mongouri = "mongodb://$host:$noAuthPort/$embedDB"
+    |  collection-cache {
+    |    // disable caching of journal and realtime collections - spec drops them between tests
+    |    journal.expire-after-write = -1s
+    |    realtime.expire-after-write = -1s
+    |  }
+    |}
     |akka.persistence.journal.plugin = "akka-contrib-mongodb-persistence-journal"
     |akka-contrib-mongodb-persistence-journal {
     |    # Class name of the plugin.

@@ -16,6 +16,8 @@ import org.scalatest.junit.JUnitRunner
 @RunWith(classOf[JUnitRunner])
 class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   override def afterAll(): Unit = {
     cleanup()
   }

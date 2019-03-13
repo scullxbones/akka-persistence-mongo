@@ -67,8 +67,8 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     // create unauthenticated connection, there is no direct way to wait for authentication this way
     // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
     driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
-      .database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
-      .map(_.connection)(system.dispatcher)
+      .database(name = dbName, failoverStrategy = failoverStrategy)
+      .map(_.connection)
   }
 
   private[mongodb] lazy val connection: MongoConnection =
@@ -78,7 +78,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
     }
 
   private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse(""), failoverStrategy)(system.dispatcher))
+    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse(""), failoverStrategy))
     conn
   }
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
@@ -96,16 +96,19 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
-  private[mongodb] def db = connection.database(name = dbName, failoverStrategy = failoverStrategy)(system.dispatcher)
+  private[mongodb] def db(implicit ec: ExecutionContext): Future[DefaultDB] =
+    connection.database(name = dbName, failoverStrategy = failoverStrategy)
 
-  private[mongodb] override def collection(name: String) = db.map(_[BSONCollection](name))(system.dispatcher)
+  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))
 
-  private val NamespaceExistsErrorCode = 48
-  private[mongodb] override def ensureCollection(name: String): Future[BSONCollection] = {
-    implicit val ec: ExecutionContext = system.dispatcher
+  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] =
+    ensureCollection(name, _.create())
+
+  private[this] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit])
+                                    (implicit ec: ExecutionContext): Future[BSONCollection] = {
     for {
       coll <- collection(name)
-      _ <- coll.create().recover { case CommandError.Code(NamespaceExistsErrorCode) => coll }
+      _ <- collectionCreator(coll).recover { case CommandError.Code(MongoErrors.NamespaceExists.code) => coll }
     } yield coll
   }
 
@@ -123,16 +126,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       name = Some(indexName))).map(_ => c))
   }
 
-  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
-    collection(name).flatMap { cc =>
-      cc.stats().flatMap { s =>
-        if (!s.capped) cc.convertToCapped(realtimeCollectionSize, None)
-        else Future.successful(())
-      }.recoverWith {
-        case _ => cc.createCapped(realtimeCollectionSize, None)
-      }.map(_ => cc)
-    }
-  }
+  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) =
+    for {
+      cc <- ensureCollection(name, _.createCapped(realtimeCollectionSize, None))
+      s <- cc.stats
+      _ <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
+    } yield cc
 
   private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
     val fut = for {

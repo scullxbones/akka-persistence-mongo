@@ -8,8 +8,8 @@ object MongoErrors {
 
 }
 
-abstract class CommandExceptionErrorCode(expectedErrorCode: Int) {
+abstract class CommandExceptionErrorCode(val code: Int) {
 
   def unapply(scrutinee: MongoCommandException): Boolean =
-    expectedErrorCode == scrutinee.getErrorCode
+    code == scrutinee.getErrorCode
 }

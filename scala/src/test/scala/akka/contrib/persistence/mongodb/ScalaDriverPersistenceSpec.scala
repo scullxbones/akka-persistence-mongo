@@ -7,12 +7,11 @@ import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.junit.JUnitRunner
 
-import scala.concurrent.{Await, Future, ExecutionContext, duration}
+import scala.concurrent.{Await, Future, duration}
 import duration._
 
 @RunWith(classOf[JUnitRunner])
 class ScalaDriverPersistenceShutdownSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
-  import ExecutionContext.Implicits._
 
   override def beforeAll(): Unit = cleanup()
 

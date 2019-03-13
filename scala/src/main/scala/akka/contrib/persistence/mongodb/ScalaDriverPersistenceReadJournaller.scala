@@ -285,16 +285,16 @@ class ScalaDriverPersistenceReadJournaller(driver: ScalaMongoDriver, m: Material
   }
 
 
-  override def currentAllEvents(implicit m: Materializer): Source[Event, NotUsed] =
+  override def currentAllEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     CurrentAllEvents.source(driver)
 
-  override def currentPersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
+  override def currentPersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] =
     CurrentPersistenceIds.source(driver)
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] =
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     CurrentEventsByPersistenceId.source(driver, persistenceId, fromSeq, toSeq)
 
-  override def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] =
+  override def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext): Source[(Event, Offset), NotUsed] =
     CurrentEventsByTag.source(driver, tag, offset)
 
   override def checkOffsetIsSupported(offset: Offset): Boolean =
@@ -303,18 +303,18 @@ class ScalaDriverPersistenceReadJournaller(driver: ScalaMongoDriver, m: Material
       case ObjectIdOffset(hexStr, _) => ObjectId.isValid(hexStr)
     }
 
-  override def liveEvents(implicit m: Materializer): Source[Event, NotUsed] =
+  override def liveEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     journalStream.cursor(None).map{ case(e,_) => e }
 
-  override def livePersistenceIds(implicit m: Materializer): Source[String, NotUsed] =
+  override def livePersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] =
     journalStream.cursor(None).map{ case(e,_) => e.pid }
 
-  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer): Source[Event, NotUsed] =
+  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     journalStream.cursor(
       Option(equal(PROCESSOR_ID, persistenceId))
     ).mapConcat{ case(ev,_) => List(ev).filter(_.pid == persistenceId) }
 
-  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] =
+  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] =
     journalStream.cursor(
       Option(equal(TAGS, tag))
     ).filter{ case(ev, off) => ev.tags.contains(tag) &&  ord.gt(off, offset)}

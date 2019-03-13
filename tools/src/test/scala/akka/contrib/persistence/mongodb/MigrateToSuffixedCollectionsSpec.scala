@@ -17,6 +17,8 @@ import scala.concurrent.{ Await, Future, Promise }
 
 class MigrateToSuffixedCollectionsSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   override def embedDB = s"migrate-to-suffixed-collections-test"
 
   override def afterAll() = cleanup()
