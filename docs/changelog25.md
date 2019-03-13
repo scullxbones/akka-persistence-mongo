@@ -1,5 +1,9 @@
 ## Changelog for 2.x major version
 
+### 2.2.4
+* Improve collection creation for long-running systems under high load (#225)
+* Document the minimum akka 2.5 version
+
 ### 2.2.3
 * Merge pull request #223 from bsinno/bugfix/213
 * Merge branch 'master' into bugfix/213
