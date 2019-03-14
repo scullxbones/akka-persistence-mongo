@@ -106,7 +106,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
-      val builderClass = Class.forName(suffixBuilderClass)
+      val builderClass = Class.forName(suffixBuilderClass, true, Thread.currentThread.getContextClassLoader)
       val builderCons = builderClass.getConstructor()
       val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
       builderIns.getSuffixFromPersistenceId(persistenceId)
@@ -118,7 +118,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config) {
    */
   private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
-      val builderClass = Class.forName(suffixBuilderClass)
+      val builderClass = Class.forName(suffixBuilderClass, true, Thread.currentThread.getContextClassLoader)
       val builderCons = builderClass.getConstructor()
       val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
       builderIns.validateMongoCharacters(input)
