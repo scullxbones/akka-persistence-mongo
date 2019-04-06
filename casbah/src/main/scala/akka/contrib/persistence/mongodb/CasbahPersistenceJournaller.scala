@@ -12,7 +12,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence._
-import com.mongodb.casbah.Imports
+import com.mongodb.casbah.{Imports, TypeImports}
 import com.mongodb.{DBObject, DuplicateKeyException}
 import com.mongodb.casbah.Imports._
 import org.slf4j.{Logger, LoggerFactory}
@@ -106,7 +106,7 @@ class CasbahPersistenceJournaller(val driver: CasbahMongoDriver) extends MongoPe
     journal.aggregate($match :: $group :: Nil).results.flatMap(_.getAs[Long]("max")).headOption
   }
 
-  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
+  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): TypeImports.WriteResult = {
     try {
       metadata.update(
         MongoDBObject(PROCESSOR_ID -> persistenceId),

@@ -94,7 +94,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
 
     for {
       names <-  db.listCollectionNames().toFuture()
-      list  =   names.filterNot(excluded).filter(nameFilter.getOrElse(passAll _))
+      list  =   names.filterNot(excluded).filter(nameFilter.getOrElse(passAll))
       xs    <-  Future.sequence(list.map(collection))
     } yield xs.toList
   }

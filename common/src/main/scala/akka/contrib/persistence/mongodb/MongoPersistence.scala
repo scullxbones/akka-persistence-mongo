@@ -107,9 +107,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     */
   private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
-      val builderClass = Class.forName(suffixBuilderClass)
+      val reflectiveAccess = ReflectiveLookupExtension(actorSystem)
+      val builderClass = reflectiveAccess.unsafeReflectClassByName[CanSuffixCollectionNames](suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
-      val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
+      val builderIns = builderCons.newInstance()
       builderIns.getSuffixFromPersistenceId(persistenceId)
     case _ => ""
   }
@@ -119,9 +120,10 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     */
   private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
-      val builderClass = Class.forName(suffixBuilderClass)
+      val reflectiveAccess = ReflectiveLookupExtension(actorSystem)
+      val builderClass = reflectiveAccess.unsafeReflectClassByName[CanSuffixCollectionNames](suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
-      val builderIns = builderCons.newInstance().asInstanceOf[CanSuffixCollectionNames]
+      val builderIns = builderCons.newInstance()
       builderIns.validateMongoCharacters(input)
     case _ => input
   }
@@ -184,7 +186,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     IndexSettings(journalTagIndexName, unique = false, sparse = true, TAGS -> 1)
   )
 
-  private[this] val journalCache = MongoCollectionCache[C](settings.CollectionCache, "journal")
+  private[this] val journalCache = MongoCollectionCache[C](settings.CollectionCache, "journal", actorSystem)
 
   private[mongodb] def journal(implicit ec: ExecutionContext): C = journal("")
 
@@ -206,7 +208,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     journalCache.invalidate(collectionName)
   }
 
-  private[this] val snapsCache = MongoCollectionCache[C](settings.CollectionCache, "snaps")
+  private[this] val snapsCache = MongoCollectionCache[C](settings.CollectionCache, "snaps", actorSystem)
 
   private[mongodb] def snaps(implicit ec: ExecutionContext): C = snaps("")
 
@@ -227,14 +229,14 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     snapsCache.invalidate(collectionName)
   }
 
-  private[this] val realtimeCache = MongoCollectionCache[C](settings.CollectionCache, "realtime")
+  private[this] val realtimeCache = MongoCollectionCache[C](settings.CollectionCache, "realtime", actorSystem)
 
   private[mongodb] def realtime(implicit ec: ExecutionContext): C =
     realtimeCache.getOrElseCreate(realtimeCollectionName, collectionName => cappedCollection(collectionName))
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
 
-  private[this] val metadataCache = MongoCollectionCache[C](settings.CollectionCache, "metadata")
+  private[this] val metadataCache = MongoCollectionCache[C](settings.CollectionCache, "metadata", actorSystem)
 
   private[mongodb] def metadata(implicit ec: ExecutionContext): C =
     metadataCache.getOrElseCreate(metadataCollectionName, collectionName => {

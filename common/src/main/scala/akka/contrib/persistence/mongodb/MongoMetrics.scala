@@ -32,9 +32,10 @@ trait MongoMetrics extends MetricsBuilder with BaseBuilder {
   private[this] lazy val metrics: MetricsBuilder = {
     val mongoMetricsBuilderClass: String = driver.settings.MongoMetricsBuilderClass.trim
     if (mongoMetricsBuilderClass.nonEmpty) {
-      val builderClass = Class.forName(mongoMetricsBuilderClass)
+      val reflectiveAccess = ReflectiveLookupExtension(driver.actorSystem)
+      val builderClass = reflectiveAccess.unsafeReflectClassByName[MetricsBuilder](mongoMetricsBuilderClass)
       val builderCons = builderClass.getConstructor()
-      builderCons.newInstance().asInstanceOf[MetricsBuilder]
+      builderCons.newInstance()
     } else {
       DropwizardMetrics
     }
