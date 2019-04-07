@@ -7,6 +7,7 @@ scalaVersion := scalaV
 crossScalaVersions := Seq("2.11.12", "2.12.8")
 
 val AkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
+val MongoJavaDriverVersion = "3.8.2"
 
 def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % AkkaV)
@@ -19,8 +20,8 @@ def commonDeps(sv:String) = Seq(
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12"),
   "com.typesafe.akka"         %% "akka-persistence-query"   % AkkaV     % "compile",
-  "org.mongodb"               % "mongodb-driver-core"       % "3.8.2"   % "compile",
-  "org.mongodb"               % "mongodb-driver"            % "3.8.2"   % "test",
+  "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
+  "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
@@ -42,8 +43,9 @@ val commonSettings = Seq(
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   dependencyOverrides ++= Seq(
     "com.typesafe" % "config" % "1.3.2",
-    "org.slf4j" % "slf4j-api" % "1.7.7",
-    "com.typesafe.akka" %% "akka-stream" % AkkaV
+    "org.slf4j" % "slf4j-api" % "1.7.22",
+    "com.typesafe.akka" %% "akka-stream" % AkkaV,
+    "org.mongodb" % "mongo-java-driver" % MongoJavaDriverVersion
   ),
   version := releaseV,
   organization := "com.github.scullxbones",
