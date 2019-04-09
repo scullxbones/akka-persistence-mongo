@@ -1,5 +1,8 @@
 ## Changelog for 2.x major version
 
+### 2.2.5
+* Use Akka DynamicAccess for reflective classloading (#230)
+
 ### 2.2.4
 * Improve collection creation for long-running systems under high load (#225)
 * Document the minimum akka 2.5 version

@@ -27,16 +27,16 @@
 
 (Official Scala)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "2.2.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "2.2.5"
 ```
 (Casbah)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.2.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-casbah" % "2.2.5"
 ```
 (Reactive Mongo)
 ##### Please note: Supported versions of reactive mongo require the `0.12` series, with a minimum version number of `0.12.3` (for Akka 2.5 support)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.2.4"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "2.2.5"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The casbah/rxmongo selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -85,7 +85,7 @@ A mongo uri can be specified.  This must meet the requirements of [Mongo's uri f
 For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
 
 ```
-akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2.2.417/replicated-database"
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2.2.517/replicated-database"
 ```
 
 If a user, password, and database are specified, the database will be used both as a credentials source as well as journal and/or snapshot storage.  
@@ -614,7 +614,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.2.4",
+libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.2.5",
                              "org.mongodb" %% "casbah" % "3.1.0" )
 ```
 
