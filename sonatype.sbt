@@ -1,3 +1,10 @@
+publishMavenStyle := true
+
+licenses := Seq("APL2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
+
+import xerial.sbt.Sonatype._
+sonatypeProjectHosting := Some(GitHubHosting("scullxbones", "akka-persistence-mongo", "scullduggery@gmail.com"))
+
 pomExtra in Global := {
   <url>https://github.com/scullxbones/akka-persistence-mongo</url>
     <licenses>

@@ -80,7 +80,10 @@ val commonSettings = Seq(
   parallelExecution in Test := true,
   testOptions in Test += Tests.Argument("-oDS"),
   testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
-  fork in Test := true
+  fork in Test := true,
+  publishTo := sonatypePublishTo.value,
+  publishConfiguration := publishConfiguration.value.withOverwrite(true),
+  publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
 ) ++ inConfig(Travis)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
