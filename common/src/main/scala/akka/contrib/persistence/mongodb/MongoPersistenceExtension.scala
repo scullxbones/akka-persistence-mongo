@@ -19,12 +19,13 @@ import scala.util.Try
 
 object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] with ExtensionIdProvider {
   
-  override def lookup = MongoPersistenceExtension
+  override def lookup: ExtensionId[MongoPersistenceExtension] = MongoPersistenceExtension
 
   override def createExtension(actorSystem: ExtendedActorSystem): MongoPersistenceExtension = {
     val settings = MongoSettings(actorSystem.settings)
     val implementation = settings.Implementation
-    val implType = actorSystem.dynamicAccess.getClassFor[MongoPersistenceExtension](implementation).getOrElse(Class.forName(implementation))
+    val implType = actorSystem.dynamicAccess.getClassFor[MongoPersistenceExtension](implementation)
+      .getOrElse(Class.forName(implementation, true, Thread.currentThread.getContextClassLoader))
     val implCons = implType.getConstructor(classOf[ActorSystem])
     implCons.newInstance(actorSystem).asInstanceOf[MongoPersistenceExtension]
   }

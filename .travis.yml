@@ -9,7 +9,7 @@ services:
 language: scala
 scala:
    - 2.11.12
-   - 2.12.6
+   - 2.12.8
 env:
   matrix:
     - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"

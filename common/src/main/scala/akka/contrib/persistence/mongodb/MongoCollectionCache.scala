@@ -4,6 +4,7 @@ import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.BinaryOperator
 
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
 
 import scala.collection.concurrent.TrieMap
@@ -24,11 +25,12 @@ trait MongoCollectionCache[C] {
 
 object MongoCollectionCache {
 
-  def apply[C](config: Config, path: String): MongoCollectionCache[C] = {
+  def apply[C](config: Config, path: String, system: ActorSystem): MongoCollectionCache[C] = {
+    val reflectiveLookup = ReflectiveLookupExtension(system)
     val configuredCache =
       for {
         className <- Try(config.getString(s"$path.class"))
-        constructor <- loadCacheConstructor[C](className)
+        constructor <- loadCacheConstructor[C](className, reflectiveLookup)
       } yield constructor.apply(config.getConfig(path))
 
     configuredCache.getOrElse(createDefaultCache(config, path))
@@ -123,10 +125,10 @@ object MongoCollectionCache {
 
   }
 
-  private[this] def loadCacheConstructor[C](className: String): Try[Config => MongoCollectionCache[C]] =
+  private[this] def loadCacheConstructor[C](className: String, reflectiveLookup: ReflectiveLookupExtension): Try[Config => MongoCollectionCache[C]] =
     for {
       nonEmptyClassName <- Success(className.trim).filter(_.nonEmpty)
-      cacheClass <- Try(Class.forName(nonEmptyClassName))
+      cacheClass <- reflectiveLookup.reflectClassByName[MongoCollectionCache[_]](nonEmptyClassName)
       // if the loaded class implements MongoCollectionCache, take it on faith that it can store C
       if classOf[MongoCollectionCache[_]].isAssignableFrom(cacheClass)
       constructor <- getExpectedConstructor(cacheClass.asInstanceOf[Class[MongoCollectionCache[C]]])
