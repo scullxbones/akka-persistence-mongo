@@ -62,7 +62,9 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Migration tool](#suffixmigration)
 
 <a name="major"/>
+
 ### Major Changes in 1.x
+
 <a name="akka24"/>
 
 #### Akka 2.4 support
@@ -75,6 +77,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
   * More information in [the migration guide](http://doc.akka.io/docs/akka/snapshot/project/migration-guide-2.3.x-2.4.x.html)
 
 <a name="model"/>
+
 #### Journal Data Model Changes
 ##### This upgrade gave a good opportunity to correct the data model and make it more robust:
 
@@ -88,6 +91,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
     * In the 1.x series, `Array[Byte]`, `String`, `Double`, `Long`, and `Boolean` are added as pass-throughs.  The fallback continues to use Akka Serialization
 
 <a name="migration"/>  
+
 #### Migration of 0.x Journal
 
 * The 1.x journal is backward-incompatible with the 0.x journal.  Here are a couple of options for dealing with this.  These approaches assume no inbound writes to the journal:
@@ -105,6 +109,7 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
     * An alternative to removing these records is supplied with akka as of `2.4.0-RC3` [see more details](http://doc.akka.io/docs/akka/2.4.0-RC3/scala/cluster-sharding.html#Removal_of_Internal_Cluster_Sharding_Data)
 
 <a name="readjournal"/>
+
 #### Read Journal [akka docs](http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html)
 
 To obtain a handle to the read journal use the following:
@@ -128,6 +133,7 @@ Similarly there is a JavaDsl version.
 * The live queries use capped collection to stream events. If you do not use live queries you can disable the inserts into capped collection with `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence = false`
 
 <a name="miscchanges"/>
+
 #### Miscellaneous Other Changes
 
 * The `CircuitBreaker` implementation operates a little differently:
@@ -137,9 +143,11 @@ Similarly there is a JavaDsl version.
 * Several metrics were no longer relevant due to journal changes in 2.4
 
 <a name="config"/>
+
 #### Configuration
 
 <a name="mongouri"/>
+
 ##### Mongo URI
 
 A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
@@ -161,6 +169,7 @@ akka.contrib.persistence.mongodb.mongo.database = "storage-db"
 Proper MongoDB user permissions must be in place of course for the user to be able to access `storage-db` in this case
 
 <a name="mongocollection"/>
+
 ##### Mongo Collection, Index settings
 
 A DB name can be specified, as can the names of the collections and indices used (one for journal, one for snapshots).
@@ -174,6 +183,7 @@ akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
 ```
 
 <a name="writeconcern"/>
+
 ##### Mongo Write Concern settings
 
 This is well described in the [MongoDB Write Concern Documentation](http://docs.mongodb.org/manual/core/write-concern/)
@@ -206,6 +216,7 @@ akka.contrib.persistence.mongodb.mongo.snaps-fsync = false
 ```
 
 <a name="circuitbreaker"/>
+
 ##### Circuit breaker settings
 
 By default the circuit breaker is set up with a `maxTries` of 5, and `callTimeout` and `resetTimeout` of 5s.  [Akka's circuit breaker documentation](http://doc.akka.io/docs/akka/snapshot/common/circuitbreaker.html) covers in detail what these settings are used for.  In the context of this plugin, you can set these in the following way:
@@ -224,6 +235,7 @@ These settings may need tuning depending on your particular environment.  If you
 Make sure to look into the [Backoff Supervisor](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Failures).  Also, `onPersistRejected` can be caught and examined.  Between these two components, it should be possible to manage backpressure from MongoDB communicated via `CircuitBreaker`.
 
 <a name="rxmfailover"/>
+
 ##### Reactive Mongo Driver - failover settings
 
 The reactive mongo driver supports specific failover settings which govern behavior when sending requests results in failures.
@@ -248,6 +260,7 @@ akka.contrib.persistence.mongodb.rxmongo.failover {
 See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.12/documentation/advanced-topics/failoverstrategy.html) for more information.
 
 <a name="dispatcher"/>
+
 ##### Configuring the dispatcher used
 
 The name `akka-contrib-persistence-dispatcher` is mapped to a typically configured `ThreadPoolExecutor` based dispatcher.  This is needed to support the `Future`s used to interact with MongoDB via Casbah.  More details on these settings can be found in the [Akka Dispatcher documentation](http://doc.akka.io/docs/akka/snapshot/scala/dispatchers.html).  For example the (by core-scaled) pool sizes can be set:
@@ -260,6 +273,7 @@ akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
 
 
 <a name="passthru"/>
+
 ##### Passing DB objects directly into journal collection
 
 If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with `DBObject` (using casbah driver) or `BSONDocument` (using reactivemongo).
@@ -291,6 +305,7 @@ During replay, events will be sent to your actor as-is. It is the application's 
 This functionality is also exposed for snapshots.
 
 <a name="legacyser"/>
+
 ##### Legacy Serialization
 
 Legacy serialization (0.x) can be forced via the configuration parameter:
@@ -302,6 +317,7 @@ akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
 This will fully delegate serialization to `akka-serialization` by directly persisting the `PersistentRepr` as binary.  It can be used to carry over functionality that is dependent on the way that the `0.x` series used to treat storage of events.
 
 <a name="metrics"/>
+
 ##### Metrics (optional functionality)
 
 Depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
@@ -336,6 +352,7 @@ Histograms:
  - Adding health checks to both
 
 <a name="multiplugin"/>
+
 ##### Multiple plugin configurations
 
 With the introduction of the `journalPluginId` and `snapshotPluginId` parameters as documented [here](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#Multiple_persistence_plugin_configurations),
@@ -402,6 +419,7 @@ In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persisten
 Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
 
 <a name="casbahsettings"/>
+
 ##### Casbah Client Settings
 The Java MongoDB Driver, Casbah is based on, supports various connection related settings, which can be overriden in
 `application.conf`:
@@ -431,9 +449,11 @@ Be aware that some of them can be set via the MongoURI as well, in that case set
 settings.
 
 <a name="suffixcollection"/>
+
 ### Suffixed collection names
 
 <a name="suffixoverview"/>
+
 #### Overview
 Without any further configuration, events are stored in some unique collection, named by default "akka_persistence_journal", while snapshots are stored in "akka_persistence_snaps". This is the primary and widely used behavior of event sourcing through Akka-persistence, but it may happen to be insufficient in some cases.
 
@@ -461,6 +481,7 @@ journal name would be "akka_persistence_journal_*suffix*" while snapshot name wo
 Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
 
 <a name="suffixusage"/>
+
 #### Usage
 Using the *suffixed collection names* feature is a matter of configuration and a little code writing.
 
@@ -519,6 +540,7 @@ Keep in mind, while designing `getSuffixfromPersistenceId` and `validateMongoCha
 **Pay particularly attention to collection and index name length**. For example, with default database, journals, snapshots and their respective indexes names, your suffix, obtained through `getSuffixfromPersistenceId` and `validateMongoCharacters` methods, should not exceed 53 characters long.
 
 <a name="suffixdetail"/>
+
 #### Details
 
 ##### Batch writing
@@ -534,6 +556,7 @@ Instead of reading a single journal, we now collect all journals and, for each o
 Of course, for reading via the "xxxByPersistenceId" methods, we directly point to the correspondant journal collection.
 
 <a name="suffixmigration"/>
+
 #### Migration tool
 
 ##### Overview

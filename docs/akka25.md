@@ -66,7 +66,9 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
    * [Migration tool](#suffixmigration)
 
 <a name="major"/>
+
 ### Major Changes in 2.x
+
 <a name="akka25"/>
 
 #### Akka 2.5 support
@@ -75,9 +77,11 @@ akka.persistence.snapshot-store.plugin = "akka-contrib-mongodb-persistence-snaps
 * `EventsByTag` and `CurrentEventsByTag` queries are now supported.  More information [below](#eventsbytag)
 
 <a name="config"/>
+
 #### Configuration
 
 <a name="mongouri"/>
+
 ##### Mongo URI
 
 A mongo uri can be specified.  This must meet the requirements of [Mongo's uri format](http://docs.mongodb.org/manual/reference/connection-string/).
@@ -99,6 +103,7 @@ akka.contrib.persistence.mongodb.mongo.database = "storage-db"
 Proper MongoDB user permissions must be in place for the user to be able to access `storage-db` in this case
 
 <a name="mongocollection"/>
+
 ##### Mongo Collection, Index settings
 
 A DB name can be specified, as can the names of the collections and indices used (one for journal, one for snapshots).
@@ -112,6 +117,7 @@ akka.contrib.persistence.mongodb.mongo.journal-write-concern = "Acknowledged"
 ```
 
 <a name="collectioncaches"/>
+
 ##### Collection Caches
 
 The persistence plugin caches all collections it creates. As long as a collection remains in cache, the plugin will not re-create or re-index it for each access, which would cause unnecessary write-locks. By default, collection caches keep their entries forever and have unbounded memory consumption. It is best to implement your own collection cache if you enable [suffixed collection names](#suffixcollection).
@@ -171,6 +177,7 @@ akka.contrib.persistence.mongodb.mongo {
 ```
 
 <a name="writeconcern"/>
+
 ##### Mongo Write Concern settings
 
 This is well described in the [MongoDB Write Concern Documentation](http://docs.mongodb.org/manual/core/write-concern/)
@@ -202,6 +209,7 @@ akka.contrib.persistence.mongodb.mongo.snaps-wtimeout = 3s
 akka.contrib.persistence.mongodb.mongo.snaps-fsync = false
 ```
 <a name="rxmfailover"/>
+
 ##### Reactive Mongo Driver - failover settings
 
 The reactive mongo driver supports specific failover settings which govern behavior when sending requests results in failures.
@@ -226,6 +234,7 @@ akka.contrib.persistence.mongodb.rxmongo.failover {
 See [Reactive Mongo documentation](http://reactivemongo.org/releases/0.12/documentation/advanced-topics/failoverstrategy.html) for more information.
 
 <a name="buffer-size"/>
+
 ##### Configuring size of buffer for read stream
 
 This functionality has effectively been removed with the change of live streams to open a cursor on the realtime collection with every read query.
@@ -243,6 +252,7 @@ akka.contrib.persistence.stream-buffer-max-size.stream-buffer-max-size.pid = [yo
 ```
 
 <a name="dispatcher"/>
+
 ##### Configuring the dispatcher used
 
 The name `akka-contrib-persistence-dispatcher` is mapped to a typically configured `ThreadPoolExecutor` based dispatcher.  This is needed to support the `Future`s used to interact with MongoDB via Casbah.  More details on these settings can be found in the [Akka Dispatcher documentation](http://doc.akka.io/docs/akka/snapshot/scala/dispatchers.html).  For example the (by core-scaled) pool sizes can be set:
@@ -255,6 +265,7 @@ akka-contrib-persistence-dispatcher.thread-pool-executor.core-pool-size-max = 20
 
 
 <a name="passthru"/>
+
 ##### Passing DB objects directly into journal collection
 
 If you need to see contents of your events directly in database in non-binary form, you can call `persist()` with a specific type that corresponds to the driver you use:
@@ -290,6 +301,7 @@ During replay, events will be sent to your actor as-is. It is the application's 
 This functionality is also exposed for snapshots.
 
 <a name="legacyser"/>
+
 ##### Legacy Serialization
 
 Legacy serialization (0.x) can be forced via the configuration parameter:
@@ -301,6 +313,7 @@ akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
 This will fully delegate serialization to `akka-serialization` by directly persisting the `PersistentRepr` as binary.  It can be used to carry over functionality that is dependent on the way that the `0.x` series used to treat storage of events.
 
 <a name="metrics"/>
+
 ##### Metrics (optional functionality)
 
 By default metrics depends on the excellent [Metrics-Scala library](https://github.com/erikvanoosten/metrics-scala) which in turn stands on the shoulders of codahale's excellent [Metrics library](https://github.com/dropwizard/metrics).
@@ -344,6 +357,7 @@ of your implementation of `akka.contrib.persistence.mongodb.MetricsBuilder`.
  - Adding health checks to both
 
 <a name="multiplugin"/>
+
 ##### Multiple plugin configurations
 
 With the introduction of the `journalPluginId` and `snapshotPluginId` parameters as documented [here](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#Multiple_persistence_plugin_configurations),
@@ -410,6 +424,7 @@ In addition, some can specify `journalPluginId = "akka-contrib-mongodb-persisten
 Some more information is covered in [#43](https://github.com/scullxbones/akka-persistence-mongo/issues/43)
 
 <a name="officialsettings"/>
+
 ##### Casbah / Official Scala Client Settings
 The Official MongoDB Drivers that are used support various connection related settings, which can be overriden via typesafe config e.g. `application.conf`:
 
@@ -458,6 +473,7 @@ akka.contrib.persistence.mongodb.casbah {
 Any settings provided in the configured `mongouri` connection string will override explicit settings.
 
 <a name="eventsbytag"/>
+
 ### EventsByTag queries
 `EventsByTag` queries as described in [the akka docs](http://doc.akka.io/docs/akka/current/scala/persistence-query.html#eventsbytag-and-currenteventsbytag) are available for use.  When payloads are wrapped in an instance of `akka.persistence.journal.Tagged`, these tags are stored in the journal and can be used as part of a persistence query.  In DDD context, tags correspond well to aggregate roots.
 
@@ -474,9 +490,11 @@ The mongo plugin understands either `Offset.noOffset` or an `ObjectId` offset.  
 For offsets to operate correctly in a distributed environment, the system clocks of all journal-writing processes should be synchronized.  In addition, `ObjectId`s will be sorted by their components described in the [mongodb docs](https://docs.mongodb.com/manual/reference/method/ObjectId/).  This can cause events that are generated in the same second to be replayed out of strict temporal order.
 
 <a name="suffixcollection"/>
+
 ### Suffixed collection names
 
 <a name="suffixoverview"/>
+
 #### Overview
 Without any further configuration, events are stored in some unique collection, named by default "akka_persistence_journal", while snapshots are stored in "akka_persistence_snaps". This is the primary and widely used behavior of event sourcing through Akka-persistence, but it may happen to be insufficient in some cases.
 
@@ -504,6 +522,7 @@ journal name would be "akka_persistence_journal_*suffix*" while snapshot name wo
 Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
 
 <a name="suffixusage"/>
+
 #### Usage
 Using the *suffixed collection names* feature is a matter of configuration and a little code writing.
 
@@ -562,6 +581,7 @@ Keep in mind, while designing `getSuffixfromPersistenceId` and `validateMongoCha
 **Pay particularly attention to collection and index name length**. For example, with default database, journals, snapshots and their respective indexes names, your suffix, obtained through `getSuffixfromPersistenceId` and `validateMongoCharacters` methods, should not exceed 53 characters long.
 
 <a name="suffixdetail"/>
+
 #### Details
 
 ##### Batch writing
@@ -577,6 +597,7 @@ Instead of reading a single journal, we now collect all journals and, for each o
 Of course, for reading via the "xxxByPersistenceId" methods, we directly point to the correspondant journal collection.
 
 <a name="suffixmigration"/>
+
 #### Migration tool
 
 ##### Overview
