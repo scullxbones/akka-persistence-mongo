@@ -1,4 +1,8 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Optimization, journal collection cache. PR #181
+ * Copyright (c) 2018      Gael Breard, Orange: fix Race condition on deleteFrom. #203
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
  * ...
@@ -6,21 +10,26 @@
 
 package akka.contrib.persistence.mongodb
 
+import akka.actor.ActorSystem
 import akka.persistence._
-import com.mongodb.DBObject
+import com.mongodb.casbah.{Imports, TypeImports}
+import com.mongodb.{DBObject, DuplicateKeyException}
 import com.mongodb.casbah.Imports._
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.collection.immutable.Seq
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
+class CasbahPersistenceJournaller(val driver: CasbahMongoDriver) extends MongoPersistenceJournallingApi {
 
-  import CasbahSerializers._
+  import driver.CasbahSerializers._
 
-  implicit val system = driver.actorSystem
+  private implicit val system: ActorSystem = driver.actorSystem
 
-  private[this] implicit val serialization = driver.serialization
+  private[this] val logger: Logger = LoggerFactory.getLogger(getClass)
+
   private[this] lazy val writeConcern = driver.journalWriteConcern
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long): DBObject =
@@ -45,35 +54,49 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
       .map(driver.deserializeJournal)
   }
 
-  import collection.immutable.{ Seq => ISeq }
-  private[this] def doBatchAppend(writes: ISeq[AtomicWrite], collection: MongoCollection)(implicit ec: ExecutionContext): ISeq[Try[Unit]] = {
-    val batch = writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
+  private[this] def buildBatch(writes: Seq[AtomicWrite]): Seq[Try[Imports.DBObject]] =
+    writes.map(write => Try(driver.serializeJournal(Atom[DBObject](write, driver.useLegacySerialization))))
 
+  private[this] def doBatchAppend(batch: Seq[Try[Imports.DBObject]], collection: MongoCollection)(implicit ec: ExecutionContext): Seq[Try[Imports.DBObject]] = {
     if (batch.forall(_.isSuccess)) {
       val bulk = collection.initializeOrderedBulkOperation
       batch.collect { case scala.util.Success(ser) => ser } foreach bulk.insert
       bulk.execute(writeConcern)
-      batch.map(t => t.map(_ => ()))
+      batch
     } else { // degraded performance, can't batch
-      batch.map(_.map { serialized => collection.insert(serialized)(identity, writeConcern) }.map(_ => ()))
+      batch.map(_.map { serialized => serialized -> collection.insert(serialized)(identity, writeConcern) })
+        .map{_.map{case (ser,_) => ser}}
     }
   }
 
-  private[mongodb] override def batchAppend(writes: ISeq[AtomicWrite])(implicit ec: ExecutionContext): Future[ISeq[Try[Unit]]] = {
-    val batchFuture = Future {
+  private[mongodb] override def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = {
+    val batchFuture =
       if (driver.useSuffixedCollectionNames) {
-        writes.groupBy(write => driver.getJournalCollectionName(write.persistenceId)).flatMap {
-          case (_, writeSeq) => doBatchAppend(writeSeq, driver.journal(writeSeq.head.persistenceId))
-        }.to[collection.immutable.Seq]
+        writes
+          .groupBy(write => driver.getJournalCollectionName(write.persistenceId))
+          .foldLeft(Future.successful(Seq.empty[Try[Imports.DBObject]])) { case(future, (_, hunk)) =>
+            for {
+              prev <- future
+              batch = buildBatch(hunk)
+              next <- Future { doBatchAppend(batch, driver.journal(hunk.head.persistenceId)) }
+            } yield prev ++ next
+        }
       } else {
-        doBatchAppend(writes, journal)
+        val batch = buildBatch(writes)
+        Future { doBatchAppend(batch, journal) }
       }
-    }
 
     if (driver.realtimeEnablePersistence)
-      batchFuture.flatMap { _ => Future { doBatchAppend(writes, realtime) } }
+      batchFuture.flatMap { batch =>
+        val f = Future { doBatchAppend(batch, realtime) }
+        f.onFailure {
+          case t =>
+            logger.error("Error during write to realtime collection", t)
+        }
+        f.map(squashToUnit)
+      }
     else
-      batchFuture
+      batchFuture.map(squashToUnit)
   }
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Option[Long] = {
@@ -83,30 +106,65 @@ class CasbahPersistenceJournaller(driver: CasbahMongoDriver) extends MongoPersis
     journal.aggregate($match :: $group :: Nil).results.flatMap(_.getAs[Long]("max")).headOption
   }
 
-  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext) = {
+  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): TypeImports.WriteResult = {
+    try {
+      metadata.update(
+        MongoDBObject(PROCESSOR_ID -> persistenceId),
+        $setOnInsert(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
+        upsert = true,
+        multi = false,
+        concern = driver.metadataWriteConcern
+      )
+    }
+    catch {
+      case _:DuplicateKeyException =>
+        // Ignore Duplicate Key, PID already exists
+    }
+
     metadata.update(
       MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> MongoDBObject("$lte" -> maxSequenceNr)),
-      MongoDBObject(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr),
-      upsert = true,
+      $set(MAX_SN -> maxSequenceNr),
+      upsert = false,
       multi = false,
-      concern = driver.metadataWriteConcern)
+      concern = driver.metadataWriteConcern
+    )
   }
+
 
   private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = Future {
     val journal = driver.getJournal(persistenceId)
-    val query = journalRangeQuery(persistenceId, 0L, toSequenceNr)
+
+
+    val maxSn = findMaxSequence(persistenceId, toSequenceNr)
+    maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
+
+    //first remove docs that have to be removed, it avoid settings some docs with from > to and trying to set same from on several docs
+    val docWithAllEventsToRemove = (PROCESSOR_ID $eq persistenceId) ++ (TO $lte toSequenceNr)
+    journal.remove(docWithAllEventsToRemove)
+
+    //then update the (potential) doc that should have only one (not all) event removed
+    //note the query: we exclude documents that have to < toSequenceNr, it should have been deleted just before,
+    // but we avoid here some potential race condition that would lead to have from > to and several documents with same from
+    val query = journalRangeQuery(persistenceId, toSequenceNr, toSequenceNr)
     val update: DBObject = MongoDBObject(
       "$pull" -> MongoDBObject(
         EVENTS -> MongoDBObject(
           PROCESSOR_ID -> persistenceId,
           SEQUENCE_NUMBER -> MongoDBObject("$lte" -> toSequenceNr))),
       "$set" -> MongoDBObject(FROM -> (toSequenceNr + 1)))
-    val maxSn = findMaxSequence(persistenceId, toSequenceNr)
-    journal.update(query, update, upsert = false, multi = true, writeConcern)
-    maxSn.foreach(setMaxSequenceMetadata(persistenceId, _))
-    journal.remove(clearEmptyDocumentsQuery(persistenceId), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && journal.count() == 0)
+    try {
+      journal.update(query, update, upsert = false, multi = true, writeConcern)
+
+    } catch {
+      case _: DuplicateKeyException =>
+      // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
+      // (dup key => Same (pid,from,to) => Same targeted "from" in mongo document => it was the same toSequenceNr value)
+    }
+
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && journal.count() == 0) {
       journal.dropCollection()
+      driver.removeJournalInCache(persistenceId)
+    }
     ()
   }
 

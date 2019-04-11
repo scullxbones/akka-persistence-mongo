@@ -10,8 +10,8 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
-class CasbahPersistenceSnapshotterTckSpec extends SnapshotTckSpec(classOf[CasbahPersistenceExtension], "casbah")
+class CasbahPersistenceSnapshotterTckSpec extends SnapshotTckSpec(classOf[CasbahPersistenceExtension], "casbah-snaptck")
 
 
 @RunWith(classOf[JUnitRunner])
-class CasbahSuffixPersistenceSnapshotterTckSpec extends SnapshotTckSpec(classOf[CasbahPersistenceExtension], "casbah", SuffixCollectionNamesTest.extendedConfig)
+class CasbahSuffixPersistenceSnapshotterTckSpec extends SnapshotTckSpec(classOf[CasbahPersistenceExtension], "casbah-snaptck-suffix", SuffixCollectionNamesTest.extendedConfig)

@@ -6,278 +6,304 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor._
+import akka.NotUsed
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
-import akka.stream.actor.ActorPublisher
-import akka.{ Done => ADone }
-import play.api.libs.iteratee._
+import akka.persistence.query.{NoOffset, Offset}
+import akka.stream.{Attributes, Materializer, Outlet, SourceShape}
+import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
+import org.reactivestreams.{Publisher, Subscriber, Subscription}
+import reactivemongo.akkastream._
 import reactivemongo.api.QueryOpts
-import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson._
 
-import scala.concurrent.{ ExecutionContext, Future }
-
-import scala.util.Success
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
-
-trait IterateeActorPublisher[T] extends ActorPublisher[T] with ActorLogging {
-
-  import akka.pattern.pipe
-  import akka.stream.actor.ActorPublisherMessage._
-  import context.dispatcher
-
-  def initial: Enumerator[T]
-
-  override def preStart() = {
-    context.become(awaiting(initial andThen Enumerator.eof[T]))
-  }
-
-  override def receive: Receive = Actor.emptyBehavior
-
-  private case class Next(enumerator: Enumerator[T], iteratee: Iteratee[T, Unit])
-
-  private def respondToDemand(enumerator: Enumerator[T], iter: Iteratee[T, Unit]) = {
-    Concurrent.runPartial(enumerator, iter).map { case (_, e) => Next(e, iter) }.pipeTo(self)
-  }
-
-  private class DoneIteratee extends Iteratee[T, Unit] {
-    override def fold[B](folder: (Step[T, Unit]) => Future[B])(implicit ec: ExecutionContext): Future[B] = {
-      folder(Step.Done((), Input.Empty))
-    }
-  }
-
-  private class CursorIteratee extends Iteratee[T, Unit] {
-    override def fold[B](folder: (Step[T, Unit]) => Future[B])(implicit ec: ExecutionContext): Future[B] = {
-      folder(Step.Cont({
-        case Input.El(elem) =>
-          onNext(elem)
-          if (totalDemand > 0L) this
-          else new DoneIteratee
-        case Input.EOF =>
-          onComplete()
-          cleanup().pipeTo(self)
-          new DoneIteratee
-        case Input.Empty =>
-          if (totalDemand > 0L) this
-          else new DoneIteratee
-      }))
-    }
-  }
-
-  def cleanup(): Future[ADone] = Future.successful(ADone)
-
-  def defaults: Receive = {
-    case _: Cancel | SubscriptionTimeoutExceeded =>
-      log.warning("Cancelling stream")
-      onCompleteThenStop()
-      cleanup().pipeTo(self)
-      ()
-    case Status.Failure(t) =>
-      log.error(t, "Failure occurred while streaming")
-      onErrorThenStop(t)
-      cleanup().pipeTo(self)
-      ()
-    case ADone =>
-      context.stop(self)
-  }
-
-  def awaiting(enumerator: Enumerator[T]): Receive = defaults orElse handleNext("Awaiting") orElse {
-    case Request(_) =>
-      log.debug(s"Awaiting: Request received, demand = $totalDemand")
-      respondToDemand(enumerator, new CursorIteratee)
-      context.become(streaming(enumerator))
-  }
-
-  def streaming(enumerator: Enumerator[T]): Receive = defaults orElse handleNext("Streaming")
-
-  private def handleNext(header: String): Receive = {
-    case Next(enm, it) =>
-      log.debug("Next received")
-      if (totalDemand > 0) {
-        log.debug(s"$header: requesting more, demand = $totalDemand")
-        respondToDemand(enm, it)
-        context.become(streaming(enm))
-      } else {
-        log.debug(s"$header: nothing to do, no demand")
-        context.become(awaiting(enm))
-      }
-  }
-
-}
-
 object CurrentAllEvents {
-  def props(driver: RxMongoDriver) = Props(new CurrentAllEvents(driver))
-}
+  def source(driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
+    import driver.RxMongoSerializers._
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-class CurrentAllEvents(val driver: RxMongoDriver) extends IterateeActorPublisher[Event] {
-  import JournallingFieldNames._
-  import RxMongoSerializers._
-  import context.dispatcher
-
-  private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
-    Enumerator(
-      doc.as[BSONArray](EVENTS).values.collect {
-        case d: BSONDocument => driver.deserializeJournal(d)
-      }: _*)
-  }
-
-  private val flattenCollection: Enumeratee[BSONCollection, BSONDocument] = Enumeratee.mapFlatten[BSONCollection] { journal =>
-    journal.find(BSONDocument())
-      .projection(BSONDocument(EVENTS -> 1))
-      .cursor[BSONDocument]()
-      .enumerate()
-  }
-
-  override def initial: Enumerator[Event] = {
-
-    driver.getJournalCollections()
-      .through(flattenCollection)
-      .through(flatten)
+    Source.fromFuture(driver.journalCollectionsAsFuture)
+      .flatMapConcat(_.map { c =>
+        c.find(BSONDocument())
+          .projection(BSONDocument(EVENTS -> 1))
+          .cursor[BSONDocument]()
+          .documentSource()
+          .map { doc =>
+            doc.getAs[BSONArray](EVENTS)
+              .map(_.elements
+                .map(_.value)
+                .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
+              .getOrElse(Nil)
+          }.mapConcat(identity)
+      }.reduceLeftOption(_ concat _)
+       .getOrElse(Source.empty))
   }
 }
 
-object CurrentAllPersistenceIds {
-  def props(driver: RxMongoDriver) = Props(new CurrentAllPersistenceIds(driver))
-}
+object CurrentPersistenceIds {
+  def source(driver: RxMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
+    val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
-class CurrentAllPersistenceIds(val driver: RxMongoDriver) extends IterateeActorPublisher[String] {
-  import JournallingFieldNames._
-  import context.dispatcher
-  import reactivemongo.bson._
-
-    val temporaryCollectionName = {
-    val name = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
-    name
-  }
-  def temporaryCollection = driver.collection(temporaryCollectionName)
-
-  override def postStop() = {
-    driver.db.flatMap(_.collectionNames).andThen {
-      case Success(names) if names.contains(temporaryCollectionName) =>
-        cleanup()
-    }
-    ()
-  }
-
-  override def cleanup() = {
-    for {
-      tc <- temporaryCollection
-      dropped  <- tc.drop(failIfNotFound = false)
-    } yield {
-      ADone
-    }
-  }
-
-  private val flattened = Enumeratee.mapConcat[BSONDocument](_.getAs[String]("_id").toSeq)
-
-  private val flattenCollection: Enumeratee[BSONCollection, BSONDocument] = Enumeratee.mapFlatten[BSONCollection] { journal =>
-    import journal.BatchCommands.AggregationFramework.{ Group, Out, Project }
-
-    val enumerator = for {
-      _ <- journal.aggregate(Project(BSONDocument(PROCESSOR_ID -> 1)),
-        List(
-          Group(BSONString(s"$$$PROCESSOR_ID"))(),
-          Out(temporaryCollectionName)))
-      tc <- temporaryCollection
-    } yield tc.find(BSONDocument())
-            .cursor[BSONDocument]()
-            .enumerate()
-
-    Enumerator.flatten(enumerator)
-  }
-
-  override def initial: Enumerator[String] = {
-    driver.getJournalCollections()
-      .through(flattenCollection)
-      .through(flattened)
+    Source.fromFuture(for {
+        collections <- driver.journalCollectionsAsFuture
+        tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
+                          import c.BatchCommands.AggregationFramework.{Group, Out, Project}
+                          val nameWithIndex = s"$temporaryCollectionName-$idx"
+                          c.aggregatorContext[BSONDocument](
+                            Project(BSONDocument(PROCESSOR_ID -> 1)),
+                            Group(BSONString(s"$$$PROCESSOR_ID"))() ::
+                            Out(nameWithIndex) ::
+                            Nil,
+                            batchSize = Option(1000)
+                          ).prepared[AkkaStreamCursor]
+                            .cursor
+                            .headOption
+                            .map(_ => nameWithIndex)
+                        })
+        tmps         <- Future.sequence(tmpNames.map(driver.collection))
+      } yield tmps )
+      .flatMapConcat(cols => cols.map(_.find(BSONDocument()).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
+      .mapConcat(_.getAs[String]("_id").toList)
+      .alsoTo(Sink.onComplete{ _ =>
+        driver
+          .getCollectionsAsFuture(temporaryCollectionName)
+          .foreach(cols =>
+            cols.foreach(_.drop(failIfNotFound = false))
+          )
+      })
   }
 }
 
 object CurrentEventsByPersistenceId {
-  def props(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    Props(new CurrentEventsByPersistenceId(driver, persistenceId, fromSeq, toSeq))
-}
+  def queryFor(persistenceId: String, fromSeq: Long, toSeq: Long) = BSONDocument(
+    PROCESSOR_ID -> persistenceId,
+    TO -> BSONDocument("$gte" -> fromSeq),
+    FROM -> BSONDocument("$lte" -> toSeq)
+  )
 
-class CurrentEventsByPersistenceId(val driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long) extends IterateeActorPublisher[Event] {
-  import JournallingFieldNames._
-  import RxMongoSerializers._
-  import context.dispatcher
+  def source(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
+    import driver.RxMongoSerializers._
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-  private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
-    Enumerator(
-      doc.as[BSONArray](EVENTS).values.collect {
-        case d: BSONDocument => driver.deserializeJournal(d)
-      }: _*)
-  }
+    val query = queryFor(persistenceId, fromSeq, toSeq)
 
-  private val filter = Enumeratee.filter[Event] { e =>
-    e.sn >= fromSeq && e.sn <= toSeq
-  }
-
-  override def initial = Enumerator.flatten {
-
-    val q = BSONDocument(
-      PROCESSOR_ID -> persistenceId,
-      TO -> BSONDocument("$gte" -> fromSeq),
-      FROM -> BSONDocument("$lte" -> toSeq))
-
-    driver.getJournal(persistenceId)
-      .map(_.find(q)
-        .sort(BSONDocument(TO -> 1))
-        .projection(BSONDocument(EVENTS -> 1))
-        .cursor[BSONDocument]()
-        .enumerate()
-        .through(flatten)
-        .through(filter))
+    Source.fromFuture(driver.getJournal(persistenceId))
+            .flatMapConcat(
+              _.find(query)
+                .sort(BSONDocument(TO -> 1))
+                .projection(BSONDocument(EVENTS -> 1))
+                .cursor[BSONDocument]()
+                .documentSource()
+            ).map( doc =>
+              doc.getAs[BSONArray](EVENTS)
+                .map(_.elements
+                  .map(_.value)
+                  .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
+                .getOrElse(Nil)
+            ).mapConcat(identity)
   }
 }
 
-class RxMongoJournalStream(driver: RxMongoDriver) extends JournalStream[Enumerator[BSONDocument]] {
-  import RxMongoSerializers._
+object CurrentEventsByTag {
+  def source(driver: RxMongoDriver, tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
+    import driver.RxMongoSerializers._
+    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-  implicit val ec = driver.querySideDispatcher
+    val offset = fromOffset match {
+      case NoOffset => None
+      case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).toOption
+    }
+    val query = BSONDocument(
+      TAGS -> tag
+    ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id))))
 
-  override def cursor() =
-    Enumerator.flatten(
-      driver.realtime.map(rt =>
-        rt.find(BSONDocument.empty)
-          .options(QueryOpts().tailable.awaitData)
-          .cursor[BSONDocument]()
-          .enumerate()
-          ))
-
-  private val flatten: Enumeratee[BSONDocument, Event] = Enumeratee.mapFlatten[BSONDocument] { doc =>
-    Enumerator(
-      doc.as[BSONArray](EVENTS).values.collect {
-        case d: BSONDocument => driver.deserializeJournal(d)
-      }: _*)
-  }
-
-  override def publishEvents() = {
-    val iteratee = Iteratee.foreach[Event](driver.actorSystem.eventStream.publish)
-    cursor().through(flatten).run(iteratee)
-    ()
+    Source.fromFuture(driver.journalCollectionsAsFuture)
+          .flatMapConcat{ xs =>
+            xs.map(c =>
+              c.find(query)
+               .sort(BSONDocument(ID -> 1))
+               .cursor[BSONDocument]()
+               .documentSource()
+            ).reduceLeftOption(_ ++ _)
+             .getOrElse(Source.empty)
+          }.map{ doc =>
+            val id = doc.getAs[BSONObjectID](ID).get
+            doc.getAs[BSONArray](EVENTS)
+              .map(_.elements
+                .map(_.value)
+                .collect{ case d:BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time) }
+                .filter(_._1.tags.contains(tag))
+              )
+              .getOrElse(Nil)
+    }.mapConcat(identity)
   }
 }
 
-class RxMongoReadJournaller(driver: RxMongoDriver) extends MongoPersistenceReadJournallingApi {
+class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory: Option[BSONObjectID] => Publisher[BSONDocument])
+  extends GraphStage[SourceShape[BSONDocument]] {
 
-  val journalStream = {
-    val stream = new RxMongoJournalStream(driver)
-    stream.publishEvents()
+  private val out = Outlet[BSONDocument]("out")
+
+  override def shape: SourceShape[BSONDocument] = SourceShape(out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+    new GraphStageLogic(shape) {
+      private var lastId: Option[BSONObjectID] = None
+      private var subscription: Option[Subscription] = None
+      private var cursor: Option[Publisher[BSONDocument]] = None
+      private var buffer: List[BSONDocument] = Nil
+
+      override def preStart(): Unit = {
+        cursor = Option(buildCursor(buildSubscriber()))
+      }
+
+      private def subAc = getAsyncCallback[Subscription] { s =>
+        s.request(bufsz.toLong)
+        subscription = Option(s)
+      }
+
+      private def nxtAc = getAsyncCallback[BSONDocument] { doc =>
+        if (isAvailable(out)) {
+          push(out, doc)
+          subscription.foreach(_.request(1L))
+        }
+        else
+          buffer = buffer ::: List(doc)
+        lastId = doc.getAs[BSONObjectID]("_id")
+      }
+
+      private def errAc = getAsyncCallback[Throwable](failStage)
+
+      private def cmpAc = getAsyncCallback[Unit]{ _ =>
+        subscription.foreach(_.cancel())
+        cursor = None
+        cursor = Option(buildCursor(buildSubscriber()))
+      }
+
+      private def buildSubscriber(): Subscriber[BSONDocument] = new Subscriber[BSONDocument] {
+        private val subAcImpl = subAc
+        private val nxtAcImpl = nxtAc
+        private val errAcImpl = errAc
+        private val cmpAcImpl = cmpAc
+
+        override def onSubscribe(s: Subscription): Unit = subAcImpl.invoke(s)
+
+        override def onNext(t: BSONDocument): Unit = nxtAcImpl.invoke(t)
+
+        override def onError(t: Throwable): Unit = errAcImpl.invoke(t)
+
+        override def onComplete(): Unit = cmpAcImpl.invoke(())
+      }
+
+      setHandler(out, new OutHandler {
+        override def onPull(): Unit = {
+          while (buffer.nonEmpty && isAvailable(out)){
+            val head :: tail = buffer
+            push(out, head)
+            buffer = tail
+            subscription.foreach(_.request(1L))
+          }
+        }
+
+        override def onDownstreamFinish(): Unit = {
+          subscription.foreach(_.cancel())
+          completeStage()
+        }
+      })
+
+      private def buildCursor(subscriber: Subscriber[BSONDocument]): Publisher[BSONDocument] = {
+        subscription.foreach(_.cancel())
+        val c = factory(lastId)
+        c.subscribe(subscriber)
+        c
+      }
+    }
+}
+
+class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) extends JournalStream[Source[(Event, Offset), NotUsed]] {
+  import driver.RxMongoSerializers._
+
+  implicit val ec: ExecutionContext = driver.querySideDispatcher
+
+  def cursor(query: Option[BSONDocument]): Source[(Event, Offset),NotUsed] =
+    if (driver.realtimeEnablePersistence)
+      Source.fromFuture(driver.realtime)
+        .flatMapConcat { rt =>
+          Source.fromGraph(
+            new RxMongoRealtimeGraphStage(driver)(maybeId => {
+              ((query, maybeId) match {
+                case (None, None) =>
+                  rt.find(BSONDocument.empty)
+                case (None, Some(id)) =>
+                  rt.find(BSONDocument(ID -> BSONDocument("$gt" -> id)))
+                case (Some(q), None) =>
+                  rt.find(q)
+                case (Some(q), Some(id)) =>
+                  rt.find(q ++ BSONDocument(ID -> BSONDocument("$gt" -> id)))
+              }).options(QueryOpts().tailable.awaitData)
+                .cursor[BSONDocument]()
+                .documentPublisher()
+            })
+          )
+          .via(killSwitch.flow)
+          .mapConcat { d =>
+            val id = d.getAs[BSONObjectID](ID).get
+            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+              case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
+            }).getOrElse(Nil)
+          }
+        }
+    else
+      Source.empty
+}
+
+class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
+
+  val journalStream: RxMongoJournalStream = {
+    val stream = new RxMongoJournalStream(driver)(m)
+    driver.actorSystem.registerOnTermination(stream.stopAllStreams())
     stream
   }
 
-  override def currentAllEvents: Props = CurrentAllEvents.props(driver)
+  override def currentAllEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
+    CurrentAllEvents.source(driver)
 
-  override def currentPersistenceIds: Props = CurrentAllPersistenceIds.props(driver)
+  override def currentPersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] =
+    CurrentPersistenceIds.source(driver)
 
-  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long): Props =
-    CurrentEventsByPersistenceId.props(driver, persistenceId, fromSeq, toSeq)
+  override def currentEventsByPersistenceId(persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
+    CurrentEventsByPersistenceId.source(driver, persistenceId, fromSeq, toSeq)
 
-  override def subscribeJournalEvents(subscriber: ActorRef): Unit = {
-    driver.actorSystem.eventStream.subscribe(subscriber, classOf[Event])
-    ()
+  override def currentEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext): Source[(Event, Offset), NotUsed] =
+    CurrentEventsByTag.source(driver, tag, offset)
+
+  override def checkOffsetIsSupported(offset: Offset): Boolean =
+    PartialFunction.cond(offset){
+      case NoOffset => true
+      case ObjectIdOffset(hexStr, _) => BSONObjectID.parse(hexStr).isSuccess
+    }
+
+  override def liveEventsByPersistenceId(persistenceId: String)(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] = {
+    journalStream.cursor(Option(BSONDocument(
+      PROCESSOR_ID -> persistenceId
+    ))).mapConcat{ case(ev,_) => List(ev).filter(_.pid == persistenceId) }
+  }
+
+  override def liveEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] = {
+    journalStream.cursor(None).map(_._1)
+  }
+
+  override def livePersistenceIds(implicit m: Materializer, ec: ExecutionContext): Source[String, NotUsed] = {
+    journalStream.cursor(None).map{ case(ev,_) => ev.pid }
+  }
+
+  override def liveEventsByTag(tag: String, offset: Offset)(implicit m: Materializer, ec: ExecutionContext, ord: Ordering[Offset]): Source[(Event, Offset), NotUsed] = {
+    journalStream.cursor(Option(BSONDocument(
+      TAGS -> tag
+    ))).filter{ case(ev, off) => ev.tags.contains(tag) &&  ord.gt(off, offset)}
   }
 }

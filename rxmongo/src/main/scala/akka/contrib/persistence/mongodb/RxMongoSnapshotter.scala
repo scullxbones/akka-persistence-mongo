@@ -15,11 +15,9 @@ import scala.concurrent._
 class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshottingApi {
 
   import SnapshottingFieldNames._
-  import RxMongoSerializers._
+  import driver.RxMongoSerializers._
 
-  private[this] implicit val serialization = driver.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
-  private[this] implicit lazy val snapshotSerialization = new RxMongoSnapshotSerialization()
 
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     val selected =
@@ -51,8 +49,9 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- s.count()
-          if (n == 0)
+            if n == 0
           _ <- s.drop(failIfNotFound = false)
+          _ = driver.removeSnapsInCache(pid)
         } yield ()
       ()
     }
@@ -69,8 +68,9 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
           n <- s.count()
-          if (n == 0)
+            if n == 0
           _ <- s.drop(failIfNotFound = false)
+          _ = driver.removeSnapsInCache(pid)
         } yield ()
       ()
     }

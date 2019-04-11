@@ -1,6 +1,10 @@
-/* 
+/*
+ * Copyright (c) 2013-2018 Brian Scully
+ * Copyright (c) 2018      Gael Breard, Orange: Fix issue #179 about actorRef serialization
+ *
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * Florian FENDT: optimization, solution collection cache
  * ...
  */
 
@@ -28,8 +32,10 @@ object CasbahPersistenceSnapshotter {
     snapshot.snapshot match {
       case o: DBObject =>
         obj.put(V2.SERIALIZED, o)
-      case b =>
-        obj.put(V2.SERIALIZED, serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
+      case _ =>
+        Serialization.withTransportInformation(serialization.system) { () =>
+          obj.put(V2.SERIALIZED, serialization.serializerFor(classOf[Snapshot]).toBinary(Snapshot(snapshot.snapshot)))
+        }
     }
     obj
   }
@@ -70,7 +76,7 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
   import CasbahPersistenceSnapshotter._
   import SnapshottingFieldNames._
 
-  private[this] implicit val serialization = driver.serialization
+  private[this] implicit val serialization: Serialization = driver.CasbahSerializers.serialization
   private[this] lazy val writeConcern = driver.snapsWriteConcern
 
   private[this] def snapQueryMaxSequenceMaxTime(pid: String, maxSeq: Long, maxTs: Long) =
@@ -99,16 +105,20 @@ class CasbahPersistenceSnapshotter(driver: CasbahMongoDriver) extends MongoPersi
     val snaps = driver.getSnaps(pid)
     val criteria = Seq(PROCESSOR_ID $eq pid, SEQUENCE_NUMBER $eq seq) ++ Option(TIMESTAMP $eq ts).filter(_ => ts > 0).toList
     snaps.remove($and(criteria : _*), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0)
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0) {
       snaps.dropCollection()
+      driver.removeSnapsInCache(pid)
+    }
     ()
   }
 
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = Future {
     val snaps = driver.getSnaps(pid)
     snaps.remove(snapQueryMaxSequenceMaxTime(pid, maxSeq, maxTs), writeConcern)
-    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0)
+    if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && snaps.count() == 0) {
       snaps.dropCollection()
+      driver.removeSnapsInCache(pid)
+    }
     ()
   }
 }

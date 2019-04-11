@@ -9,10 +9,11 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor._
-import akka.testkit._
 import akka.persistence.PersistentActor
+import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.tagobjects.Slow
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
@@ -24,9 +25,10 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
   override def embedDB = s"load-test-$database"
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
     |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -42,13 +44,14 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     $extendedConfig
-    |""".stripMargin)
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   def actorProps(id: String, eventCount: Int, atMost: FiniteDuration = 60.seconds): Props =
     Props(new CounterPersistentActor(id, eventCount, atMost))
 
   sealed trait Command
   case class SetTarget(ar: ActorRef) extends Command
+  case object TargetIsSet
   case class IncBatch(n: Int) extends Command
   case object Stop extends Command
 
@@ -75,6 +78,12 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
       case x:Int => (1 to x).foreach(_ => state.event(IncEvent))
     }
 
+    override def onRecoveryFailure(cause: Throwable, event: Option[Any]): Unit = {
+      log.error(cause,s"FAILED TO RECOVER during load test due to event of type ${event.map(_.getClass)}: $event")
+
+      super.onRecoveryFailure(cause, event)
+    }
+
     private def eventHandler(int: Int): Unit = {
       (1 to int) foreach { _ =>
         state.event(IncEvent)
@@ -89,6 +98,7 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
 
     override def receiveCommand: Receive = {
       case SetTarget(ar) =>
+        sender() ! TargetIsSet
         accumulator = Option(ar)
         context.setReceiveTimeout(atMost)
       case IncBatch(count) =>
@@ -133,17 +143,19 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
   def startPersistentActors(as: ActorSystem, eventsPer: Int, maxDuration: FiniteDuration) =
     persistenceIds.map(nm => as.actorOf(actorProps(nm, eventsPer, maxDuration),s"counter-$nm")).toSet
 
-  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
+  "A mongo persistence driver" should "insert journal records at a rate faster than 10000/s" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
-    val actors = startPersistentActors(as, commandsPerBatch * batches, 60.seconds.dilated)
+    val probe = TestProbe()
+    val actors = startPersistentActors(as, commandsPerBatch * batches, 10.seconds.dilated)
     val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
-    actors.foreach(_ ! SetTarget(accumulator))
+    actors.foreach(ar => probe.send(ar, SetTarget(accumulator)))
+    probe.receiveN(actors.size, 30.seconds.dilated)
 
     val start = System.currentTimeMillis
     (1 to batches).foreach(_ => actors foreach(ar => ar ! IncBatch(commandsPerBatch)))
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated))
+    val total = Try(Await.result(result.future, 30.seconds.dilated))
 
     val time = System.currentTimeMillis - start
     // (total / (time / 1000.0)) should be >= 10000.0
@@ -165,15 +177,17 @@ abstract class JournalLoadSpec(extensionClass: Class[_], database: String, exten
     total shouldBe Success(commandsPerBatch * batches * maxActors)
   }
 
-  it should "recover in less than 20 seconds" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
+  it should "recover in less than 20 seconds" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "load-test") { case (as,config) =>
     implicit val system = as
+    val probe = TestProbe()
+    val result = Promise[Long]()
     val start = System.currentTimeMillis
     val actors = startPersistentActors(as, commandsPerBatch * batches, 100.milliseconds.dilated)
-    val result = Promise[Long]()
     val accumulator = as.actorOf(Props(new Accumulator(actors, result)),"accumulator")
-    actors.foreach(_ ! SetTarget(accumulator))
+    actors.foreach(ar => probe.send(ar, SetTarget(accumulator)))
+    probe.receiveN(actors.size, 30.seconds.dilated)
 
-    val total = Try(Await.result(result.future, 60.seconds.dilated)).recoverWith {
+    val total = Try(Await.result(result.future, 10.seconds.dilated)).recoverWith {
       case t: Throwable =>
         t.printStackTrace()
         scala.util.Failure(t)

@@ -1,16 +1,19 @@
 /* 
  * Contributions:
  * Jean-Francois GUENA: implement "suffixed collection name" feature (issue #39 partially fulfilled)
+ * Gael BREARD (Orange): issue #179 ActorRef serialization
  * ...
  */
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem, BootstrapSetup, ExtendedActorSystem, ProviderSelection}
+import akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionTerminated
 import akka.persistence._
 import akka.serialization.SerializationExtension
 import akka.testkit._
 import com.mongodb.casbah.Imports._
+import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
@@ -21,13 +24,15 @@ import scala.language.postfixOps
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {
 
-  import collection.immutable.{ Seq => ISeq }
-  import CasbahSerializers.Deserializer._
-  import CasbahSerializers.Serializer._
   import JournallingFieldNames._
+
+  import collection.immutable.{Seq => ISeq}
 
   override def embedDB = "persistence-journaller-casbah"
 
+  implicit val CasbahSerializers = CasbahSerializersExtension(system)
+  import CasbahSerializers.Deserializer._
+  import CasbahSerializers.Serializer._
   implicit val serialization = SerializationExtension(system)
 
   implicit class PimpedDBObject(dbo: DBObject) {
@@ -43,17 +48,72 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     val underTest = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
       override def driverName = "casbah"
     }
-    
+
     val underExtendedTest = new CasbahPersistenceJournaller(extendedDriver) with MongoPersistenceJournalMetrics {
       override def driverName = "casbah"
     }
-    
+
     val records: List[PersistentRepr] = List(1L, 2L, 3L).map { sq => PersistentRepr(payload = "payload", sequenceNr = sq, persistenceId = "unit-test", manifest = "M") }
 
     val threeAtoms: List[AtomicWrite] = ((1L to 9L) grouped 3 toList).map(block =>
       AtomicWrite(ISeq(block.map(sn => PersistentRepr(persistenceId = "three-atoms", sequenceNr = sn, payload = "payload")): _*)))
 
     val pid = "unit-test"
+  }
+
+  "A mongo journal implementation" should "serialize an event with a  (issue #179)" in {
+    new Fixture {
+      val pConfig = ConfigFactory.load().withValue("akka.remote.netty.tcp.port",ConfigValueFactory.fromAnyRef(0))
+
+      val setup1 = BootstrapSetup().withActorRefProvider(ProviderSelection.Cluster).withConfig(pConfig)
+
+      val system1 = ActorSystem("unit-test2", setup1)
+      val extendedSystem1: ExtendedActorSystem = system1.asInstanceOf[ExtendedActorSystem]
+      val casbahSerializers1 : CasbahSerializers = CasbahSerializersExtension(system1)
+      val address1 = extendedSystem1.provider.getDefaultAddress
+
+
+      val setup2 = BootstrapSetup().withActorRefProvider(ProviderSelection.Remote).withConfig(pConfig)
+      val system2 = ActorSystem("unit-test2", setup2)
+      val extendedSystem2: ExtendedActorSystem = system2.asInstanceOf[ExtendedActorSystem]
+      val casbahSerializers2 = CasbahSerializersExtension(system2)
+      val address2 = extendedSystem2.provider.getDefaultAddress
+
+      address1 should not equal(address2)
+
+      def serialize(ref:ActorRef,casbahSerializers: CasbahSerializers): DBObject ={
+        val myPayload = Payload[com.mongodb.DBObject](ShardRegionTerminated(ref))(casbahSerializers.serialization,implicitly,casbahSerializers.dt,casbahSerializers.loader)
+        val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = myPayload)))
+        val serialized = serializeAtom(repr)
+        serialized
+      }
+
+      def deser(input:DBObject,casbahSerializers: CasbahSerializers): ActorRef ={
+        val deserialized = casbahSerializers.Deserializer.deserializeDocument(input.firstEvent)
+        deserialized.payload.content.asInstanceOf[ShardRegionTerminated].region
+      }
+
+
+      val refInSys1 = system1.actorOf(TestStubActors.Counter.props,"myActor")
+      val ser1InSys1 = serialize(refInSys1,casbahSerializers1)
+      system2.stop(refInSys1)
+      watch(refInSys1)
+      expectTerminated(refInSys1)
+
+
+      val refDeser1InSys1AfterDead = deser(ser1InSys1,casbahSerializers1)
+      refDeser1InSys1AfterDead should be(refInSys1)
+
+
+      val ser2InSys1 = serialize(refDeser1InSys1AfterDead,casbahSerializers1)
+      val refDeser2InSys2 = deser(ser2InSys1,casbahSerializers2)
+
+      refDeser2InSys2.path.address.hasLocalScope should be(false)
+      refDeser2InSys2.path.address should be(extendedSystem1.provider.getDefaultAddress)
+
+
+    }
+    ()
   }
 
   "A mongo journal implementation" should "serialize and deserialize non-confirmable data" in {
@@ -71,7 +131,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val deserialized = deserializeDocument(serialized.firstEvent)
 
-      deserialized.payload shouldBe StringPayload("TEST")
+      deserialized.payload shouldBe StringPayload("TEST", Set.empty)
       deserialized.pid should be("pid")
       deserialized.sn should be(1)
       deserialized.manifest shouldBe empty
@@ -582,6 +642,33 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
     ()
   }
 
+  it should "write serializer id in suffixed journal" in {
+    new Fixture {
+      withAutoSuffixedJournal { drv =>
+        val ar = system.deadLetters
+        val msg = akka.cluster.sharding.ShardCoordinator.Internal.ShardRegionRegistered(ar)
+        val withSerializedObjects = records.map(_.withPayload(msg))
+        val serializer = serialization.serializerFor(msg.getClass)
+
+        val result = underExtendedTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
+
+        val writeResult = Await.result(result, 5.seconds.dilated)
+        writeResult.foreach(wr => wr shouldBe 'success)
+
+        val journalName = drv.getJournalCollectionName("unit-test")
+        journalName should be("akka_persistence_journal_unit-test-test")
+        drv.db.collectionExists(journalName) should be(true)
+
+        val allSerIds = drv.db(journalName).find().flatMap { dbo =>
+          dbo.as[MongoDBList](EVENTS).map(_.asInstanceOf[DBObject])
+        }.map(_.as[Int](SER_ID))
+
+        allSerIds.toList should contain theSameElementsInOrderAs records.map(_ => serializer.identifier)
+      }
+    }
+    ()
+  }
+
   it should "record metrics" in {
     new Fixture {
       withJournal { journal =>
@@ -590,7 +677,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         val buf = mutable.Buffer[PersistentRepr]()
         underTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
 
-        val registry = MongoPersistenceDriver.registry
+        val registry = DropwizardMetrics.metricRegistry
         registry.getTimers() should have size 4
         registry.getTimers().keySet() should contain("akka-persistence-mongo.journal.casbah.read.max-seq.timer")
         registry.getTimers().get("akka-persistence-mongo.journal.casbah.read.max-seq.timer").getCount should be > 0L
@@ -611,7 +698,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
         val buf = mutable.Buffer[PersistentRepr]()
         underExtendedTest.replayJournal("unit-test", 2, 3, 10)(replay(buf)).value.get.get
 
-        val registry = MongoPersistenceDriver.registry
+        val registry = DropwizardMetrics.metricRegistry
         registry.getTimers() should have size 4
         registry.getTimers().keySet() should contain("akka-persistence-mongo.journal.casbah.read.max-seq.timer")
         registry.getTimers().get("akka-persistence-mongo.journal.casbah.read.max-seq.timer").getCount should be > 0L

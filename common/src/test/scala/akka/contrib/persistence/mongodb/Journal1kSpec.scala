@@ -6,12 +6,11 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.Props
-import akka.persistence.PersistentActor
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.tagobjects.Slow
 
 abstract class Journal1kSpec(extensionClass: Class[_], database: String, extendedConfig: String = "|") extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
@@ -19,9 +18,10 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
 
   override def embedDB = s"1k-test-$database"
 
-  override def afterAll() = cleanup()
+  override def beforeAll() = cleanup()
 
   def config(extensionClass: Class[_]) = ConfigFactory.parseString(s"""
+    |include "/application.conf"
     |akka.contrib.persistence.mongodb.mongo.use-legacy-serialization = true
     |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
     |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
@@ -37,43 +37,16 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
     |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
     |}
     $extendedConfig
-    |""".stripMargin)
-
-  object Counter {
-    def props = Props(new Counter)
-    case object Inc
-    case object GetCounter
-    case object Shutdown
-  }
-
-  class Counter extends PersistentActor{
-    import Counter._
-    var counter = 0
-
-    override def receiveRecover: Receive = {
-      case Inc => counter += 1
-      case x:Int => counter += x
-    }
-
-    override def receiveCommand: Receive = {
-      case Inc =>
-        persist(1) { _ =>
-          counter += 1
-        }
-      case GetCounter => sender() ! counter
-      case Shutdown => context stop self
-    }
-
-    override def persistenceId: String = self.path.name
-  }
+    |""".stripMargin).withFallback(ConfigFactory.defaultReference()).resolve()
 
   val id = "123"
+  import TestStubActors._
   import Counter._
   import akka.pattern._
 
   import concurrent.duration._
 
-  "A counter" should "persist the counter to 1000" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test") { case (as,config) =>
+  "A counter" should "persist the counter to 1000" taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test-persist") { case (as,config) =>
     implicit val askTimeout = Timeout(2.minutes)
     val counter = as.actorOf(Counter.props, id)
     (1 to 1000).foreach(_ => counter ! Inc)
@@ -83,7 +56,7 @@ abstract class Journal1kSpec(extensionClass: Class[_], database: String, extende
     }
   }
 
-  it should "restore the counter back to 1000" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test") { case (as, config) =>
+  it should "restore the counter back to 1000"  taggedAs Slow in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "1k-test-restore") { case (as, config) =>
     implicit val askTimeout = Timeout(2.minutes)
     val counter = as.actorOf(Counter.props, id)
     val result = (counter ? GetCounter).mapTo[Int]

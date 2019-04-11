@@ -9,13 +9,13 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoCollection
-import com.mongodb.{ BasicDBObjectBuilder, MongoCommandException, WriteConcern, MongoClientURI => JavaMongoClientURI }
+import com.mongodb.{BasicDBObjectBuilder, DBCollection, WriteConcern, MongoClientURI => JavaMongoClientURI}
 import com.typesafe.config.Config
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-import scala.util.{ Failure, Success, Try }
 import scala.language.reflectiveCalls
+import scala.util.{Failure, Success, Try}
 
 object CasbahPersistenceDriver {
   import MongoPersistenceDriver._
@@ -31,6 +31,8 @@ object CasbahPersistenceDriver {
 class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
   import akka.contrib.persistence.mongodb.CasbahPersistenceDriver._
 
+  val CasbahSerializers: CasbahSerializers = CasbahSerializersExtension(system)
+
   // Collection type
   type C = MongoCollection
 
@@ -38,61 +40,10 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   override private[mongodb] def closeConnections(): Unit = client.close()
 
-  override private[mongodb] def upgradeJournalIfNeeded: Unit = upgradeJournalIfNeeded("")
-
-  override private[mongodb] def upgradeJournalIfNeeded(persistenceId: String): Unit = {
-    import scala.collection.immutable.{ Seq => ISeq }
-    import CasbahSerializers._
-
-    val j = getJournal(persistenceId)
-    val q = MongoDBObject(VERSION -> MongoDBObject("$exists" -> 0))
-    val legacyClusterSharding = MongoDBObject(PROCESSOR_ID -> s"^/user/sharding/[^/]+Coordinator/singleton/coordinator".r)
-
-    Try(j.remove(legacyClusterSharding)).map(
-      wr => logger.info(s"Removed ${wr.getN} legacy cluster sharding records as part of upgrade")).recover {
-        case x => logger.error("Exception occurred while removing legacy cluster sharding records", x)
-      }
-
-    Try(j.dropIndex(MongoDBObject(PROCESSOR_ID -> 1, SEQUENCE_NUMBER -> 1, DELETED -> 1))).orElse(
-      Try(j.dropIndex(settings.JournalIndex))).map(
-        _ => logger.info("Successfully dropped legacy index")).recover {
-          case e: MongoCommandException if e.getErrorMessage.startsWith("index not found with name") =>
-            logger.info("Legacy index has already been dropped")
-          case t =>
-            logger.error("Received error while dropping legacy index", t)
-        }
-
-    val cnt = j.count(q)
-    logger.info(s"Journal automatic upgrade found $cnt records needing upgrade")
-    if (cnt > 0) Try {
-      val results = j.find[DBObject](q)
-        .map(d => d.as[ObjectId]("_id") -> Event[DBObject](useLegacySerialization)(deserializeJournal(d).toRepr))
-        .map { case (id, ev) => j.update("_id" $eq id, serializeJournal(Atom(ev.pid, ev.sn, ev.sn, ISeq(ev)))) }
-      results.foldLeft((0, 0)) {
-        case ((successes, failures), result) =>
-          val n = result.getN
-          if (n > 0)
-            (successes + n) -> failures
-          else
-            successes -> (failures + 1)
-      } match {
-        case (s, f) if f > 0 =>
-          logger.warn(s"There were $s successful updates and $f failed updates")
-        case (s, _) =>
-          logger.info(s"$s records were successfully updated")
-      }
-
-    } match {
-      case Success(_) => ()
-      case Failure(t) =>
-        logger.error("Failed to upgrade journal due to exception", t)
-    }
-  }
-
-  private[this] val casbahSettings = CasbahDriverSettings(system.settings)
+  private[this] val casbahSettings = CasbahDriverSettings(system)
 
   private[this] val url = {
-    val underlying =  new JavaMongoClientURI(mongoUri,casbahSettings.mongoClientOptionsBuilder)
+    val underlying =  new JavaMongoClientURI(mongoUri,casbahSettings.configure(new MongoClientOptions.Builder()))
     MongoClientURI(underlying)
   }
 
@@ -100,7 +51,19 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
 
   private[mongodb] lazy val db = client(databaseName.getOrElse(url.database.getOrElse(DEFAULT_DB_NAME)))
 
-  private[mongodb] def collection(name: String) = db(name)
+  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db(name)
+
+  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): MongoCollection =
+    ensureCollection(name, collectionName => db.createCollection(collectionName, BasicDBObjectBuilder.start().get()))
+
+  private[this] def ensureCollection(name: String, collectionCreator: String => DBCollection)
+                                    (implicit ec: ExecutionContext): MongoCollection =
+    Try(collectionCreator(name).asScala) match {
+      case Success(collection) => collection
+      case Failure(MongoErrors.NamespaceExists()) => db(name)
+      case Failure(error) => throw error
+    }
+
   private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
   private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
@@ -113,31 +76,34 @@ class CasbahMongoDriver(system: ActorSystem, config: Config) extends MongoPersis
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) = {
-    if (db.collectionExists(name)) {
-      val collection = db(name)
-      if (!collection.isCapped) {
-        collection.drop()
-        val options = BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get()
-        db.createCollection(name, options).asScala
-      } else {
-        collection
-      }
+    val collection = ensureCollection(name, createNewCappedCollection)
+    if (collection.isCapped) {
+      collection
     } else {
-      import com.mongodb.casbah.Imports._
-      val options = BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get()
-      val c = db.createCollection(name, options).asScala
-      c.insert(MongoDBObject("x" -> "x")) // casbah cannot tail empty collections
-      c
+      collection.drop()
+      ensureCollection(name, createNewCappedCollection)
     }
   }
 
-  private[mongodb] def getCollections(collectionName: String): List[C] = {
-    db.collectionNames().filter(_.startsWith(collectionName)).map(collection(_)).toList
+  private[this] def createNewCappedCollection(name: String): DBCollection = {
+    val collection = db.createCollection(name,
+      BasicDBObjectBuilder.start.add("capped", true).add("size", realtimeCollectionSize).get())
+    collection.insert(MongoDBObject("x" -> "x")) // casbah cannot tail empty collections
+    collection
   }
 
-  private[mongodb] def getJournalCollections(): List[C] = getCollections(journalCollectionName)
+  private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): List[C] = {
+    def excludeNames(name: String): Boolean =
+      name == realtimeCollectionName ||
+        name == metadataCollectionName ||
+        name.startsWith("system.")
 
-  private[mongodb] def getSnapshotCollections(): List[C] = getCollections(snapsCollectionName)
+    db.collectionNames().filterNot(excludeNames).filter(_.startsWith(collectionName)).map(collection).toList
+  }
+
+  private[mongodb] def getJournalCollections(implicit ec: ExecutionContext): List[C] = getCollections(journalCollectionName)
+
+  private[mongodb] def getSnapshotCollections(implicit ec: ExecutionContext): List[C] = getCollections(snapsCollectionName)
 
 }
 
@@ -149,13 +115,11 @@ class CasbahPersistenceExtension(val actorSystem: ActorSystem) extends MongoPers
 
     val driver = new CasbahMongoDriver(actorSystem, config)
 
-    override lazy val journaler = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics with MongoPersistenceJournalFailFast {
+    override lazy val journaler: MongoPersistenceJournallingApi = new CasbahPersistenceJournaller(driver) with MongoPersistenceJournalMetrics {
       override def driverName = "casbah"
-      override private[mongodb] val breaker = driver.breaker
     }
-    override lazy val snapshotter = new CasbahPersistenceSnapshotter(driver) with MongoPersistenceSnapshotFailFast {
-      override private[mongodb] val breaker = driver.breaker
-    }
+    override lazy val snapshotter = new CasbahPersistenceSnapshotter(driver)
+
     override lazy val readJournal = new CasbahPersistenceReadJournaller(driver)
   }
 

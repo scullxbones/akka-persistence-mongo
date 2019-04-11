@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 class CasbahDriverSettingsSpec extends BaseUnitTest{
 
   def fixture[A](config: Config)(testCode: CasbahDriverSettings => A): A = {
-    testCode(CasbahDriverSettings(new ActorSystem.Settings(getClass.getClassLoader, config, "settings name")))
+    testCode(CasbahDriverSettings(ActorSystem("casbah-driver-settings-spec", config, getClass.getClassLoader)))
   }
 
   def reference = ConfigFactory.load()

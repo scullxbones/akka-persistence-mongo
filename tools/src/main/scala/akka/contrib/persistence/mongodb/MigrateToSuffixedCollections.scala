@@ -6,14 +6,11 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
+import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import com.mongodb.casbah.Imports._
 import com.typesafe.config.ConfigFactory
 
-import akka.contrib.persistence.mongodb.JournallingFieldNames._
-
-import scala.util.Try
-import scala.util.Random
-import com.typesafe.config.ConfigFactory
+import scala.util.{Random, Try}
 
 class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDriver(system, ConfigFactory.empty()) {
 
@@ -66,8 +63,8 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
 
     // retrieve journal or snapshot properties
     val (makeNewCollection, getNewCollectionName, writeConcern, summaryTitle) = originCollection match {
-      case c: MongoCollection if (c == journal) => (makeJournal, getJournalCollectionName(_), journalWriteConcern, "journals")
-      case c: MongoCollection if (c == snaps)   => (makeSnaps, getSnapsCollectionName(_), snapsWriteConcern, "snapshots")
+      case c: MongoCollection if c == journal => (makeJournal, getJournalCollectionName _, journalWriteConcern, "journals")
+      case c: MongoCollection if c == snaps   => (makeSnaps, getSnapsCollectionName _, snapsWriteConcern, "snapshots")
     }
     val originCollectionName = getOriginCollectionName(originCollection)
 
@@ -88,14 +85,14 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
       // we group by future suffixed collection name, foldLeft methods are only here for counting
       val (totalOk, totalIgnored) = temporaryCollection.find().toSeq.groupBy { tempDbObject =>
         tempDbObject.getAs[String]("_id") match {
-          case Some(pid) if (pid != null) => getNewCollectionName(pid)
+          case Some(pid) if pid != null => getNewCollectionName(pid)
           case _                          => originCollectionName
         }
       }.foldLeft(0L, 0L) {
-        case ((done, ignored), (newCollectionName, tempDbObjects)) => {
+        case ((done, ignored), (newCollectionName, tempDbObjects)) =>
           // we create suffixed collection
           val newCollection = tempDbObjects.head.getAs[String]("_id") match {
-            case Some(pid) if (pid != null) => makeNewCollection(pid)
+            case Some(pid) if pid != null => makeNewCollection(pid)
             case _                          => originCollection
           }
           // we check new suffixed collection is not origin unique collection
@@ -108,7 +105,6 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
             val notMigrated = ignoreRecords(tempDbObjects, originCollection)
             (done, ignored + notMigrated)
           }
-        }
       }
       // logging...
       logger.info(s"${summaryTitle.toUpperCase}: $totalOk/$totalCount records were successfully transfered to suffixed collections")
@@ -164,7 +160,7 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
       case t: Throwable =>
         logger.error(s"Errors occurred when trying to insert record in '$newCollectionName'", t)
         i
-    } getOrElse (i)
+    } getOrElse i
   }
 
   /**
@@ -178,7 +174,7 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
       case t: Throwable =>
         logger.error(s"Errors occurred when trying to remove records from '${getOriginCollectionName(originCollection)}'", t)
         i
-    } getOrElse (i)
+    } getOrElse i
 
   }
 
@@ -201,16 +197,16 @@ class MigrateToSuffixedCollections(system: ActorSystem) extends CasbahMongoDrive
    * Convenient method to generate a simple query widely used in this class
    */
   private[this] def pidQuery(dbo: DBObject) =  dbo.getAs[String]("_id") match {
-    case Some(pid) if (pid != null) => (PROCESSOR_ID $eq pid)
-    case _ => (PROCESSOR_ID $eq Nil)
+    case Some(pid) if pid != null => PROCESSOR_ID $eq pid
+    case _ => PROCESSOR_ID $eq Nil
   }
 
   /**
    * Convenient method to retrieve origin collection name
    */
   private[this] def getOriginCollectionName(originCollection: MongoCollection): String = originCollection match {
-    case c: MongoCollection if (c == journal) => settings.JournalCollection
-    case c: MongoCollection if (c == snaps)   => settings.SnapsCollection
+    case c: MongoCollection if c == journal => settings.JournalCollection
+    case c: MongoCollection if c == snaps   => settings.SnapsCollection
   }
 
 }

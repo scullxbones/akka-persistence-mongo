@@ -1,5 +1,35 @@
 ## Changelog for 1.x major version
 
+### 1.4.3
+* Retry fixing 151
+[#151](https://github.com/scullxbones/akka-persistence-mongo/issues/151)
+
+### 1.4.2
+* Fix for timing-based error upon deleting journal entries [#151](https://github.com/scullxbones/akka-persistence-mongo/issues/151)
+
+### 1.4.1
+* Fix for `PersistentFSM` serialization issue [#141](https://github.com/scullxbones/akka-persistence-mongo/issues/141)
+  * Change to prefer read-time values for serializer (binary serialization) when possible
+* Fix for `currentPersistenceIds` query on Casbah journal [#144](https://github.com/scullxbones/akka-persistence-mongo/issues/144)
+
+### 1.4.0
+* Update Reactive Mongo driver to 0.12 series
+* Update Casbah driver to one that supports 2.11, 2.12
+* Add cross-compilation to scala 2.12
+* Supporting PRs:
+  - [#139](https://github.com/scullxbones/akka-persistence-mongo/pull/139) thanks @marekzebrowski!
+  - [#143](https://github.com/scullxbones/akka-persistence-mongo/pull/143)
+* Fixed issues:
+  - [#128](https://github.com/scullxbones/akka-persistence-mongo/issues/128)
+  - [#133](https://github.com/scullxbones/akka-persistence-mongo/issues/133)
+
+### 1.3.7
+* Thanks for both of these @filosganga!
+* Fix [#137](https://github.com/scullxbones/akka-persistence-mongo/issues/137)
+  * Support use of serializer identifer for schema evolution of binary payloads
+* Fix [#103](https://github.com/scullxbones/akka-persistence-mongo/issues/103)
+  * Fix for old deprecated custom stage APIs
+
 ### 1.3.6
 * Fix [#131](https://github.com/scullxbones/akka-persistence-mongo/issues/131)
   * Support casbah options when constructing driver (e.g. socket keep alive for firewalls)
@@ -23,11 +53,11 @@
 
 ### 1.3.2
 * PR [#124](https://github.com/scullxbones/akka-persistence-mongo/pull/124)
- * Refinements to suffixed collection migration tool.  Thanks @JeanFrancoisGuena! 
+ * Refinements to suffixed collection migration tool.  Thanks @JeanFrancoisGuena!
 
 ### 1.3.1
 * PR [#122](https://github.com/scullxbones/akka-persistence-mongo/pull/122)
- * Build migration tool for suffixed collections.  Thanks @JeanFrancoisGuena! 
+ * Build migration tool for suffixed collections.  Thanks @JeanFrancoisGuena!
 
 ### 1.3.0
 * Issue [#39](https://github.com/scullxbones/akka-persistence-mongo/issues/39)
@@ -102,9 +132,9 @@
   * Allows naming index used for finding the maximum sequence # for a given `persistenceId` - thanks @bilyush!
 
 ### 1.1.4
-* Issue [#79](https://github.com/scullxbones/akka-persistence-mongo/issues/79) fixed 
+* Issue [#79](https://github.com/scullxbones/akka-persistence-mongo/issues/79) fixed
   * Fix unindexed query causing issues on large journals by adding additional index
- 
+
 ### 1.1.3
 * PR [#71](https://github.com/scullxbones/akka-persistence-mongo/pull/71) merged ~ thanks @matheuslima:
   * Add support for allEvents/currentEvents and allPersistenceIds/currentPersistenceIds queries
@@ -139,7 +169,7 @@
 
 ### 1.0.8
 
-* Fix [#57](https://github.com/scullxbones/akka-persistence-mongo/issues/57) - Dump `foldWhile` for play `Iteratee`s, not sure if issue is upstream or local.  Thanks to @matheuslima for helping find a reproducing test case 
+* Fix [#57](https://github.com/scullxbones/akka-persistence-mongo/issues/57) - Dump `foldWhile` for play `Iteratee`s, not sure if issue is upstream or local.  Thanks to @matheuslima for helping find a reproducing test case
 
 ### 1.0.7
 

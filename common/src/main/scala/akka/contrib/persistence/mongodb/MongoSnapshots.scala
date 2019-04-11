@@ -1,14 +1,11 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.Actor
-import akka.pattern.CircuitBreaker
+import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.persistence.snapshot.SnapshotStore
-import akka.persistence.SnapshotSelectionCriteria
 import com.typesafe.config.Config
-import scala.concurrent.Future
-import akka.persistence.SnapshotMetadata
-import akka.persistence.SelectedSnapshot
-import scala.concurrent.ExecutionContext
+
+import scala.concurrent.{ExecutionContext, Future}
 
 class MongoSnapshots(config: Config) extends SnapshotStore {
 
@@ -59,7 +56,7 @@ class MongoSnapshots(config: Config) extends SnapshotStore {
   override def receivePluginInternal: Actor.Receive = Actor.emptyBehavior
 }
 
-object SnapshottingFieldNames {
+trait SnapshottingFieldNames {
   final val PROCESSOR_ID = "pid"
   final val SEQUENCE_NUMBER = "sn"
   final val TIMESTAMP = "ts"
@@ -71,6 +68,8 @@ object SnapshottingFieldNames {
   }
 }
 
+object SnapshottingFieldNames extends SnapshottingFieldNames
+
 trait MongoPersistenceSnapshottingApi {
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Option[SelectedSnapshot]]
 
@@ -79,21 +78,4 @@ trait MongoPersistenceSnapshottingApi {
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Unit]
-}
-
-trait MongoPersistenceSnapshotFailFast extends MongoPersistenceSnapshottingApi {
-
-  private[mongodb] val breaker: CircuitBreaker
-
-  private[mongodb] abstract override def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.findYoungestSnapshotByMaxSequence(pid,maxSeq,maxTs))
-
-  private[mongodb] abstract override def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.saveSnapshot(snapshot))
-
-  private[mongodb] abstract override def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.deleteSnapshot(pid,seq,ts))
-
-  private[mongodb] abstract override def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) =
-    breaker.withCircuitBreaker(super.deleteMatchingSnapshots(pid,maxSeq,maxTs))
 }
