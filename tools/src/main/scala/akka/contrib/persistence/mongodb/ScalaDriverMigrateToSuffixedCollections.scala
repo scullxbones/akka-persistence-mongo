@@ -53,18 +53,6 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       case str: String if str == snapsCollectionName => (makeSnaps, getSnapsCollectionName _, snapsWriteConcern, "snapshots")
     }
 
-//    for {
-//      tempMap <- buildTemporaryMap(originCollectionName, getNewCollectionName)
-//      x <- Future.fold(
-//        tempMap.map {
-//          case (newCollectionName, pids) =>
-//              handleDocs(pids, originCollectionName, newCollectionName, writeConcern, summaryTitle)
-//        }
-//      )((0L, 0L, 0L)){
-//        (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3)
-//      }
-//    } yield x
-
     buildTemporaryMap(originCollectionName, getNewCollectionName)
     .flatMap { tmpMap =>
       Future.fold(
@@ -76,62 +64,17 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
         (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4, acc._5 + res._5)
       }
     }
-    .map { res =>
-      logger.info(s"${summaryTitle.toUpperCase}: ${res._1}/${res._5} records were successfully transferred to suffixed collections")
-      logger.info(s"${summaryTitle.toUpperCase}: ${res._2}/${res._5} records were successfully removed from '$originCollectionName'")
-      logger.info(s"${summaryTitle.toUpperCase}: ${res._3}/${res._5} records were ignored and remain in '$originCollectionName'")
-      logger.error(s"${summaryTitle.toUpperCase}: ${res._4}/${res._5} records lead to errors")
-      res._4 == 0L
+    .map { case (inserted, removed, ignored, errors, total) =>
+
+      logger.info(s"${summaryTitle.toUpperCase}: $inserted/$total records were successfully transferred to suffixed collections")
+      logger.info(s"${summaryTitle.toUpperCase}: $removed/$total records were successfully removed from '$originCollectionName' collection")
+      if (ignored > 0L)
+        logger.info(s"${summaryTitle.toUpperCase}: $ignored/$total records were ignored and remain in '$originCollectionName' collection")
+      if (errors > 0L)
+        logger.error(s"${summaryTitle.toUpperCase}: $errors/$total records lead to errors")
+      errors == 0L
     }
 
-
-//    Source.fromFuture(collection(originCollectionName))
-//      .flatMapConcat(_.find().asAkka)
-//      .runWith(Sink.foldAsync[(Map[String, (Long, Long)], Long), D]((Map[String, (Long, Long)](), 0L)){ // accumulator: (Map(collName -> (success, error)), ignored))
-//        case (acc, doc) =>
-//          Option(doc.getString(PROCESSOR_ID)) match {
-//            case Some(bStr) if bStr.getValue != null =>
-//              getNewCollectionName(bStr.getValue) match {
-//                case `originCollectionName` => // ignored
-//                  Future.successful((acc._1, acc._2 + 1))
-//                case newCollectionName =>
-//                  for {
-//                    res1 <- insertDoc(makeNewCollection, newCollectionName, writeConcern, bStr.getValue, doc)
-//                    res2 <- removeDoc(originCollectionName, writeConcern, bStr.getValue)
-//                  } yield {
-//                    if (res1 && res2) {
-//                      acc._1.get(newCollectionName) match {
-//                        case Some(tup) => (acc._1 + ((newCollectionName, (tup._1 + 1L, tup._2))), acc._2)
-//                        case None => (acc._1 + ((newCollectionName, (1L, 0L))), acc._2)
-//                      }
-//                    } else {
-//                      acc._1.get(newCollectionName) match {
-//                        case Some(tup) => (acc._1 + ((newCollectionName, (tup._1, tup._2 + 1L))), acc._2)
-//                        case None => (acc._1 + ((newCollectionName, (0L, 1L))), acc._2)
-//                      }
-//                    }
-//                  }
-//              }
-//            case _ => // no persistenceId in this document, so we ignore it
-//              Future.successful((acc._1, acc._2 + 1))
-//          }
-//      })
-//      .map { res =>
-//        // logging...
-//        val totalOk = res._1.values.map(_._1).fold(0L)(_ + _)
-//        val totalError = res._1.values.map(_._2).fold(0L)(_ + _)
-//        val totalIgnored = res._2
-//        val totalCount = totalOk + totalIgnored + totalError
-//        val collectionsInError = res._1.foldLeft(Set[String]()){
-//          case (acc, kv) if kv._2._2 > 0 => acc + kv._1
-//        }
-//        logger.info(s"${summaryTitle.toUpperCase}: $totalOk/$totalCount records were successfully transfered to suffixed collections")
-//        logger.info(s"${summaryTitle.toUpperCase}: $totalIgnored/$totalCount records were ignored and remain in '$originCollectionName'")
-//        logger.warn(s"${summaryTitle.toUpperCase}: $totalError/$totalCount records were NOT successfully transfered to suffixed collections")
-//        logger.warn(s"${summaryTitle.toUpperCase}: suffixed collections for which problem occurred are the following: ${collectionsInError.mkString(", ")}")
-//        // result
-//        totalError == 0
-//      }
   }
 
   /**
@@ -158,7 +101,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     */
   private[this] def handleDocs(pids: Seq[String], originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern, summaryTitle: String): Future[(Long, Long, Long, Long, Long)] = {
     if (originCollectionName == newCollectionName) {
-      logger.info(s"${summaryTitle.toUpperCase}: ${pids.size.toLong}/${pids.size.toLong} records were ignored and remain in '$originCollectionName'")
+      logger.info(s"${summaryTitle.toUpperCase}: ${pids.size.toLong}/${pids.size.toLong} records were ignored and remain in '$originCollectionName' collection")
       Future.successful((0L, 0L, pids.size.toLong, 0L, pids.size.toLong))
     } else {
       Future.fold(
@@ -179,7 +122,8 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
 
           logger.info(s"${summaryTitle.toUpperCase}: $inserted/$total records were successfully transferred to suffixed collection '$newCollectionName'")
           logger.info(s"${summaryTitle.toUpperCase}: $removed/$total records, previously copied to '$newCollectionName', were successfully removed from '$originCollectionName'")
-          logger.error(s"${summaryTitle.toUpperCase}: $errors/$total records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
+          if (errors > 0L)
+            logger.error(s"${summaryTitle.toUpperCase}: $errors/$total records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
 
           (inserted, removed, 0L, errors, total)
       }
@@ -199,7 +143,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
         case _ => Future.successful(0L)
       }
       .recoverWith { case t: Throwable =>
-        logger.error(s"Unable to insert documents into collection '$newCollectionName': ${t.getMessage}", t)
+        logger.error(s"Unable to insert documents into '$newCollectionName' collection: ${t.getMessage}", t)
         Future.successful(0L)
       }
   }
@@ -217,54 +161,10 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
         case _ => Future.successful(0L)
       }
       .recoverWith { case t: Throwable =>
-        logger.error(s"Unable to remove documents from '$originCollectionName': ${t.getMessage}", t)
+        logger.error(s"Unable to remove documents from '$originCollectionName' collection: ${t.getMessage}", t)
         Future.successful(0L)
       }
   }
-
-//  /**
-//    * @return true if success, false otherwise, never fail.
-//    */
-//  private[this] def insertDoc(makeNewCollection: String => C, collectionName: String, writeConcern: WriteConcern, pid: String, doc: D, tryNb: Int = 0): Future[Boolean] = {
-//    Source.fromFuture(makeNewCollection(pid))
-//      .flatMapConcat(_.withWriteConcern(writeConcern).insertOne(doc).asAkka)
-//      .runWith(Sink.headOption)
-//      .flatMap {
-//        case Some(_) => // ok
-//          Future.successful(true)
-//        case None if tryNb < MaxInsertRetry => // stream completes before signaling at least a single element
-//          insertDoc(makeNewCollection, collectionName, writeConcern, pid, doc, tryNb + 1)
-//        case _ =>
-//          logger.warn(s"Unable to insert document in collection $collectionName for persistence Id $pid")
-//          Future.successful(false)
-//      }
-//      .recoverWith { case t: Throwable =>
-//        logger.error(s"Unable to insert document in collection $collectionName for persistence Id $pid: ${t.getMessage}", t)
-//        Future.successful(false)
-//      }
-//  }
-//
-//  /**
-//    * @return true if success, false otherwise, never fail.
-//    */
-//  private[this] def removeDoc(originCollectionName: String, writeConcern: WriteConcern, pid: String, tryNb: Int = 0): Future[Boolean] = {
-//    Source.fromFuture(collection(originCollectionName))
-//      .flatMapConcat(_.withWriteConcern(writeConcern).deleteOne(equal(PROCESSOR_ID, pid)).asAkka)
-//      .runWith(Sink.headOption)
-//      .flatMap {
-//        case Some(_) => // ok
-//          Future.successful(true)
-//        case None if tryNb < MaxRemoveRetry => // stream completes before signaling at least a single element
-//          removeDoc(originCollectionName, writeConcern, pid, tryNb + 1)
-//        case _ =>
-//          logger.warn(s"Unable to remove document from collection $originCollectionName for persistence Id $pid")
-//          Future.successful(false)
-//      }
-//      .recoverWith { case t: Throwable =>
-//        logger.error(s"Unable to remove document from collection $originCollectionName for persistence Id $pid: ${t.getMessage}", t)
-//        Future.successful(false)
-//      }
-//  }
 
   private[this] def checkJournalAutomaticUpgrade: Future[Unit] = {
     if (settings.JournalAutomaticUpgrade) {
@@ -291,30 +191,19 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       .runWith(Sink.headOption)
       .flatMap {
         case Some(delResult) => // ok
-          Future.successful(logger.info(s"METADATA: ${delResult.getDeletedCount} records were successfully removed from $metadataCollectionName collection"))
-        case None if tryNb < MaxEmptyMetadataRetry => // stream completes before signaling at least a single element
+          Future.successful(logger.info(s"METADATA: ${delResult.getDeletedCount} records were successfully removed from '$metadataCollectionName' collection"))
+        case None if tryNb < MaxEmptyMetadataRetry =>
           emptyMetadata(tryNb + 1)
         case _ =>
-          val warnMsg = s"METADATA: Unable to remove all records from $metadataCollectionName collection"
+          val warnMsg = s"METADATA: Unable to remove all records from '$metadataCollectionName' collection"
           logger.warn(warnMsg)
           Future.failed(new RuntimeException(warnMsg))
       }
       .recover {
         case t: Throwable =>
-          logger.error(s"Trying to empty $metadataCollectionName collection failed.", t)
+          logger.error(s"Trying to empty '$metadataCollectionName' collection failed.", t)
           throw t
       }
-
-//    (for {
-//      metadataColl <- collection(metadataCollectionName)
-//      count <- metadataColl.countDocuments().toFuture()
-//      // TODO: check that deleteMany(Document()) really deletes all documents of the collection
-//      deletedCount <- metadataColl.withWriteConcern(metadataWriteConcern).deleteMany(Document()).toFuture()
-//    } yield {
-//      logger.info(s"METADATA: $deletedCount/$count records were successfully removed from ${settings.MetadataCollection} collection")
-//    }) recover {
-//      case t: Throwable => logger.error(s"Trying to empty ${settings.MetadataCollection} collection failed.", t)
-//    }
   }
 
 }
