@@ -61,7 +61,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       Future.fold(
         tmpMap.map {
           case (newCollectionName, (pids, count)) =>
-            handleDocs(pids, count, makeCollection, originCollectionName, newCollectionName, writeConcern, summaryTitle)
+            handleDocs(pids, count, makeCollection, originCollectionName, newCollectionName, writeConcern)
         }
       )((0L, 0L, 0L, 0L, 0L, 0L)){
         (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4, acc._5 + res._5, acc._6 + res._6)
@@ -108,10 +108,9 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Migrates documents from an origin collection to some new collection, and returns a tuple containing amounts of documents inserted, removed, ignored, failed, handled and initial count.
     */
-  private[this] def handleDocs(pids: Seq[String], count: Long, makeCollection: String => C, originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern, summaryTitle: String): Future[(Long, Long, Long, Long, Long, Long)] = {
+  private[this] def handleDocs(pids: Seq[String], count: Long, makeCollection: String => C, originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long, Long, Long)] = {
     if (originCollectionName == newCollectionName) {
-      logger.info(s"${summaryTitle.toUpperCase}: $count/$count records were ignored and remain in '$originCollectionName' collection")
-      Future.successful((0L, 0L, count, 0L, count, count))
+      Future.successful((0L, 0L, count, 0L, count, count)) // just counting...
     } else {
       Future.fold(
         pids.map { pid =>
@@ -129,13 +128,13 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       .map {
         case (inserted, removed, failed, handled) =>
 
-          logger.info(s"${summaryTitle.toUpperCase}: $handled/$count records were handled for suffixed collection '$newCollectionName'")
-          logger.info(s"${summaryTitle.toUpperCase}: $inserted/$count records were successfully transferred to suffixed collection '$newCollectionName'")
-          logger.info(s"${summaryTitle.toUpperCase}: $removed/$count records, previously copied to '$newCollectionName', were successfully removed from '$originCollectionName'")
+          logger.info(s"$handled/$count records were handled for suffixed collection '$newCollectionName'")
+          logger.info(s"$inserted/$count records were successfully transferred to suffixed collection '$newCollectionName'")
+          logger.info(s"$removed/$count records, previously copied to '$newCollectionName', were successfully removed from '$originCollectionName'")
           if(removed < inserted)
-            logger.warn(s"${summaryTitle.toUpperCase}: ${inserted - removed} records were transferred to suffixed collection '$newCollectionName' but were NOT removed from '$originCollectionName'")
+            logger.warn(s"${inserted - removed} records were transferred to suffixed collection '$newCollectionName' but were NOT removed from '$originCollectionName'")
           if (failed > 0L)
-            logger.error(s"${summaryTitle.toUpperCase}: $failed/$count records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
+            logger.error(s"$failed/$count records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
 
           (inserted, removed, 0L, failed, handled, count)
       }
@@ -145,14 +144,14 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Inserts many documents in some new collection and returns the amount of inserted documents (zero in case of failure)
     */
-  private[this] def insertManyDocs(docs: Seq[D], makeCollection: String => C, newCollectionName: String, writeConcern: WriteConcern, tryNb: Int = 0): Future[Long] = {
+  private[this] def insertManyDocs(docs: Seq[D], makeCollection: String => C, newCollectionName: String, writeConcern: WriteConcern, tryNb: Int = 1): Future[Long] = {
     Source.fromFuture(makeCollection(docs.head.getString(PROCESSOR_ID).getValue))
       .flatMapConcat(_.withWriteConcern(writeConcern).insertMany(docs).asAkka)
       .runWith(Sink.headOption)
       .flatMap {
         case Some(_) =>
           Future.successful(docs.size.toLong)
-        case None if tryNb < settings.SuffixMigrationMaxInsertRetry =>
+        case None if tryNb < settings.SuffixMigrationMaxInsertRetry || settings.SuffixMigrationMaxInsertRetry == 0 =>
           insertManyDocs(docs, makeCollection, newCollectionName, writeConcern, tryNb + 1)
         case _ =>
           Future.successful(0L)
@@ -166,16 +165,16 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Removes many documents from an origin collection and returns the amount of removed documents (zero in case of total failure)
     */
-  private[this] def removeManyDocs(pid: String, originCollectionName: String, writeConcern: WriteConcern, toRemove: Long, alreadyRemoved: Long = 0L, tryNb: Int = 0): Future[Long] = {
+  private[this] def removeManyDocs(pid: String, originCollectionName: String, writeConcern: WriteConcern, toRemove: Long, alreadyRemoved: Long = 0L, tryNb: Int = 1): Future[Long] = {
     Source.fromFuture(collection(originCollectionName))
       .flatMapConcat(_.withWriteConcern(writeConcern).deleteMany(equal(PROCESSOR_ID, pid)).asAkka)
       .runWith(Sink.headOption)
       .flatMap {
         case Some(delResult) if delResult.getDeletedCount == toRemove =>
           Future.successful(delResult.getDeletedCount + alreadyRemoved)
-        case Some(delResult) if tryNb < settings.SuffixMigrationMaxRemoveRetry =>
+        case Some(delResult) if tryNb < settings.SuffixMigrationMaxDeleteRetry || settings.SuffixMigrationMaxDeleteRetry == 0 =>
           removeManyDocs(pid, originCollectionName, writeConcern, toRemove - delResult.getDeletedCount, alreadyRemoved + delResult.getDeletedCount, tryNb + 1)
-        case None if tryNb < settings.SuffixMigrationMaxRemoveRetry =>
+        case None if tryNb < settings.SuffixMigrationMaxDeleteRetry || settings.SuffixMigrationMaxDeleteRetry == 0 =>
           removeManyDocs(pid, originCollectionName, writeConcern, toRemove, alreadyRemoved, tryNb + 1)
         case _ =>
           Future.successful(alreadyRemoved)
@@ -211,7 +210,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Empties metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
     */
-  private[this] def emptyMetadata(tryNb: Int = 0): Future[Unit] = {
+  private[this] def emptyMetadata(tryNb: Int = 1): Future[Unit] = {
     Source.fromFuture(collection(metadataCollectionName))
       .flatMapConcat(_.countDocuments(Document()).asAkka)
       .runWith(Sink.head)
@@ -223,10 +222,10 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
             .flatMap {
               case Some(delResult) if delResult.getDeletedCount == count =>
                 Future.successful(logger.info(s"METADATA: all $count records were successfully removed from '$metadataCollectionName' collection"))
-              case Some(delResult) if tryNb < settings.SuffixMigrationMaxEmptyMetadataRetry =>
+              case Some(delResult) if tryNb < settings.SuffixMigrationMaxEmptyMetadataRetry || settings.SuffixMigrationMaxEmptyMetadataRetry == 0 =>
                 logger.info(s"METADATA: ${delResult.getDeletedCount}/$count records only were successfully removed from '$metadataCollectionName' collection")
                 emptyMetadata(tryNb + 1)
-              case None if tryNb < settings.SuffixMigrationMaxEmptyMetadataRetry =>
+              case None if tryNb < settings.SuffixMigrationMaxEmptyMetadataRetry || settings.SuffixMigrationMaxEmptyMetadataRetry == 0 =>
                 emptyMetadata(tryNb + 1)
               case _ =>
                 val warnMsg = s"METADATA: Unable to remove all records from '$metadataCollectionName' collection"
