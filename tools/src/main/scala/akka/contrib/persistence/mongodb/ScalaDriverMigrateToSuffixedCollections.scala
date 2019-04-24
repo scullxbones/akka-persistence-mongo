@@ -1,3 +1,8 @@
+/*
+ * Contributions:
+ * Jean-Francois GUENA: implement "suffixed collection name" migration tool
+ * ...
+ */
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
