@@ -608,7 +608,7 @@ The main idea is to parse unique journal, pick up every record, insert it in new
 
 Of course, this process would be very long, but thanks to *aggregation*, we actually "gather" records by future suffixed collection, then by *persistence Id*, append (i.e. *INSERT*) them **in one step** (meaning all records of each *persistence Id*) to that new suffixed collection, and remove (i.e. *DELETE*) them **in one step**, from unique original collection.
 
-Additionally, we offer the possibility to try these *INSERT* and *DELETE* operations multiple times, as the process runs such operations in parallel and may lead to Mongo timeouts; We also offer the same possibility for removing all records from "akka_persistence_metadata" capped collection (see configuration below) 
+Additionally, we offer the possibility to try these *INSERT* and *DELETE* operations multiple times, as the process runs such operations in parallel and may lead to Mongo timeouts. We also offer the same possibility for removing all records from "akka_persistence_metadata" capped collection (see configuration below) 
 
 ###### Recommended migration steps:
 * **backup your database** (use, for example, the `mongodump` command)
