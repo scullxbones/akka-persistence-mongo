@@ -2,10 +2,6 @@ val releaseV = "2.2.5"
 
 val scalaV = "2.11.12"
 
-scalaVersion := scalaV
-
-crossScalaVersions := Seq("2.11.12", "2.12.8")
-
 val AkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
 val MongoJavaDriverVersion = "3.8.2"
 
@@ -37,8 +33,13 @@ def commonDeps(sv:String) = Seq(
 
 lazy val Travis = config("travis").extend(Test)
 
+ThisBuild / organization := "com.github.scullxbones"
+ThisBuild / version      := releaseV
+ThisBuild / scalaVersion := scalaV
+
 val commonSettings = Seq(
   scalaVersion := scalaV,
+  crossScalaVersions := Seq("2.11.12", "2.12.8"),
   dependencyOverrides += "org.mongodb" % "mongodb-driver" % "3.8.2" ,
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   dependencyOverrides ++= Seq(
@@ -126,9 +127,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
       ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.16.0" % "compile")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12")
-    ),
-    crossScalaVersions := Seq("2.11.8"),
-    scalaVersion := "2.11.8"
+    )
   )
   .configs(Travis)
 
@@ -144,9 +143,8 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
 
 lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
-  .settings(commonSettings:_*)
   .settings(
+    crossScalaVersions := Nil,
     skip in publish := true,
     publishTo := Some(Resolver.file("file", new File("target/unusedrepo")))
   )
-  .configs(Travis)
