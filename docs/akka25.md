@@ -606,7 +606,9 @@ We provide a **basic** migration tool from **1.x** unique journal and snapshot t
 ###### How does it work ?
 The main idea is to parse unique journal, pick up every record, insert it in newly created appropriate suffixed journal, and finally remove it from unique journal. Additionally, we do the same for snapshots, and remove all records from "akka_persistence_metadata" capped collection. This capped collection will be built again through usual event sourcing process...
 
-Of course, this process would be very long, but thanks to *aggregation*, we actually "gather" records by future suffixed collection, append them **one by one** to that new suffixed collection, and remove them **in one step**, from unique original collection. Appending records to new collection *one by one* may appear as a bad choice regarding performance issues, but trying to append a great number of records in a single bulk operation may lead to `OutOfMemoryError` exception. Remember, its a *basic* tool and there is no need to hurry here, as this is actually a maintenance operation. So, once more, let's keep it simple but efficient.
+Of course, this process would be very long, but thanks to *aggregation*, we actually "gather" records by future suffixed collection, then by *persistence Id*, append (i.e. *INSERT*) them **in one step** (meaning all records of each *persistence Id*) to that new suffixed collection, and remove (i.e. *DELETE*) them **in one step**, from unique original collection.
+
+Additionally, we offer the possibility to try these *INSERT* and *DELETE* operations multiple times, as the process runs such operations in parallel and may lead to Mongo timeouts. We also offer the same possibility for removing all records from "akka_persistence_metadata" capped collection (see configuration below) 
 
 ###### Recommended migration steps:
 * **backup your database** (use, for example, the `mongodump` command)
@@ -636,76 +638,79 @@ Of course, once this is done, you should **not** start your application, unless 
 Add the following to your `build.sbt` file:
 ```scala
 libraryDependencies ++= Seq( "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.2.5",
-                             "org.mongodb" %% "casbah" % "3.1.0" )
+                             "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2" )
 ```
+Notice that even if you currently don't use it, migration process is performed through Official Scala driver.
 
-Notice that even if you currently don't use it, migration process is performed through Casbah driver.
+Notice that if you use Official Scala driver, `"org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"` dependency should already be part of your `build.sbt` file.
 
-Notice that if you use Casbah driver, `"org.mongodb" %% "casbah" % "3.1.0"` dependency should already be part of your `build.sbt` file.
-
-Additionally, you may configure your logging system with **INFO** level for `MigrateToSuffixedCollections` class, otherwise there will be no output to console or log files. With *log4J*, this should be done like that:
+Additionally, you may configure your logging system with **INFO** level for `ScalaDriverMigrateToSuffixedCollections` class, otherwise there will be no output to console or log files. With *log4J*, this should be done like that:
 ```xml
-<logger name="akka.contrib.persistence.mongodb.MigrateToSuffixedCollections" level="INFO" />
+<logger name="akka.contrib.persistence.mongodb.ScalaDriverMigrateToSuffixedCollections" level="INFO" />
 ```
+
+Optionally, you can configure how many times *INSERT* and *DELETE* operations may take place, and how many attempts to empty "akka_persistence_metadata" capped collection may occur, through the following properties:
+```
+akka.contrib.persistence.mongodb.mongo.suffix-migration.max-insert-retry = 1
+akka.contrib.persistence.mongodb.mongo.suffix-migration.max-delete-retry = 1
+akka.contrib.persistence.mongodb.mongo.suffix-migration.max-empty-metadata-retry = 1
+```
+Careful, the value `0` means **unlimited** retries (not recommanded)
 
 ###### Code
-Provide an `ActorSystem`, instantiate a `MigrateToSuffixedCollections` class and call its `migrateToSuffixCollections` method as shown in the following example:
+Provide an `ActorSystem`, instantiate a `ScalaDriverMigrateToSuffixedCollections` class and call its `migrateToSuffixCollections` method as shown in the very basic following example:
 ```scala
 package com.mycompany.myproject.myapplication.main
 
-object Migrate extends App {
-    import akka.actor.ActorSystem
-    val system: ActorSystem = ActorSystem("my system name", myConfig)
 
-    import akka.contrib.persistence.mongodb.MigrateToSuffixedCollections
-    val migration = new MigrateToSuffixedCollections(system)
-    try {
-        migration.migrateToSuffixCollections()
-    } catch {
-        case t: Throwable =>
-            println("Error occurred on migration to suffixed collections")
-            t.printStackTrace()
-            System.exit(-1)
-    }
+import akka.actor.ActorSystem
+val system: ActorSystem = ActorSystem("my system name", myConfig)
+
+import akka.contrib.persistence.mongodb.ScalaDriverMigrateToSuffixedCollections
+try {
+    Await.result(new ScalaDriverMigrateToSuffixedCollections(system).migrateToSuffixCollections, myDuration)
+} catch {
+    case t: Throwable =>
+        println("Error occurred on migration to suffixed collections")
+        t.printStackTrace()
 }
+
 ```
 Providing an `ActorSystem` depends on the manner your application is designed and is beyond the scope of this documentation.
 
-As the process **must** be performed offline, its a good idea to use an object (we call it "Migrate" in our example) extending the `scala.App` trait and run it through the `sbt run` command that allows us to choose which one to run:
-
+Running this process, we should see something like this (remember to configure INFO level for `ScalaDriverMigrateToSuffixedCollections` class)
 ```
-Multiple main classes detected, select one to run:
-
- [1] com.mycompany.myproject.myapplication.main.Main
- [2] com.mycompany.myproject.myapplication.main.Migrate
-
-Enter number:
-```
-If we choose number 2 here, we should see something like this (remember to configure INFO level for `MigrateToSuffixedCollections` class)
-```
-2016-09-23_15:43:31.823  INFO - Starting automatic migration to collections with suffixed names
+2019-04-24_15:43:31.823  INFO - Starting automatic migration to collections with suffixed names
 This may take a while...
-2016-09-23_15:43:36.519  INFO - 1/1 records were inserted into 'akka_persistence_journal_foo1'
-2016-09-23_15:43:36.536  INFO - 1/1 records, previously copied to 'akka_persistence_journal_foo1', were removed from 'akka_persistence_journal'
-2016-09-23_15:43:36.649  INFO - 24/24 records were inserted into 'akka_persistence_journal_foo2'
-2016-09-23_15:43:36.652  INFO - 24/24 records, previously copied to 'akka_persistence_journal_foo2', were removed from 'akka_persistence_journal'
-2016-09-23_15:44:58.090  INFO - 74013/74013 records were inserted into 'akka_persistence_journal_foo3'
-2016-09-23_15:45:07.559  INFO - 74013/74013 records, previously copied to 'akka_persistence_journal_foo3', were removed from 'akka_persistence_journal'
-2016-09-23_15:45:20.423  INFO - 54845/54845 records were inserted into 'akka_persistence_journal_foo4'
-2016-09-23_15:45:25.494  INFO - 54845/54845 records, previously copied to 'akka_persistence_journal_foo4', were removed from 'akka_persistence_journal'
-2016-09-23_15:45:25.502  INFO - 76 records were ignored and remain in 'akka_persistence_journal'
-2016-09-23_15:45:25.502  INFO - JOURNALS: 128883/128959 records were successfully transfered to suffixed collections
-2016-09-23_15:45:25.502  INFO - JOURNALS: 76/128959 records were ignored and remain in 'akka_persistence_journal'
-2016-09-23_15:45:25.502  INFO - JOURNALS: 128883 + 76 = 128959, all records were successfully handled
-2016-09-23_15:45:25.785  INFO - 2/2 records were inserted into 'akka_persistence_snaps_foo4'
-2016-09-23_15:45:25.788  INFO - 2/2 records, previously copied to 'akka_persistence_snaps_foo4', were removed from 'akka_persistence_snaps'
-2016-09-23_15:45:25.915  INFO - 101/101 records were inserted into 'akka_persistence_snaps_foo3'
-2016-09-23_15:45:25.931  INFO - 101/101 records, previously copied to 'akka_persistence_snaps_foo3', were removed from 'akka_persistence_snaps'
-2016-09-23_15:45:25.932  INFO - SNAPSHOTS: 103/103 records were successfully transfered to suffixed collections
-2016-09-23_15:45:25.936  INFO - METADATA: 106/106 records were successfully removed from akka_persistence_metadata collection
-2016-09-23_15:45:25.974  INFO - Automatic migration to collections with suffixed names has completed
+2019-04-24_15:43:36.517  INFO - 1/1 records were handled for suffixed collection 'akka_persistence_journal_foo1'
+2019-04-24_15:43:36.519  INFO - 1/1 records were successfully transferred to 'akka_persistence_journal_foo1'
+2019-04-24_15:43:36.536  INFO - 1/1 records, previously copied to 'akka_persistence_journal_foo1', were successfully removed from 'akka_persistence_journal'
+2019-04-24_15:43:36.647  INFO - 24/24 records were handled for suffixed collection 'akka_persistence_journal_foo2'
+2019-04-24_15:43:36.649  INFO - 24/24 records were successfully transferred to 'akka_persistence_journal_foo2'
+2019-04-24_15:43:36.652  INFO - 24/24 records, previously copied to 'akka_persistence_journal_foo2', were successfully removed from 'akka_persistence_journal'
+2019-04-24_15:44:58.088  INFO - 74013/74013 records were handled for suffixed collection 'akka_persistence_journal_foo3'
+2019-04-24_15:44:58.090  INFO - 74013/74013 records were successfully transferred to 'akka_persistence_journal_foo3'
+2019-04-24_15:45:07.559  INFO - 74013/74013 records, previously copied to 'akka_persistence_journal_foo3', were successfully removed from 'akka_persistence_journal'
+2019-04-24_15:45:20.421  INFO - 54845/54845 records were handled for suffixed collection 'akka_persistence_journal_foo4'
+2019-04-24_15:45:20.423  INFO - 54845/54845 records were successfully transferred to 'akka_persistence_journal_foo4'
+2019-04-24_15:45:25.494  INFO - 54845/54845 records, previously copied to 'akka_persistence_journal_foo4', were successfully removed from 'akka_persistence_journal'
+2019-04-24_15:45:25.500  INFO - JOURNALS: 128959/128959 records were handled
+2019-04-24_15:45:25.502  INFO - JOURNALS: 128883/128959 records were successfully transferred to suffixed collections
+2019-04-24_15:45:25.502  INFO - JOURNALS: 128883/128959 records were successfully removed from 'akka_persistence_journal'collection
+2019-04-24_15:45:25.502  INFO - JOURNALS: 76/128959 records were ignored and remain in 'akka_persistence_journal'
+2019-04-24_15:45:25.783  INFO - 2/2 records were handled for suffixed collection 'akka_persistence_snaps_foo4'
+2019-04-24_15:45:25.785  INFO - 2/2 records were successfully transferred to 'akka_persistence_snaps_foo4'
+2019-04-24_15:45:25.788  INFO - 2/2 records, previously copied to 'akka_persistence_snaps_foo4', were successfully removed from 'akka_persistence_snaps'
+2019-04-24_15:45:25.912  INFO - 101/101 records were handled for suffixed collection 'akka_persistence_snaps_foo3'
+2019-04-24_15:45:25.915  INFO - 101/101 records were successfully transferred to 'akka_persistence_snaps_foo3'
+2019-04-24_15:45:25.931  INFO - 101/101 records, previously copied to 'akka_persistence_snaps_foo3', were successfully removed from 'akka_persistence_snaps'
+2019-04-24_15:45:25.932  INFO - SNAPSHOTS: 103/103 records were handled
+2019-04-24_15:45:25.932  INFO - SNAPSHOTS: 103/103 records were successfully transferred to suffixed collections
+2019-04-24_15:45:25.933  INFO - SNAPSHOTS: 103/103 records were successfully removed from 'akka_persistence_snaps'collection
+2019-04-24_15:45:25.936  INFO - METADATA: all 106 records were successfully removed from 'akka_persistence_metadata' collection
+2019-04-24_15:45:25.974  INFO - Automatic migration to collections with suffixed names has completed
 ```
-Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods sometimes return an empty string. In that case, an information regarding these records is printed in the console above, and a warning is also printed if *migrated* + *ignored* records does not equal *total* records.
+Notice that records **may** remain in unique collections "akka_persistence_journal" and "akka_persistence_snapshot" in case your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods sometimes return an empty string. In that case, an information regarding these records is printed in the console above, and a warning is also printed if *inserted* records does not equal *removed* records.
 
 Notice that unique collections "akka_persistence_journal" and "akka_persistence_snapshot" remain in the database, even if empty. You should remove them if you want, using mongo shell...
 
@@ -713,7 +718,7 @@ Notice that unique collections "akka_persistence_journal" and "akka_persistence_
 **Keep *suffixed collection names* feature enabled** as explained in [*suffixed collection names* usage](#suffixusage), and of course, **do not modify** your `getSuffixfromPersistenceId` and `validateMongoCharacters` methods.
 
 Keep your database safe, **avoid running again the migration process**, so:
-* remove migration code (in our example, we remove our `Migrate` object)
+* remove migration code
 * remove `akka-persistence-mongo-tools` dependency from your `build.sbt` file
 
 That's it, you should **start your application** and enjoy *suffixed collection names* feature.

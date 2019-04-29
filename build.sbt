@@ -132,11 +132,11 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .configs(Travis)
 
 lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
-  .dependsOn(`akka-persistence-mongo-casbah` % "test->test;compile->compile")
+  .dependsOn(`akka-persistence-mongo-scala` % "test->test;compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.1" % "compile"
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2" % "compile"
     )
   )
   .configs(Travis)
