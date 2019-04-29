@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.2.6
+* Suffixed collections scala driver migration (#232)
+* Fixes for cross-build and publishing from sbt 1.x upgrade
+* Fixes related to sbt 1.x upgrade
+
 ### 2.2.5
 * Use Akka DynamicAccess for reflective classloading (#230)
 
