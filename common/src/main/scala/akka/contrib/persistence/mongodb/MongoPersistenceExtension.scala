@@ -114,6 +114,10 @@ class MongoSettings(val config: Config) {
   val SuffixSeparator: String = config.getString("suffix-builder.separator")
   val SuffixDropEmptyCollections: Boolean = config.getBoolean("suffix-drop-empty-collections")
 
+  val SuffixMigrationMaxInsertRetry: Int = config.getInt("suffix-migration.max-insert-retry")
+  val SuffixMigrationMaxDeleteRetry: Int = config.getInt("suffix-migration.max-delete-retry")
+  val SuffixMigrationMaxEmptyMetadataRetry: Int = config.getInt("suffix-migration.max-empty-metadata-retry")
+
   val MongoMetricsBuilderClass: String = config.getString("metrics-builder.class")
 
   val CollectionCache: Config = config.getConfig("collection-cache")

@@ -102,39 +102,30 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
   private[mongodb] def closeConnections(): Unit
 
-  /**
-    * retrieve suffix from persistenceId
-    */
-  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = suffixBuilderClassOption match {
+
+  private val canSuffixCollectionNamesBuilder: Option[CanSuffixCollectionNames] = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
       val reflectiveAccess = ReflectiveLookupExtension(actorSystem)
       val builderClass = reflectiveAccess.unsafeReflectClassByName[CanSuffixCollectionNames](suffixBuilderClass)
       val builderCons = builderClass.getConstructor()
-      val builderIns = builderCons.newInstance()
-      builderIns.getSuffixFromPersistenceId(persistenceId)
+      Some(builderCons.newInstance())
+    case _ => None
+  }
+
+  /**
+    * retrieve suffix from persistenceId
+    */
+  private[this] def getSuffixFromPersistenceId(persistenceId: String): String = canSuffixCollectionNamesBuilder match {
+    case Some(builderIns) => builderIns.getSuffixFromPersistenceId(persistenceId)
     case _ => ""
   }
 
   /**
     * validate characters in collection name
     */
-  private[this] def validateMongoCharacters(input: String): String = suffixBuilderClassOption match {
-    case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
-      val reflectiveAccess = ReflectiveLookupExtension(actorSystem)
-      val builderClass = reflectiveAccess.unsafeReflectClassByName[CanSuffixCollectionNames](suffixBuilderClass)
-      val builderCons = builderClass.getConstructor()
-      val builderIns = builderCons.newInstance()
-      builderIns.validateMongoCharacters(input)
+  private[this] def validateMongoCharacters(input: String): String = canSuffixCollectionNamesBuilder match {
+    case Some(builderIns) => builderIns.validateMongoCharacters(input)
     case _ => input
-  }
-
-  /**
-    * retrieve collection from persistenceId
-    */
-  private[this] def getSuffixedCollection(persistenceId: String)(build: String => String)(implicit ec: ExecutionContext): C = {
-    val name = build(getSuffixFromPersistenceId(persistenceId))
-    logger.debug(s"Name used to build collection is $name")
-    collection(name)
   }
 
   /**
