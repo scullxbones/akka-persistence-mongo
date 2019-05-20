@@ -125,9 +125,15 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
             .flatMap(docs => insertManyDocs(docs, makeCollection, newCollectionName, writeConcern).map {res =>
               (res, docs.size.toLong - res, docs.size.toLong) // (inserted, failed, handled)
             })
-            .flatMap(ins => removeManyDocs(pid, originCollectionName, writeConcern, ins._3).map { res =>
-              (ins._1, res, ins._2 + ins._3 - res, ins._3) // (inserted, removed, failed, handled)
-            })
+            .flatMap { ins =>
+              if (ins._1 > 0L) {
+                removeManyDocs(pid, originCollectionName, writeConcern, ins._3).map { res =>
+                  (ins._1, res, ins._2 + ins._3 - res, ins._3) // (inserted, removed, failed, handled)
+                }
+              } else {
+                Future.successful((0L, 0L, ins._2, ins._3))
+              }
+            }
         })((0L, 0L, 0L, 0L)) { (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4)
       }
       .map {
