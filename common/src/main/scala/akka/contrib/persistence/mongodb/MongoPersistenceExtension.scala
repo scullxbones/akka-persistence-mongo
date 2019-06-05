@@ -114,12 +114,13 @@ class MongoSettings(val config: Config) {
   val SuffixSeparator: String = config.getString("suffix-builder.separator")
   val SuffixDropEmptyCollections: Boolean = config.getBoolean("suffix-drop-empty-collections")
 
-  val SuffixMigrationMaxInsertRetry: Int = Option(config.getInt("suffix-migration.max-insert-retry")).getOrElse(1)
-  val SuffixMigrationMaxDeleteRetry: Int = Option(config.getInt("suffix-migration.max-delete-retry")).getOrElse(1)
-  val SuffixMigrationMaxEmptyMetadataRetry: Int = Option(config.getInt("suffix-migration.max-empty-metadata-retry")).getOrElse(1)
-  val SuffixMigrationMaxInsertBulkSize: Int = config.getInt("suffix-migration.max-bulk-insert")
-  val SuffixMigrationMaxDeleteBulkSize: Int = config.getInt("suffix-migration.max-bulk-delete")
-  val SuffixMigrationParallelism: Int = Option(config.getInt("suffix-migration.parallelism")).getOrElse(1)
+  val SuffixMigrationHeavyLoad: Boolean = Option(config.getBoolean("suffix-migration.heavy-load")).getOrElse(false)
+
+  val SuffixMigrationMaxInsertRetry: Int = Option(config.getInt("suffix-migration.max-insert-retry")).filter(_ >= 0).getOrElse(1)
+  val SuffixMigrationMaxDeleteRetry: Int = Option(config.getInt("suffix-migration.max-delete-retry")).filter(_ >= 0).getOrElse(1)
+  val SuffixMigrationMaxEmptyMetadataRetry: Int = Option(config.getInt("suffix-migration.max-empty-metadata-retry")).filter(_ >= 0).getOrElse(1)
+
+  val SuffixMigrationParallelism: Int = Option(config.getInt("suffix-migration.parallelism")).filter(_ > 0).getOrElse(1)
 
   val MongoMetricsBuilderClass: String = config.getString("metrics-builder.class")
 
