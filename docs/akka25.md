@@ -615,7 +615,7 @@ In case running operations in parallel leads to Mongo overload (for example erro
 
 So, we first "gather" records by *persistence Id* but not by future suffixed collection. This process is much longer but Mongo should never been overwhelmed.
 
-Additionally, we offer the possibility to run operations in parallel, that is to process a predetermined amount of *persistence Ids* at the same time. Once all these *persistence Ids* are processed (we actually wait for the slowest) we handle the following ones. This allows to decrease migration duration a little bit and is actually a matter of tunning (as an example, migrating 33 millions records for about 500 *persistence Ids* that have never been snapshotted (yes, it was due to a bug) with a *parallelism* of 50, took approximately 7 hours on a PC with 4 CPUs and a RAM of 8 Mo...)
+Additionally, we offer the possibility to run operations in parallel, that is to process a predetermined amount of *persistence Ids* at the same time. Once all these *persistence Ids* are processed (we actually wait for the slowest) we handle the following ones. This allows to decrease migration duration a little bit and is actually a matter of tuning (as an example, migrating 33 millions records for about 500 *persistence Ids* that were never snapshotted (yes, it was due to a bug) with a *parallelism* of 50, took approximately 7 hours on a PC with 4 CPUs and a RAM of 8 Mo...)
 
 ###### Recommended migration steps:
 * **backup your database** (use, for example, the `mongodump` command)
