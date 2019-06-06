@@ -38,6 +38,7 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
    |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
    |}
    |akka.contrib.persistence.mongodb.mongo.suffix-migration.heavy-load = true
+   |akka.contrib.persistence.mongodb.mongo.suffix-migration.parallelism = 2
     $extendedConfig
    |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
