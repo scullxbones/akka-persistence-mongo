@@ -93,7 +93,7 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
     system1.terminate()
     Await.ready(system1.whenTerminated, 3.seconds)
 
-    // perform simple migration
+    // perform heavy load migration
     val configExtension = SuffixCollectionNamesTest.extendedConfig
     val system2 = ActorSystem("migration", config(configExtension))
     implicit val mat2: ActorMaterializer = ActorMaterializer()(system2)
