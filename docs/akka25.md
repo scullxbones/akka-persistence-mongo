@@ -89,7 +89,7 @@ A mongo uri can be specified.  This must meet the requirements of [Mongo's uri f
 For example `mongodb://user:secret@localhost:27017/my-akka-persistence`.  If the `database name` is unspecified, it will be defaulted to `akka-persistence`.
 
 ```
-akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2.2.717/replicated-database"
+akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://user:password@192.168.0.1:27017,192.168.0.2:27017/replicated-database"
 ```
 
 If a user, password, and database are specified, the database will be used both as a credentials source as well as journal and/or snapshot storage.  
