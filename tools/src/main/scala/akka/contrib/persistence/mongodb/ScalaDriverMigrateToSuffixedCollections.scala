@@ -18,7 +18,7 @@ import org.mongodb.scala.model.Aggregates._
 import org.mongodb.scala.model.Filters.equal
 
 import scala.concurrent.Future
-import scala.util.Random
+import scala.util.Try
 
 
 class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends ScalaMongoDriver(system, ConfigFactory.empty()) {
@@ -61,28 +61,47 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       case str: String if str == snapsCollectionName => (makeSnaps, getSnapsCollectionName _, snapsWriteConcern, "snapshots")
     }
 
-    buildTemporaryMap(makeCollection, getNewCollectionName)
-    .flatMap { tmpMap =>
-      Future.fold(
-        tmpMap.map {
-          case (newCollectionName, (pids, count)) =>
-            handleDocs(pids, count, makeCollection, originCollectionName, newCollectionName, writeConcern)
+    (if (settings.SuffixMigrationHeavyLoad) {
+      buildTemporaryMapHeavyLoad(makeCollection, getNewCollectionName, originCollectionName, summaryTitle)
+        .flatMap(_.grouped(settings.SuffixMigrationParallelism).foldLeft(Future.successful((0L, 0L, 0L, 0L, 0L))) {
+          case (prevFuture, tmpMap) =>
+            for {
+              acc <- prevFuture
+              res <- Future.fold(
+                tmpMap.map { case (pid, count) =>
+                  handleDocsByPid(pid, count, makeCollection, getNewCollectionName, originCollectionName, writeConcern)
+                    .map { res => (res._1, res._2, res._3, res._4, count)}
+                })((0L,0L,0L,0L,0L)){
+                (accPid, resPid) => (accPid._1 + resPid._1, accPid._2 + resPid._2, accPid._3 + resPid._3, accPid._4 + resPid._4, accPid._5 + resPid._5)
+              }
+            } yield{
+              (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4, acc._5 + res._5)
+            }
+        })
+    } else {
+      buildTemporaryMap(makeCollection, getNewCollectionName, summaryTitle)
+        .flatMap { tmpMap =>
+          Future.fold(
+            tmpMap.map {
+              case (newCollectionName, (pids, count)) =>
+                handleDocsByCollection(pids, count, makeCollection, originCollectionName, newCollectionName, writeConcern)
+            }
+          )((0L, 0L, 0L, 0L, 0L)){
+            (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4, acc._5 + res._5)
+          }
         }
-      )((0L, 0L, 0L, 0L, 0L, 0L)){
-        (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4, acc._5 + res._5, acc._6 + res._6)
-      }
-    }
-    .map { case (inserted, removed, ignored, failed, handled, total) =>
+    })
+    .map { case (inserted, removed, failed, ignored, handled) =>
 
-      logger.info(s"${summaryTitle.toUpperCase}: $handled/$total records were handled")
-      logger.info(s"${summaryTitle.toUpperCase}: $inserted/$total records were successfully transferred to suffixed collections")
-      logger.info(s"${summaryTitle.toUpperCase}: $removed/$total records were successfully removed from '$originCollectionName' collection")
+      logger.info(s"${summaryTitle.toUpperCase}: $handled records were handled")
+      logger.info(s"${summaryTitle.toUpperCase}: $inserted/$handled records were successfully transferred to suffixed collections")
+      logger.info(s"${summaryTitle.toUpperCase}: $removed/$handled records were successfully removed from '$originCollectionName' collection")
       if (ignored > 0L)
-        logger.info(s"${summaryTitle.toUpperCase}: $ignored/$total records were ignored and remain in '$originCollectionName' collection")
+        logger.info(s"${summaryTitle.toUpperCase}: $ignored/$handled records were ignored and remain in '$originCollectionName' collection")
       if(removed < inserted)
         logger.warn(s"${summaryTitle.toUpperCase}: ${inserted - removed} records were transferred to suffixed collections but were NOT removed from '$originCollectionName'")
       if (failed > 0L)
-        logger.error(s"${summaryTitle.toUpperCase}: $failed/$total records lead to errors")
+        logger.error(s"${summaryTitle.toUpperCase}: $failed/$handled records lead to errors")
 
       // result
       failed + inserted - removed == 0L //OK if no error and removed = inserted
@@ -90,33 +109,109 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
 
   }
 
+  //////////////// HEAVY LOAD OPERATIONS ///////////////
+
+  private[this] val IgnoredPid = "IGNORED_PID"
+
+  /**
+    * Builds a Map counting documents per persistence Id: Map(pid -> count)
+    */
+  private[this] def buildTemporaryMapHeavyLoad(makeCollection: String => C, getNewCollectionName: String => String, originCollectionName: String, summaryTitle: String): Future[Map[String, Long]] = {
+    logger.info(s"\n\n${summaryTitle.toUpperCase}: Gathering documents by suffixed collection names.  T h i s   m a y   t a k e   a   w h i l e  ! ! !   It may seem to freeze, be patient...\n")
+
+    Source.fromFuture(makeCollection(""))
+      .flatMapConcat(_.aggregate(List(group(s"$$$PROCESSOR_ID", sum("count", 1)))).asAkka)
+      .runWith(Sink.fold[Map[String, Long], D](Map[String, Long]()) { case (tmpMap, tmpDoc) =>
+        val count = tmpDoc.getInt32("count").getValue.toLong
+        Option(tmpDoc.getString("_id").getValue).getOrElse("") match {
+          case pid if pid.nonEmpty && getNewCollectionName(pid) != originCollectionName =>
+            tmpMap + (pid -> count)
+          case _ =>
+            Try { tmpMap + (IgnoredPid -> (tmpMap(IgnoredPid) + count)) }
+              .recover { case _: Throwable => tmpMap + (IgnoredPid -> count)}
+              .get
+        }
+      })
+  }
+
+  /**
+    * Migrates documents corresponding to one persistence Id from an origin collection to some new collection,
+    * and returns a tuple containing amounts of documents inserted, removed, failed and ignored
+    */
+  private[this] def handleDocsByPid(pid: String, docCount: Long, makeCollection: String => C, getNewCollectionName: String => String, originCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long)] = {
+    if(pid == IgnoredPid) {
+      Future.successful((0L, 0L, 0L, docCount)) // just counting...
+    } else {
+      logger.info(s"Processing persistence Id '$pid' for $docCount documents...")
+      Source.fromFuture(makeCollection(""))
+        .flatMapConcat(_.find(equal(PROCESSOR_ID, pid)).asAkka)
+        .runWith(Sink.foldAsync[(Long, Long, Long), D]((0L, 0L, 0L)) { case ((insOk, delOk, ko), doc) =>
+          val id = doc.getObjectId("_id")
+          val idStr = id.getValue.toString
+          Source.fromFuture(makeCollection(pid))
+            .flatMapConcat(_.withWriteConcern(writeConcern).insertOne(doc).asAkka)
+            .runWith(Sink.headOption)
+            .flatMap {
+              case Some(_) => // doc has been inserted, we remove it from origin collection...
+                Source.fromFuture(makeCollection(""))
+                  .flatMapConcat(_.withWriteConcern(writeConcern).deleteOne(equal("_id", id)).asAkka)
+                  .runWith(Sink.headOption)
+                  .flatMap {
+                    case Some(delRes) if delRes.getDeletedCount == 1 =>
+                      Future.successful((insOk + 1L, delOk + 1L, ko))
+                    case _ =>
+                      logger.warn(s"Document with unique id '$idStr' transferred to '${getNewCollectionName(pid)}' was NOT removed from '$originCollectionName'")
+                      Future.successful((insOk + 1L, delOk, ko + 1L))
+                  }
+                  .recoverWith { case t: Throwable =>
+                    logger.error(s"Unable to remove document with unique id '$idStr' from '$originCollectionName': ${t.getMessage}", t)
+                    Future.successful((insOk + 1L, delOk, ko + 1L))
+                  }
+              case _ =>
+                logger.warn(s"Document with unique id '$idStr' was NOT transferred to '${getNewCollectionName(pid)}' nor removed from '$originCollectionName'")
+                Future.successful((insOk, delOk, ko + 1L))
+            }
+            .recoverWith { case t: Throwable =>
+              logger.error(s"Unable to insert document with unique id '$idStr' into '${getNewCollectionName(pid)}': ${t.getMessage}", t)
+              Future.successful((insOk, delOk, ko + 1L))
+            }
+        })
+        .map { case (inserted, removed, failed) =>
+          logger.info(s"Persistence Id '$pid' result: (inserted = $inserted, removed = $removed, failed = $failed)")
+          (inserted, removed, failed, 0L)
+        }
+        .recoverWith { case t: Throwable =>
+          logger.error(s"Unable to handle documents for persistence Id '$pid': ${t.getMessage}", t)
+          Future.successful((0L, 0L, docCount, 0L))
+        }
+    }
+  }
+
+  //////////////// NORMAL OPERATIONS ///////////////
+
   /**
     * Builds a Map grouping persistence ids by new suffixed collection names: Map(collectionName -> (Seq[pid], count))
     */
-  private[this] def buildTemporaryMap(makeCollection: String => C, getNewCollectionName: String => String): Future[Map[String, (Seq[String], Long)]] = {
-    val temporaryCollectionName = s"migration2suffix-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
+  private[this] def buildTemporaryMap(makeCollection: String => C, getNewCollectionName: String => String, summaryTitle: String): Future[Map[String, (Seq[String], Long)]] = {
+    logger.info(s"\n\n${summaryTitle.toUpperCase}: Gathering documents by suffixed collection names.  T h i s   m a y   t a k e   a   w h i l e  ! ! !   It may seem to freeze, be patient...\n")
+
     Source.fromFuture(makeCollection(""))
-      .flatMapConcat(_.aggregate(List(group(s"$$$PROCESSOR_ID", sum("count", 1)), out(temporaryCollectionName))).asAkka)
+      .flatMapConcat(_.aggregate(List(group(s"$$$PROCESSOR_ID", sum("count", 1)))).asAkka)
       .runWith(Sink.seq)
       .map(_.groupBy(doc => getNewCollectionName(Option(doc.getString("_id").getValue).getOrElse(""))))
       .map(_.mapValues(_.foldLeft((Seq[String](), 0L)){ (acc, doc) =>
         (acc._1 :+ Option(doc.getString("_id").getValue).getOrElse(""), acc._2 + doc.getInt32("count").getValue)
       }))
-      .map { res =>
-        Source.fromFuture(collection(temporaryCollectionName))
-          .flatMapConcat(_.drop().asAkka)
-          .runWith(Sink.ignore)
-        res
-      }
   }
 
   /**
-    * Migrates documents from an origin collection to some new collection, and returns a tuple containing amounts of documents inserted, removed, ignored, failed, handled and initial count.
+    * Migrates documents from an origin collection to some new collection, and returns a tuple containing amounts of documents inserted, removed, failed, ignored and handled.
     */
-  private[this] def handleDocs(pids: Seq[String], count: Long, makeCollection: String => C, originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long, Long, Long)] = {
+  private[this] def handleDocsByCollection(pids: Seq[String], docCount: Long, makeCollection: String => C, originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long, Long)] = {
     if (originCollectionName == newCollectionName) {
-      Future.successful((0L, 0L, count, 0L, count, count)) // just counting...
+      Future.successful((0L, 0L, 0L, docCount, docCount)) // just counting...
     } else {
+      logger.info(s"Processing suffixed collection '$newCollectionName' for $docCount documents...")
       Future.fold(
         pids.map { pid =>
           Source.fromFuture(makeCollection(""))
@@ -125,24 +220,30 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
             .flatMap(docs => insertManyDocs(docs, makeCollection, newCollectionName, writeConcern).map {res =>
               (res, docs.size.toLong - res, docs.size.toLong) // (inserted, failed, handled)
             })
-            .flatMap(ins => removeManyDocs(pid, originCollectionName, writeConcern, ins._3).map { res =>
-              (ins._1, res, ins._2 + ins._3 - res, ins._3) // (inserted, removed, failed, handled)
-            })
+            .flatMap { ins =>
+              if (ins._1 > 0L) {
+                removeManyDocs(pid, originCollectionName, writeConcern, ins._3).map { res =>
+                  (ins._1, res, ins._2 + ins._3 - res, ins._3) // (inserted, removed, failed, handled)
+                }
+              } else {
+                Future.successful((0L, 0L, ins._2, ins._3))
+              }
+            }
         })((0L, 0L, 0L, 0L)) { (acc, res) => (acc._1 + res._1, acc._2 + res._2, acc._3 + res._3, acc._4 + res._4)
       }
-      .map {
-        case (inserted, removed, failed, handled) =>
+        .map {
+          case (inserted, removed, failed, handled) =>
 
-          logger.info(s"$handled/$count records were handled for suffixed collection '$newCollectionName'")
-          logger.info(s"$inserted/$count records were successfully transferred to suffixed collection '$newCollectionName'")
-          logger.info(s"$removed/$count records, previously copied to '$newCollectionName', were successfully removed from '$originCollectionName'")
-          if(removed < inserted)
-            logger.warn(s"${inserted - removed} records were transferred to suffixed collection '$newCollectionName' but were NOT removed from '$originCollectionName'")
-          if (failed > 0L)
-            logger.error(s"$failed/$count records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
+            logger.info(s"$handled records were handled for suffixed collection '$newCollectionName'")
+            logger.info(s"$inserted/$handled records were successfully transferred to suffixed collection '$newCollectionName'")
+            logger.info(s"$removed/$handled records, previously transferred to '$newCollectionName', were successfully removed from '$originCollectionName'")
+            if(removed < inserted)
+              logger.warn(s"${inserted - removed} records were transferred to suffixed collection '$newCollectionName' but were NOT removed from '$originCollectionName'")
+            if (failed > 0L)
+              logger.error(s"$failed/$handled records lead to errors while transferring from '$originCollectionName' to suffixed collection '$newCollectionName'")
 
-          (inserted, removed, 0L, failed, handled, count)
-      }
+            (inserted, removed, failed, 0L, handled)
+        }
     }
   }
 
@@ -189,6 +290,8 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
         Future.successful(alreadyRemoved)
       }
   }
+
+  //////////////// COMMON OPERATIONS ///////////////
 
   /**
     * Fails if 'journal-automatic-upgrade' property is set

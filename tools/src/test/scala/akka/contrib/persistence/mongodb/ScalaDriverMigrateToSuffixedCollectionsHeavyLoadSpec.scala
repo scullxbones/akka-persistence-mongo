@@ -16,7 +16,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.{Await, Future, Promise}
 
-class ScalaDriverMigrateToSuffixedCollectionsSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
+class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -37,6 +37,8 @@ class ScalaDriverMigrateToSuffixedCollectionsSpec extends BaseUnitTest with Cont
    |    # Class name of the plugin.
    |  class = "akka.contrib.persistence.mongodb.MongoSnapshots"
    |}
+   |akka.contrib.persistence.mongodb.mongo.suffix-migration.heavy-load = true
+   |akka.contrib.persistence.mongodb.mongo.suffix-migration.parallelism = 2
     $extendedConfig
    |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
@@ -62,7 +64,7 @@ class ScalaDriverMigrateToSuffixedCollectionsSpec extends BaseUnitTest with Cont
     }
   }
 
-  "A migration process" should "migrate journal to suffixed collections names" in {
+  "A migration process" should "migrate journal to suffixed collections names (heavy load)" in {
     import concurrent.duration._
 
     // Populate database
@@ -84,14 +86,14 @@ class ScalaDriverMigrateToSuffixedCollectionsSpec extends BaseUnitTest with Cont
     Await.result(
       Source.fromFuture(underTest1.journal)
         .flatMapConcat(_.countDocuments().asAkka)
-          .runWith(Sink.head)(mat1),
+        .runWith(Sink.head)(mat1),
       10.seconds.dilated(system1)) shouldBe 5
 
     Await.ready(Future(underTest1.closeConnections())(ec1), 10.seconds.dilated(system1))
     system1.terminate()
     Await.ready(system1.whenTerminated, 3.seconds)
 
-    // perform simple migration
+    // perform heavy load migration
     val configExtension = SuffixCollectionNamesTest.extendedConfig
     val system2 = ActorSystem("migration", config(configExtension))
     implicit val mat2: ActorMaterializer = ActorMaterializer()(system2)
@@ -119,10 +121,10 @@ class ScalaDriverMigrateToSuffixedCollectionsSpec extends BaseUnitTest with Cont
       underTest3.db.listCollectionNames().asAkka
         .runWith(Sink.seq)(mat3),
       10.seconds.dilated(system3)) should contain allOf ("akka_persistence_journal_foo1-test",
-                                                        "akka_persistence_journal_foo2-test",
-                                                        "akka_persistence_journal_foo3-test",
-                                                        "akka_persistence_journal_foo4-test",
-                                                        "akka_persistence_journal_foo5-test")
+      "akka_persistence_journal_foo2-test",
+      "akka_persistence_journal_foo3-test",
+      "akka_persistence_journal_foo4-test",
+      "akka_persistence_journal_foo5-test")
 
     import akka.contrib.persistence.mongodb.JournallingFieldNames._
 
