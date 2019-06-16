@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.2.8
+* Merge pull request #235 from JeanFrancoisGuena/streamed-currentPersistenceIds
+* Source for current Persistence Ids processed in a streamed manner
+* Undo overzealous regex changes from pre release script
+
 ### 2.2.6
 * Suffixed collections scala driver migration (#232)
 * Fixes for cross-build and publishing from sbt 1.x upgrade
