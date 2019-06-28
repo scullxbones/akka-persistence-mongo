@@ -24,8 +24,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
 
   private def mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
-      .configure(MongoClientSettings.builder())
-      .applyConnectionString(new ConnectionString(mongoUri))
+      .configureWithConnectionString(MongoClientSettings.builder(), new ConnectionString(mongoUri))
       .applicationName("akka-persistence-mongodb")
       .build()
 
