@@ -24,9 +24,12 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
 
   private def mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
-      .configureWithConnectionString(MongoClientSettings.builder(), new ConnectionString(mongoUri))
+      .configureWithConnectionString(MongoClientSettings.builder(), mongoUri)
       .applicationName("akka-persistence-mongodb")
       .build()
+
+  println(s">>>>>>>>>>>>>>>> URI -> $mongoUri")
+  println(s">>>>>>>>>>>>>>>> MAX WAIT QUEUE SIZE -> ${mongoClientSettings.getClusterSettings.getMaxWaitQueueSize}")
 
   private[mongodb] lazy val client = MongoClient(mongoClientSettings)
   private[mongodb] lazy val db: MongoDatabase = {
