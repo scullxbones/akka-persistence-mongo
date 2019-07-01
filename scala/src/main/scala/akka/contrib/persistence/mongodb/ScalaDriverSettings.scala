@@ -119,7 +119,7 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
     ).applyToServerSettings(new Block[ServerSettings.Builder]{
         override def apply(t: ServerSettings.Builder): Unit = {
           t.heartbeatFrequency(getLongQueryProperty("heartbeatfrequencyms").getOrElse(HeartbeatFrequency.toMillis), TimeUnit.MILLISECONDS)
-            .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS) // no 'minHeartbeatFrequency' in ConnectionString ???
+            .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS) // no 'minHeartbeatFrequency' in ConnectionString
         }
       }
     ).applyToSocketSettings(new Block[SocketSettings.Builder] {
