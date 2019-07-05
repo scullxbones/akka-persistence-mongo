@@ -34,7 +34,7 @@ object ScalaDriverSettings extends ExtensionId[ScalaDriverSettings] with Extensi
 }
 
 class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config) with Extension {
-  import ScalaDriverSettings._
+//  import ScalaDriverSettings._
 
   import scala.language.implicitConversions
 
@@ -82,7 +82,7 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
 //    } else bldr
 //  }
 
-  def configureWithConnectionString(b: MongoClientSettings.Builder, uri: String): MongoClientSettings.Builder = {
+  def configureWithUriFallback(b: MongoClientSettings.Builder, uri: String): MongoClientSettings.Builder = {
 
     def getLongQueryProperty(key: String): Option[Long] = getQueryProperty(key, _.toLong)
 

@@ -22,9 +22,9 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   val ScalaSerializers: ScalaDriverSerializers = ScalaDriverSerializersExtension(system)
   val scalaDriverSettings: ScalaDriverSettings = ScalaDriverSettings(system)
 
-  private def mongoClientSettings: MongoClientSettings =
+  private lazy val mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
-      .configureWithConnectionString(MongoClientSettings.builder(), mongoUri)
+      .configureWithUriFallback(MongoClientSettings.builder(), mongoUri)
       .applicationName("akka-persistence-mongodb")
       .build()
 
