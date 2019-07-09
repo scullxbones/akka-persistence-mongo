@@ -9,6 +9,7 @@ import com.typesafe.config.Config
 import org.mongodb.scala.MongoClientSettings
 import org.mongodb.scala.connection._
 
+import scala.language.implicitConversions
 import scala.util.Try
 
 object ScalaDriverSettings extends ExtensionId[ScalaDriverSettings] with ExtensionIdProvider {
@@ -21,68 +22,11 @@ object ScalaDriverSettings extends ExtensionId[ScalaDriverSettings] with Extensi
 
   override def lookup(): ExtensionId[ScalaDriverSettings] = ScalaDriverSettings
 
-//  implicit def configbuilder2block[A](fn: A => A): Block[A] = new ConfigBuilderToBlock[A](fn)
-//
-//  private class ConfigBuilderToBlock[A](fn: A => A) extends Block[A] {
-//    def apply(a: A): Unit = {
-//      fn(a)
-//      ()
-//    }
-//  }
-//
-//  def builder[A](fn: A => A): A => A = identity[A]
 }
 
 class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config) with Extension {
-//  import ScalaDriverSettings._
 
-  import scala.language.implicitConversions
-
-//  def configure(b: MongoClientSettings.Builder): MongoClientSettings.Builder = {
-//    /*
-//        TODO: Apparently unsupported in latest driver
-//
-//        .socketKeepAlive(SocketKeepAlive)
-//        .heartbeatConnectTimeout(HeartbeatConnectTimeout.toMillis.toIntWithoutWrapping)
-//        .heartbeatSocketTimeout(HeartbeatSocketTimeout.toMillis.toIntWithoutWrapping)
-//     */
-//
-//    val bldr = b.applyToClusterSettings(
-//      builder[ClusterSettings.Builder](
-//        _.serverSelectionTimeout(ServerSelectionTimeout.toMillis, TimeUnit.MILLISECONDS)
-//         .maxWaitQueueSize(ThreadsAllowedToBlockforConnectionMultiplier)
-//      )
-//    ).applyToConnectionPoolSettings(
-//      builder[ConnectionPoolSettings.Builder](
-//        _.maxWaitTime(MaxWaitTime.toMillis, TimeUnit.MILLISECONDS)
-//          .maxConnectionIdleTime(MaxConnectionIdleTime.toMillis, TimeUnit.MILLISECONDS)
-//          .maxConnectionLifeTime(MaxConnectionLifeTime.toMillis, TimeUnit.MILLISECONDS)
-//          .minSize(MinConnectionsPerHost)
-//          .maxSize(ConnectionsPerHost)
-//      )
-//    ).applyToServerSettings(
-//      builder[ServerSettings.Builder](
-//        _.heartbeatFrequency(HeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS)
-//         .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS)
-//      )
-//    ).applyToSocketSettings(
-//      builder[SocketSettings.Builder](
-//        _.connectTimeout(ConnectTimeout.toMillis.toIntWithoutWrapping, TimeUnit.MILLISECONDS)
-//          .readTimeout(SocketTimeout.toMillis.toIntWithoutWrapping, TimeUnit.MILLISECONDS)
-//      )
-//    ).applyToSslSettings(
-//      builder[SslSettings.Builder](
-//        _.enabled(SslEnabled)
-//         .invalidHostNameAllowed(SslInvalidHostNameAllowed)
-//      )
-//    )
-//
-//    if (SslEnabled) {
-//      bldr.streamFactoryFactory(NettyStreamFactoryFactory())
-//    } else bldr
-//  }
-
-  def configureWithUriFallback(b: MongoClientSettings.Builder, uri: String): MongoClientSettings.Builder = {
+  def configure(uri: String): MongoClientSettings.Builder = {
 
     def getLongQueryProperty(key: String): Option[Long] = getQueryProperty(key, _.toLong)
 
@@ -100,7 +44,8 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
       }.getOrElse(None)
     }
 
-    val bldr: MongoClientSettings.Builder = b.applyConnectionString(new ConnectionString(uri))
+    val bldr: MongoClientSettings.Builder = MongoClientSettings.builder()
+      .applyConnectionString(new ConnectionString(uri))
       .applyToClusterSettings(new Block[ClusterSettings.Builder]{
         override def apply(t: ClusterSettings.Builder): Unit = {
           t.serverSelectionTimeout(getLongQueryProperty("serverselectiontimeoutms").getOrElse(ServerSelectionTimeout.toMillis), TimeUnit.MILLISECONDS)
