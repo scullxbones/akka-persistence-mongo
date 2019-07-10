@@ -1,5 +1,8 @@
 ## Changelog for 2.x major version
 
+### 2.2.9
+* improve the way official driver settings are used for connection (#236)
+
 ### 2.2.8
 * Merge pull request #235 from JeanFrancoisGuena/streamed-currentPersistenceIds
 * Source for current Persistence Ids processed in a streamed manner
