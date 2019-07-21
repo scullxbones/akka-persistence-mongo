@@ -164,7 +164,6 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
     override def serializeAtom(atom: Atom): BSONDocument = {
       Option(atom.tags).filter(_.nonEmpty).foldLeft(
         BSONDocument(
-          ID -> BSONObjectID.generate(),
           PROCESSOR_ID -> atom.pid,
           FROM -> atom.from,
           TO -> atom.to,
