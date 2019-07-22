@@ -84,7 +84,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
       def serialize(ref:ActorRef,casbahSerializers: CasbahSerializers): DBObject ={
         val myPayload = Payload[com.mongodb.DBObject](ShardRegionTerminated(ref))(casbahSerializers.serialization,implicitly,casbahSerializers.dt,casbahSerializers.loader)
         val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = myPayload)))
-        val serialized = serializeAtom(repr)
+        val serialized = serializeAtom(repr, realtimeEnablePersistence = true)
         serialized
       }
 
@@ -121,7 +121,7 @@ class CasbahPersistenceJournallerSpec extends TestKit(ActorSystem("unit-test")) 
 
       val repr = Atom(pid = "pid", from = 1L, to = 1L, events = ISeq(Event(pid = "pid", sn = 1L, payload = "TEST")))
 
-      val serialized = serializeAtom(repr)
+      val serialized = serializeAtom(repr, realtimeEnablePersistence = true)
 
       val atom = serialized
 

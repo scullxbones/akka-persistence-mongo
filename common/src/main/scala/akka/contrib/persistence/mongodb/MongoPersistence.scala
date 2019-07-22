@@ -42,7 +42,7 @@ object MongoPersistenceDriver {
 }
 
 trait CanSerializeJournal[D] {
-  def serializeAtom(atom: Atom): D
+  def serializeAtom(atom: Atom, realtimeEnablePersistence: Boolean): D
 }
 
 trait CanDeserializeJournal[D] {
@@ -289,5 +289,5 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
   def deserializeJournal(dbo: D)(implicit ev: CanDeserializeJournal[D]): Event = ev.deserializeDocument(dbo)
 
-  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]): D = ev.serializeAtom(aw)
+  def serializeJournal(aw: Atom)(implicit ev: CanSerializeJournal[D]): D = ev.serializeAtom(aw, realtimeEnablePersistence)
 }

@@ -78,7 +78,7 @@ class CasbahSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem) 
   }
 
   implicit object Serializer extends CanSerializeJournal[DBObject] {
-    override def serializeAtom(atom: Atom): DBObject = {
+    override def serializeAtom(atom: Atom, realtimeEnablePersistence: Boolean): DBObject = {
       Option(atom.tags).filter(_.nonEmpty).foldLeft(
         MongoDBObject(
           ID -> ObjectId.get(),

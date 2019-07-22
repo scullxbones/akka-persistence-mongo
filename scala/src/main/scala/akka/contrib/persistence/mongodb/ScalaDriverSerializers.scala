@@ -103,7 +103,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
   }
 
   implicit object Serializer extends CanSerializeJournal[BsonDocument] with DefaultBsonTransformers {
-    override def serializeAtom(atom: Atom): BsonDocument = {
+    override def serializeAtom(atom: Atom, realtimeEnablePersistence: Boolean): BsonDocument = {
       Option(atom.tags).filter(_.nonEmpty).foldLeft(
         BsonDocument(
           ID -> BsonObjectId(),

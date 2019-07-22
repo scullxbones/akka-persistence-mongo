@@ -161,16 +161,17 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
 
   implicit object JournalSerializer extends CanSerializeJournal[BSONDocument] with JournallingFieldNames {
 
-    override def serializeAtom(atom: Atom): BSONDocument = {
-      Option(atom.tags).filter(_.nonEmpty).foldLeft(
-        BSONDocument(
+    override def serializeAtom(atom: Atom, realtimeEnablePersistence: Boolean): BSONDocument = {
+      Option(atom.tags).filter(_.nonEmpty).foldLeft {
+        val bsonDocument = BSONDocument(
           PROCESSOR_ID -> atom.pid,
           FROM -> atom.from,
           TO -> atom.to,
           EVENTS -> BSONArray(atom.events.map(serializeEvent)),
-          VERSION -> 1
-        )
-      ){ case(d,tags) => d.merge(TAGS -> serializeTags(tags)) }
+          VERSION -> 1)
+        if (realtimeEnablePersistence) bsonDocument :~ (ID -> BSONObjectID.generate())
+        else bsonDocument
+      }{ case(d,tags) => d.merge(TAGS -> serializeTags(tags)) }
     }
 
     import Producer._
