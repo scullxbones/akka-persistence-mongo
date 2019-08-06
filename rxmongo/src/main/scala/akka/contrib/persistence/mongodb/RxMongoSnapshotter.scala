@@ -44,9 +44,9 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
     for {
       s <- snaps(pid)
-      wr <- s.remove(BSONDocument(criteria: _*), writeConcern)
+      wr <- s.delete(true, writeConcern).one(BSONDocument(criteria: _*))
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty)
         for {
           n <- s.count()
             if n == 0
@@ -60,12 +60,12 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     for {
       s <- snaps(pid)
-      wr <- s.remove(BSONDocument(PROCESSOR_ID -> pid,
+      wr <- s.delete(true, writeConcern).one(BSONDocument(
+        PROCESSOR_ID -> pid,
         SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-        TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
-        writeConcern)
+        TIMESTAMP -> BSONDocument("$lte" -> maxTs)))
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty)
         for {
           n <- s.count()
             if n == 0

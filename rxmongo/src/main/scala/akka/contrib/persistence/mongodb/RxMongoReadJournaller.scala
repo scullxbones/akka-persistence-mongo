@@ -59,8 +59,7 @@ object CurrentPersistenceIds {
                             Out(nameWithIndex) ::
                             Nil,
                             batchSize = Option(1000)
-                          ).prepared[AkkaStreamCursor]
-                            .cursor
+                          ).prepared.cursor
                             .headOption
                             .map(_ => nameWithIndex)
                         })
@@ -143,7 +142,7 @@ object CurrentEventsByTag {
   }
 }
 
-class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory: Option[BSONObjectID] => Publisher[BSONDocument])
+class RxMongoRealtimeGraphStage(bufsz: Long = 16L)(factory: Option[BSONObjectID] => Publisher[BSONDocument])
   extends GraphStage[SourceShape[BSONDocument]] {
 
   private val out = Outlet[BSONDocument]("out")
@@ -151,7 +150,7 @@ class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory:
   override def shape: SourceShape[BSONDocument] = SourceShape(out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new GraphStageLogic(shape) {
+    new GraphStageLogic(shape) with OutHandler {
       private var lastId: Option[BSONObjectID] = None
       private var subscription: Option[Subscription] = None
       private var cursor: Option[Publisher[BSONDocument]] = None
@@ -162,7 +161,7 @@ class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory:
       }
 
       private def subAc = getAsyncCallback[Subscription] { s =>
-        s.request(bufsz.toLong)
+        s.request(bufsz)
         subscription = Option(s)
       }
 
@@ -199,21 +198,21 @@ class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory:
         override def onComplete(): Unit = cmpAcImpl.invoke(())
       }
 
-      setHandler(out, new OutHandler {
-        override def onPull(): Unit = {
-          while (buffer.nonEmpty && isAvailable(out)){
-            val head :: tail = buffer
-            push(out, head)
-            buffer = tail
-            subscription.foreach(_.request(1L))
-          }
+      def onPull(): Unit = {
+        while (buffer.nonEmpty && isAvailable(out)){
+          val head :: tail = buffer
+          push(out, head)
+          buffer = tail
+          subscription.foreach(_.request(1L))
         }
+      }
 
-        override def onDownstreamFinish(): Unit = {
-          subscription.foreach(_.cancel())
-          completeStage()
-        }
-      })
+      override def onDownstreamFinish(): Unit = {
+        subscription.foreach(_.cancel())
+        completeStage()
+      }
+
+      setHandler(out, this)
 
       private def buildCursor(subscriber: Subscriber[BSONDocument]): Publisher[BSONDocument] = {
         subscription.foreach(_.cancel())
@@ -234,7 +233,7 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
       Source.fromFuture(driver.realtime)
         .flatMapConcat { rt =>
           Source.fromGraph(
-            new RxMongoRealtimeGraphStage(driver)(maybeId => {
+            new RxMongoRealtimeGraphStage()(maybeId => {
               ((query, maybeId) match {
                 case (None, None) =>
                   rt.find(BSONDocument.empty)

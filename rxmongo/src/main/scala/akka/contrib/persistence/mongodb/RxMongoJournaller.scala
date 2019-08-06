@@ -47,7 +47,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] implicit val system: ActorSystem = driver.actorSystem
   private[this] implicit val materializer: Materializer = ActorMaterializer()
 
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = { //Enumerator.flatten
+  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = {
     val journal = driver.getJournal(pid)
     val source =
       Source
@@ -81,12 +81,17 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] def doBatchAppend(batch: Seq[Try[BSONDocument]], collection: Future[BSONCollection])(implicit ec: ExecutionContext): Future[Seq[Try[BSONDocument]]] = {
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
-      collection.flatMap(_.insert[BSONDocument](ordered = true, writeConcern).many(collected).map(_ => batch))
+
+      collection.flatMap(_.insert(true, writeConcern).
+        many(collected).map(_ => batch))
+
     } else {
       Future.sequence(batch.map {
-        case Success(document: BSONDocument) =>
-          collection.flatMap(_.insert(document, writeConcern).map(writeResultToUnit(_, document)))
-        case f: Failure[_] => Future.successful(Failure[BSONDocument](f.exception))
+        case Success(document) =>
+          collection.flatMap(_.insert(true, writeConcern).
+            one(document).map(writeResultToUnit(_, document)))
+
+        case Failure(cause) => Future.successful(Failure[BSONDocument](cause))
       })
     }
   }
@@ -134,10 +139,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
         GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil,
         batchSize = Option(1)
-      ).prepared[AkkaStreamCursor]
-        .cursor
-        .headOption
-        .map(_.flatMap(_.getAs[Long]("max")))
+      ).prepared.cursor.headOption.map(_.flatMap(_.getAs[Long]("max")))
     }
 
     for {

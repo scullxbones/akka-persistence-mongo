@@ -9,12 +9,18 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
-import play.api.libs.iteratee._
-import reactivemongo.api._
+
+import reactivemongo.api.{
+  DefaultDB,
+  FailoverStrategy,
+  MongoConnection,
+  MongoDriver
+}
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands._
+import reactivemongo.api.commands.{CommandError, WriteConcern}
 import reactivemongo.api.indexes.{Index, IndexType}
-import reactivemongo.bson._
+import reactivemongo.bson.BSONDocument
+
 import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent._
@@ -133,20 +139,9 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       _ <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
     } yield cc
 
-  private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
-    val fut = for {
-      database  <- db
-      names     <- database.collectionNames
-      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
-    } yield Enumerator(list: _*)    
-    Enumerator.flatten(fut)
-  }
-
   private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
-
-  private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) = getCollections(journalCollectionName)
 
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     def excluded(name: String): Boolean =
@@ -165,7 +160,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
   
-  private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollections(snapsCollectionName)
+  private[mongodb] def snapshotCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
   
 }
 

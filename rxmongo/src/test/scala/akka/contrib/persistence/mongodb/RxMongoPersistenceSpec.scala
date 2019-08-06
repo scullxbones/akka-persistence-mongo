@@ -8,7 +8,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.testkit.{TestKit, _}
 import com.typesafe.config.ConfigFactory
-import play.api.libs.iteratee._
+
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.{DefaultDB, FailoverStrategy}
 
@@ -20,11 +20,13 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   val provider = new RxMongoDriverProvider(system)
 
   class SpecDriver extends RxMongoDriver(system, ConfigFactory.empty(), provider) {
-    override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
+    override def mongoUri =
+      s"mongodb://$host:$noAuthPort/${embedDB}?heartbeatFrequencyMS=500"
   }
 
   class ExtendedSpecDriver extends RxMongoDriver(system, ConfigFactory.parseString(SuffixCollectionNamesTest.overriddenConfig), provider) {
-    override def mongoUri = s"mongodb://$host:$noAuthPort/$embedDB"
+    override def mongoUri =
+      s"mongodb://$host:$noAuthPort/${embedDB}?heartbeatFrequencyMS=500"
   }
 
   val driver = new SpecDriver
@@ -43,6 +45,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
         ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
+        ()
       }
     }
   }
@@ -57,6 +60,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
         ()
       } finally {
         Await.ready(c.drop(failIfNotFound = false), 3.seconds.dilated)
+        ()
       }
     }
   }
@@ -66,7 +70,10 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       testCode(extendedDriver)
       ()
     } finally {
-      Await.ready(extendedDriver.getJournalCollections().through(Enumeratee.mapM(coll => coll.drop(failIfNotFound = false))).run(Iteratee.foreach { _ => () }), 3.seconds.dilated)
+      Await.ready(extendedDriver.journalCollectionsAsFuture.flatMap { cs =>
+        Future.sequence(cs.map(_.drop(failIfNotFound = false)))
+      }, 3.seconds.dilated)
+
       Await.ready(extendedDriver.metadata.flatMap(_.drop(failIfNotFound = false)), 3.seconds.dilated)
       ()
     }
@@ -77,7 +84,9 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       testCode(extendedDriver)
       ()
     } finally {
-      Await.ready(extendedDriver.getSnapshotCollections().through(Enumeratee.mapM(coll => coll.drop(failIfNotFound = false))).run(Iteratee.foreach { _ => () }), 3.seconds.dilated)
+      Await.ready(extendedDriver.snapshotCollectionsAsFuture.flatMap { cs =>
+        Future.sequence(cs.map(_.drop(failIfNotFound = false)))
+      }, 3.seconds.dilated)
       ()
     }
   }

@@ -19,9 +19,9 @@ def commonDeps(sv:String) = Seq(
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
-  "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
-  "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
-  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.5"     % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % "2.12.0"  % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % "2.12.0"  % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.12.0"  % "test",
   "org.scalatest"             %% "scalatest"                % "3.0.1"   % "test",
   "junit"                     % "junit"                     % "4.11"    % "test",
   "org.mockito"               % "mockito-all"               % "1.9.5"   % "test",
@@ -121,13 +121,11 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      ("org.reactivemongo" %% "reactivemongo" % "0.16.0" % "compile")
-        .exclude("com.typesafe.akka","akka-actor_2.11")
-        .exclude("com.typesafe.akka","akka-actor_2.12"),
-      ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.16.0" % "compile")
+      "reactivemongo", "reactivemongo-akkastream").map { dep =>
+      ("org.reactivemongo" %% dep % "0.16.6")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12")
-    )
+    }
   )
   .configs(Travis)
 
