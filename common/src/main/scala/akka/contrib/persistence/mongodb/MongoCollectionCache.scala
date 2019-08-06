@@ -48,8 +48,10 @@ object MongoCollectionCache {
     override def getOrElseCreate(collectionName: String, collectionCreator: String => C): C =
       trieMap.getOrElseUpdate(collectionName, collectionCreator.apply(collectionName))
 
-    override def invalidate(collectionName: String): Unit =
+    override def invalidate(collectionName: String): Unit = {
       trieMap.remove(collectionName)
+      ()
+    }
   }
 
   /**
@@ -76,8 +78,10 @@ object MongoCollectionCache {
       }
     }
 
-    override def invalidate(collectionName: String): Unit =
+    override def invalidate(collectionName: String): Unit = {
       trieMap.remove(collectionName)
+      ()
+    }
   }
 
   /**

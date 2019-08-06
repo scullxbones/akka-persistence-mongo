@@ -36,7 +36,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
       val legacyDocs = snapshots.map(serializer.legacyWrite)
 
-      Await.result(ss.insert[BSONDocument](ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert(ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect(Int.MaxValue, Cursor.FailOnError[List[SelectedSnapshot]]())
       val result = Await.result(extracted, 3.seconds.dilated)
@@ -53,7 +53,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
       val legacyDocs = snapshots.map(serializer.legacyWrite)
 
-      Await.result(ss.insert[BSONDocument](ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert(ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
       // should 'retrieve' (and not 'build') the suffixed snapshot 
       val snapsName = extendedDriver.getSnapsCollectionName(pid)
@@ -77,7 +77,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
       val newDocs = snapshots.drop(5).map(serializer.write)
 
-      Await.result(ss.insert[BSONDocument](ordered = true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert(ordered = true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
 
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect(Int.MaxValue, Cursor.FailOnError[List[SelectedSnapshot]]())
       val result = Await.result(extracted, 3.seconds.dilated.dilated)
@@ -97,7 +97,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
       val newDocs = snapshots.drop(5).map(serializer.write)
 
-      Await.result(ss.insert[BSONDocument](ordered = true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert(ordered = true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
        
       val snapsName = extendedDriver.getSnapsCollectionName(pid)
       snapsName should be("akka_persistence_snaps_unit-test-test")
