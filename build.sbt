@@ -1,6 +1,9 @@
-val releaseV = "2.2.9"
+import sbt.Credentials
+import sbt.Keys.{credentials, publishConfiguration}
 
-val scalaV = "2.11.12"
+val releaseV = "2.2.10_TN"
+
+val scalaV = "2.12.8"
 
 val AkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
 val MongoJavaDriverVersion = "3.8.2"
@@ -39,7 +42,7 @@ ThisBuild / scalaVersion := scalaV
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
-  crossScalaVersions := Seq("2.11.12", "2.12.8"),
+  crossScalaVersions := Seq("2.12.8", "2.11.12"),
   dependencyOverrides += "org.mongodb" % "mongodb-driver" % "3.8.2" ,
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   dependencyOverrides ++= Seq(
@@ -82,38 +85,21 @@ val commonSettings = Seq(
   testOptions in Test += Tests.Argument("-oDS"),
   testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
   fork in Test := true,
-  publishTo := sonatypePublishTo.value,
+  //publishTo := sonatypePublishTo.value,
+  publishTo := {
+    if (isSnapshot.value)
+      Some("Artifactory Realm" at "https://artifactory.linkedstore.com/artifactory/libs-snapshot-local")
+    else
+      Some("Artifactory Realm" at "https://artifactory.linkedstore.com/artifactory/libs-release-local")
+  },
+  credentials += Credentials("Artifactory Realm", "artifactory.linkedstore.com", "publisher", "u=87Zc;hyA!5K3_D"),
   publishConfiguration := publishConfiguration.value.withOverwrite(true),
   publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
+
 ) ++ inConfig(Travis)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
   .settings(commonSettings:_*)
-  .configs(Travis)
-
-lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
-  .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
-  .settings(
-    libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.1" % "compile"
-    )
-  )
-  .configs(Travis)
-
-lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
-  .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
-  .settings(
-    libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.4.2"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.17.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.17.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.17.Final" % "compile",
-      "org.reactivestreams" % "reactive-streams"  % "1.0.2"
-    )
-  )
   .configs(Travis)
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
@@ -130,21 +116,3 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
     )
   )
   .configs(Travis)
-
-lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
-  .dependsOn(`akka-persistence-mongo-scala` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
-  .settings(
-    libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2" % "compile"
-    )
-  )
-  .configs(Travis)
-
-lazy val `akka-persistence-mongo` = (project in file("."))
-  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
-  .settings(
-    crossScalaVersions := Nil,
-    skip in publish := true,
-    publishTo := Some(Resolver.file("file", new File("target/unusedrepo")))
-  )
