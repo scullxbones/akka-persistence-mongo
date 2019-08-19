@@ -31,8 +31,6 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private[this] val writeConcern = driver.journalWriteConcern
-
   private[this] def journal(implicit ec: ExecutionContext) = driver.journal
 
   private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
@@ -81,11 +79,11 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] def doBatchAppend(batch: Seq[Try[BSONDocument]], collection: Future[BSONCollection])(implicit ec: ExecutionContext): Future[Seq[Try[BSONDocument]]] = {
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
-      collection.flatMap(_.insert[BSONDocument](ordered = true, writeConcern).many(collected).map(_ => batch))
+      collection.flatMap(_.insert(ordered = true).many(collected).map(_ => batch))
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
-          collection.flatMap(_.insert(document, writeConcern).map(writeResultToUnit(_, document)))
+          collection.flatMap(_.insert(document).map(writeResultToUnit(_, document)))
         case f: Failure[_] => Future.successful(Failure[BSONDocument](f.exception))
       })
     }
@@ -134,7 +132,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
         GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil,
         batchSize = Option(1)
-      ).prepared[AkkaStreamCursor]
+      ).prepared
         .cursor
         .headOption
         .map(_.flatMap(_.getAs[Long]("max")))
@@ -154,7 +152,6 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         BSONDocument(
           "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
         ),
-        writeConcern = driver.metadataWriteConcern,
         upsert = true,
         multi = false
       )
@@ -163,7 +160,6 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         BSONDocument(
           "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
         ),
-        writeConcern = driver.metadataWriteConcern,
         upsert = false,
         multi = false
       )
@@ -195,7 +191,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
 
       duplicateKeyCodes = Seq(11000,11001,12582)
-      _ <- journal.update(query, update, writeConcern, upsert = false, multi = true) recover {
+      _ <- journal.update(query, update, upsert = false, multi = true) recover {
         case le : LastError if le.code.exists(duplicateKeyCodes.contains) || le.writeErrors.exists(we => duplicateKeyCodes.contains(we.code)) =>
         // Duplicate key error:
         // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
