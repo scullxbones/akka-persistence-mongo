@@ -123,10 +123,12 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
     libraryDependencies ++= Seq(
       ("org.reactivemongo" %% "reactivemongo" % "0.18.4" % "compile")
         .exclude("com.typesafe.akka","akka-actor_2.11")
-        .exclude("com.typesafe.akka","akka-actor_2.12"),
+        .exclude("com.typesafe.akka","akka-actor_2.12")
+        .excludeAll(ExclusionRule("org.apache.logging.log4j")),
       ("org.reactivemongo" %% "reactivemongo-akkastream" % "0.18.4" % "compile")
         .exclude("com.typesafe.akka","akka-actor_2.11")
         .exclude("com.typesafe.akka","akka-actor_2.12")
+        .excludeAll(ExclusionRule("org.apache.logging.log4j"))
     )
   )
   .configs(Travis)
