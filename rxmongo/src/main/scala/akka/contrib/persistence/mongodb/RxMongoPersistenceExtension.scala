@@ -15,7 +15,6 @@ import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.CommandError
 import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
-import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -63,24 +62,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   implicit val waitFor: FiniteDuration = 10.seconds
 
-  private[this] lazy val unauthenticatedConnection: MongoConnection = wait {
-    // create unauthenticated connection, there is no direct way to wait for authentication this way
-    // plus prevent sending double authentication (initial authenticate and our explicit authenticate)
-    driver.connection(parsedURI = parsedMongoUri.copy(authenticate = None))
-      .database(name = dbName, failoverStrategy = failoverStrategy)
-      .map(_.connection)
-  }
-
   private[mongodb] lazy val connection: MongoConnection =
-    // now authenticate explicitly and wait for confirmation
-    parsedMongoUri.authenticate.fold(unauthenticatedConnection) { auth =>
-      waitForAuthentication(unauthenticatedConnection, auth)
+    // authenticate and wait for confirmation
+    wait {
+      driver.connection(parsedMongoUri, strictUri = false).get.database(name = dbName, failoverStrategy = failoverStrategy).map(_.connection)
     }
 
-  private[this] def waitForAuthentication(conn: MongoConnection, auth: Authenticate): MongoConnection = {
-    wait(conn.authenticate(auth.db, auth.user, auth.password.getOrElse(""), failoverStrategy))
-    conn
-  }
   private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
     Await.result(awaitable, duration)
 
