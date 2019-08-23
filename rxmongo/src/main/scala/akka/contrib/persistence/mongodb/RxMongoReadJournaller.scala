@@ -27,8 +27,7 @@ object CurrentAllEvents {
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map { c =>
-        c.find(BSONDocument())
-          .projection(BSONDocument(EVENTS -> 1))
+        c.find(BSONDocument(), Option(BSONDocument(EVENTS -> 1)))
           .cursor[BSONDocument]()
           .documentSource()
           .map { doc =>
@@ -66,7 +65,7 @@ object CurrentPersistenceIds {
                         })
         tmps         <- Future.sequence(tmpNames.map(driver.collection))
       } yield tmps )
-      .flatMapConcat(cols => cols.map(_.find(BSONDocument()).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
+      .flatMapConcat(cols => cols.map(_.find(BSONDocument(), Option.empty[BSONDocument]).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
       .mapConcat(_.getAs[String]("_id").toList)
       .alsoTo(Sink.onComplete{ _ =>
         driver
@@ -93,9 +92,8 @@ object CurrentEventsByPersistenceId {
 
     Source.fromFuture(driver.getJournal(persistenceId))
             .flatMapConcat(
-              _.find(query)
+              _.find(query, Option(BSONDocument(EVENTS -> 1)))
                 .sort(BSONDocument(TO -> 1))
-                .projection(BSONDocument(EVENTS -> 1))
                 .cursor[BSONDocument]()
                 .documentSource()
             ).map( doc =>
@@ -124,7 +122,7 @@ object CurrentEventsByTag {
     Source.fromFuture(driver.journalCollectionsAsFuture)
           .flatMapConcat{ xs =>
             xs.map(c =>
-              c.find(query)
+              c.find(query, Option.empty[BSONDocument])
                .sort(BSONDocument(ID -> 1))
                .cursor[BSONDocument]()
                .documentSource()
@@ -237,13 +235,13 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
             new RxMongoRealtimeGraphStage(driver)(maybeId => {
               ((query, maybeId) match {
                 case (None, None) =>
-                  rt.find(BSONDocument.empty)
+                  rt.find(BSONDocument.empty, Option.empty[BSONDocument])
                 case (None, Some(id)) =>
-                  rt.find(BSONDocument(ID -> BSONDocument("$gt" -> id)))
+                  rt.find(BSONDocument(ID -> BSONDocument("$gt" -> id)), Option.empty[BSONDocument])
                 case (Some(q), None) =>
-                  rt.find(q)
+                  rt.find(q, Option.empty[BSONDocument])
                 case (Some(q), Some(id)) =>
-                  rt.find(q ++ BSONDocument(ID -> BSONDocument("$gt" -> id)))
+                  rt.find(q ++ BSONDocument(ID -> BSONDocument("$gt" -> id)), Option.empty[BSONDocument])
               }).options(QueryOpts().tailable.awaitData)
                 .cursor[BSONDocument]()
                 .documentPublisher()

@@ -15,6 +15,7 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
+import reactivemongo.api.ReadConcern
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.{LastError, WriteResult}
 import reactivemongo.bson.{BSONDocument, _}
@@ -44,6 +45,8 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] implicit val system: ActorSystem = driver.actorSystem
   private[this] implicit val materializer: Materializer = ActorMaterializer()
+
+  private[this] val writeConcern = driver.journalWriteConcern
 
   private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = { //Enumerator.flatten
     val journal = driver.getJournal(pid)
@@ -83,7 +86,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     } else {
       Future.sequence(batch.map {
         case Success(document: BSONDocument) =>
-          collection.flatMap(_.insert(document).map(writeResultToUnit(_, document)))
+          collection.flatMap(_.insert(ordered = false, writeConcern).one(document).map(writeResultToUnit(_, document)))
         case f: Failure[_] => Future.successful(Failure[BSONDocument](f.exception))
       })
     }
@@ -147,22 +150,22 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
     for {
       md <- metadata
-      _ <- md.update(
-        BSONDocument(PROCESSOR_ID -> persistenceId),
-        BSONDocument(
-          "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
-        ),
-        upsert = true,
-        multi = false
-      )
-      _ <- md.update(
-        BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
-        BSONDocument(
-          "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
-        ),
-        upsert = false,
-        multi = false
-      )
+      _ <- md.update(ordered = false, writeConcern).one(
+            BSONDocument(PROCESSOR_ID -> persistenceId),
+            BSONDocument(
+              "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
+            ),
+            upsert = true,
+            multi = false
+          )
+      _ <- md.update(ordered = false, writeConcern).one(
+            BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
+            BSONDocument(
+              "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
+            ),
+            upsert = false,
+            multi = false
+          )
     } yield ()
   }
 
@@ -191,7 +194,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
 
       duplicateKeyCodes = Seq(11000,11001,12582)
-      _ <- journal.update(query, update, upsert = false, multi = true) recover {
+      _ <- journal.update(ordered = false, writeConcern).one(query, update, upsert = false, multi = true) recover {
         case le : LastError if le.code.exists(duplicateKeyCodes.contains) || le.writeErrors.exists(we => duplicateKeyCodes.contains(we.code)) =>
         // Duplicate key error:
         // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
@@ -201,7 +204,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
         for {
-          n <- journal.count()
+          n <- journal.count(None, None, 0, None, ReadConcern.Local)
           if n == 0
           _ <- journal.drop(failIfNotFound = false)
           _ = driver.removeJournalInCache(persistenceId)

@@ -7,6 +7,7 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence.SelectedSnapshot
+import reactivemongo.api.ReadConcern
 import reactivemongo.api.indexes._
 import reactivemongo.bson._
 
@@ -17,13 +18,19 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   import SnapshottingFieldNames._
   import driver.RxMongoSerializers._
 
+  private[this] val writeConcern = driver.snapsWriteConcern
+
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     val selected =
-      snaps(pid).flatMap(_.find(
-        BSONDocument(PROCESSOR_ID -> pid,
+      snaps(pid).flatMap(
+        _.find(BSONDocument(
+          PROCESSOR_ID -> pid,
           SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-          TIMESTAMP -> BSONDocument("$lte" -> maxTs))).sort(BSONDocument(SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
-        .one[SelectedSnapshot])
+          TIMESTAMP -> BSONDocument("$lte" -> maxTs)
+        ), Option.empty[BSONDocument])
+          .sort(BSONDocument(SEQUENCE_NUMBER -> -1, TIMESTAMP -> -1))
+          .one[SelectedSnapshot]
+      )
     selected
   }
 
@@ -32,7 +39,11 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp)
-    snaps(snapshot.metadata.persistenceId).flatMap(_.update(query, snapshot, upsert = true, multi = false)).map(_ => ())
+    snaps(snapshot.metadata.persistenceId)
+      .flatMap(
+        _.update(ordered = true, writeConcern)
+          .one(query, snapshot, upsert = true, multi = false)
+      ).map(_ => ())
   }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
@@ -46,7 +57,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
-          n <- s.count()
+          n <- s.count(None, None, 0, None, ReadConcern.Local)
             if n == 0
           _ <- s.drop(failIfNotFound = false)
           _ = driver.removeSnapsInCache(pid)
@@ -58,13 +69,16 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     for {
       s <- snaps(pid)
-      wr <- s.delete().one(BSONDocument(PROCESSOR_ID -> pid,
-        SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-        TIMESTAMP -> BSONDocument("$lte" -> maxTs)))
+      wr <- s.delete()
+              .one(BSONDocument(
+                PROCESSOR_ID -> pid,
+                SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
+                TIMESTAMP -> BSONDocument("$lte" -> maxTs)
+              ))
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
-          n <- s.count()
+          n <- s.count(None, None, 0, None, ReadConcern.Local)
             if n == 0
           _ <- s.drop(failIfNotFound = false)
           _ = driver.removeSnapsInCache(pid)

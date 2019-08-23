@@ -9,10 +9,9 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
-import play.api.libs.iteratee._
-import reactivemongo.api._
+import reactivemongo.api.{DefaultDB, FailoverStrategy, MongoConnection, MongoDriver}
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands.CommandError
+import reactivemongo.api.commands.{CommandError, WriteConcern}
 import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.bson._
 
@@ -62,14 +61,8 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   implicit val waitFor: FiniteDuration = 10.seconds
 
-  private[mongodb] lazy val connection: MongoConnection =
-    // authenticate and wait for confirmation
-    wait {
-      driver.connection(parsedMongoUri, strictUri = false).get.database(name = dbName, failoverStrategy = failoverStrategy).map(_.connection)
-    }
-
-  private[this] def wait[T](awaitable: Awaitable[T])(implicit duration: Duration): T =
-    Await.result(awaitable, duration)
+  private[mongodb] lazy val connection: Future[MongoConnection] =
+    Future.fromTry(driver.connection(parsedMongoUri, strictUri = false))
 
   private[mongodb] def closeConnections(): Unit = {
     driver.close(5.seconds)
@@ -84,7 +77,10 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       delayFactor = rxMSettings.GrowthFunction)
   }
   private[mongodb] def db(implicit ec: ExecutionContext): Future[DefaultDB] =
-    connection.database(name = dbName, failoverStrategy = failoverStrategy)
+    for {
+      conn <- connection
+      db   <- conn.database(name = dbName, failoverStrategy = failoverStrategy)
+    } yield db
 
   private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))
 
@@ -120,20 +116,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       _ <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
     } yield cc
 
-  private[mongodb] def getCollections(collectionName: String)(implicit ec: ExecutionContext): Enumerator[BSONCollection] = {
-    val fut = for {
-      database  <- db
-      names     <- database.collectionNames
-      list      <- Future.sequence(names.filter(_.startsWith(collectionName)).map(collection))
-    } yield Enumerator(list: _*)    
-    Enumerator.flatten(fut)
-  }
-
   private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
 
-  private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) = getCollections(journalCollectionName)
+  private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) =
+    getCollectionsAsFuture(journalCollectionName)
 
   private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
     def excluded(name: String): Boolean =
@@ -152,7 +140,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
   
-  private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollections(snapsCollectionName)
+  private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
   
 }
 
