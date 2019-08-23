@@ -17,8 +17,6 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   import SnapshottingFieldNames._
   import driver.RxMongoSerializers._
 
-  private[this] lazy val writeConcern = driver.snapsWriteConcern
-
   private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     val selected =
       snaps(pid).flatMap(_.find(
@@ -34,7 +32,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
       TIMESTAMP -> snapshot.metadata.timestamp)
-    snaps(snapshot.metadata.persistenceId).flatMap(_.update(query, snapshot, writeConcern, upsert = true, multi = false)).map(_ => ())
+    snaps(snapshot.metadata.persistenceId).flatMap(_.update(query, snapshot, upsert = true, multi = false)).map(_ => ())
   }
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
@@ -44,7 +42,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
     for {
       s <- snaps(pid)
-      wr <- s.remove(BSONDocument(criteria: _*), writeConcern)
+      wr <- s.delete().one(BSONDocument(criteria: _*))
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
@@ -60,10 +58,9 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
   private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
     for {
       s <- snaps(pid)
-      wr <- s.remove(BSONDocument(PROCESSOR_ID -> pid,
+      wr <- s.delete().one(BSONDocument(PROCESSOR_ID -> pid,
         SEQUENCE_NUMBER -> BSONDocument("$lte" -> maxSeq),
-        TIMESTAMP -> BSONDocument("$lte" -> maxTs)),
-        writeConcern)
+        TIMESTAMP -> BSONDocument("$lte" -> maxTs)))
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
