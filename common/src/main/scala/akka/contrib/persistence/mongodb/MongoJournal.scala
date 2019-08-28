@@ -4,7 +4,7 @@ import akka.actor.Actor
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import com.typesafe.config.Config
-import nl.grons.metrics.scala.MetricName
+import nl.grons.metrics4.scala.MetricName
 
 import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
@@ -195,4 +195,3 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
     = timeIt (maxTimer) { super.maxSequenceNr(pid, from) }
   
 }
-  

@@ -135,7 +135,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
     }
 
     private def serializeTags(tags: Set[String]): BsonArray =
-      BsonArray(tags.map(BsonString(_)))
+      BsonArray.fromIterable(tags.map(BsonString(_)))
 
     private def serializePayload(payload: Payload)(doc: BsonDocument): BsonDocument = {
       val withType = doc.append(TYPE, BsonString(payload.hint))

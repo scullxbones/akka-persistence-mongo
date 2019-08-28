@@ -5,7 +5,7 @@ import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.{FlatSpecLike, Matchers}
 import org.scalatest.concurrent.PatienceConfiguration
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.Await
 import scala.util.Try

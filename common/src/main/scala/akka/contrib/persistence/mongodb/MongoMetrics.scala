@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import com.codahale.metrics.Timer.Context
 import com.codahale.metrics.{MetricRegistry, SharedMetricRegistries}
-import nl.grons.metrics.scala._
+import nl.grons.metrics4.scala._
 
 /**
   * Builds timers and histograms to record metrics.
