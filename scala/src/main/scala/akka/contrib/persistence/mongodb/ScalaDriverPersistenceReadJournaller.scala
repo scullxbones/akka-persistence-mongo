@@ -39,7 +39,7 @@ object CurrentAllEvents {
                   case d:BsonDocument => driver.deserializeJournal(d)
                 })
               .getOrElse(Nil)
-          ).mapConcat(xs => Seq(xs:_*))
+          ).mapConcat(_.toVector)
       ).reduceLeftOption(_ concat _)
        .getOrElse(Source.empty))
   }

@@ -116,9 +116,10 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       batchFuture.andThen {
         case Success(batch) =>
           val f = doBatchAppend(batch, realtime)
-          f.onFailure {
-            case t =>
+          f.onComplete {
+            case scala.util.Failure(t) =>
               logger.error("Error during write to realtime collection", t)
+            case _ => ()
           }
           f
       }.map(squashToUnit)

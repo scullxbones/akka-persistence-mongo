@@ -2,6 +2,7 @@ val releaseV = "2.2.10"
 
 val scala211V = "2.11.12"
 val scala212V = "2.12.9"
+val scala213V = "2.13.0"
 
 val scalaV = scala211V
 
@@ -52,7 +53,7 @@ ThisBuild / scalaVersion := scalaV
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
-  crossScalaVersions := Seq(scala211V, scala212V),
+  crossScalaVersions := Seq(scala211V, scala212V, scala213V),
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   dependencyOverrides ++= Seq(
     "com.typesafe" % "config" % "1.3.2",
