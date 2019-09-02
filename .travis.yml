@@ -9,7 +9,8 @@ services:
 language: scala
 scala:
    - 2.11.12
-   - 2.12.8
+   - 2.12.9
+   - 2.13.0
 env:
   matrix:
     - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"
@@ -32,4 +33,4 @@ before_script:
   - sleep 15
   - docker exec $(docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
 script:
-  - travis_retry sbt ++$TRAVIS_SCALA_VERSION ";akka-persistence-mongo-common/travis:test;akka-persistence-mongo-casbah/travis:test;akka-persistence-mongo-rxmongo/travis:test;akka-persistence-mongo-scala/travis:test;akka-persistence-mongo-tools/travis:test"
+  - travis_retry ./travis_build.sh

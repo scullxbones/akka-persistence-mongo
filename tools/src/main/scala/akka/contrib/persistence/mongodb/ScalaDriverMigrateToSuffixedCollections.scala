@@ -201,7 +201,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
       .map(_.groupBy(doc => getNewCollectionName(Option(doc.getString("_id").getValue).getOrElse(""))))
       .map(_.mapValues(_.foldLeft((Seq[String](), 0L)){ (acc, doc) =>
         (acc._1 :+ Option(doc.getString("_id").getValue).getOrElse(""), acc._2 + doc.getInt32("count").getValue)
-      }))
+      }).toMap)
   }
 
   /**

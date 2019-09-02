@@ -39,7 +39,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
       case Version(x,_) => throw new IllegalStateException(s"Don't know how to deserialize version $x of document")
     }
 
-    private def extractTags(d: BsonDocument): Seq[String] =
+    private def extractTags(d: BsonDocument): scala.collection.Seq[String] =
       Option(d.get(TAGS)).filter(_.isArray).map(_.asArray)
         .map(_.getValues.asScala.collect{ case s:bson.BsonString => s.getValue })
         .getOrElse(Seq.empty[String])
@@ -135,7 +135,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
     }
 
     private def serializeTags(tags: Set[String]): BsonArray =
-      BsonArray(tags.map(BsonString(_)))
+      BsonArray.fromIterable(tags.map(BsonString(_)))
 
     private def serializePayload(payload: Payload)(doc: BsonDocument): BsonDocument = {
       val withType = doc.append(TYPE, BsonString(payload.hint))
