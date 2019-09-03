@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.3.0
+* Merge pull request #247 from WellingR/feature/scala-2.13-support
+* Support scala 2.13
+* Libary upgrades in preparation for scala 2.13
+
 ### 2.2.10
 * Clean up some old deprecation and warning messages; reintroduce configured writeconcern
 * Reactive Mongo 0.18.4 Compatibility (#244)
