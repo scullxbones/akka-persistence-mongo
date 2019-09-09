@@ -112,7 +112,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
         for {
-          n <- s.countDocuments().toFuture() if n == 0
+          n <- s.estimatedDocumentCount().toFuture() if n == 0
           _ <- s.drop().toFuture()
         } yield ()
       ()
@@ -132,7 +132,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
         for {
-          n <- s.countDocuments().toFuture() if n == 0L
+          n <- s.estimatedDocumentCount().toFuture() if n == 0L
           _ <- s.drop().toFuture()
         } yield ()
       ()

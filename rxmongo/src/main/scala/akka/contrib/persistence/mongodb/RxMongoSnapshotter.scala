@@ -48,7 +48,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
-          n <- s.count()
+          n <- s.count(limit = 1)
             if n == 0
           _ <- s.drop(failIfNotFound = false)
           _ = driver.removeSnapsInCache(pid)
@@ -67,7 +67,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
         for {
-          n <- s.count()
+          n <- s.count(limit = 1)
             if n == 0
           _ <- s.drop(failIfNotFound = false)
           _ = driver.removeSnapsInCache(pid)

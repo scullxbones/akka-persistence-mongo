@@ -205,7 +205,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
         for {
-          n <- journal.count()
+          n <- journal.count(limit = 1)
           if n == 0
           _ <- journal.drop(failIfNotFound = false)
           _ = driver.removeJournalInCache(persistenceId)
