@@ -69,7 +69,7 @@ trait CasbahPersistenceSpec extends MongoPersistenceSpec[CasbahMongoDriver, Mong
   override def withSuffixedSnapshot(pid: String)(testCode: MongoCollection => Any) =
     withCollection(extendedDriver.getSnapsCollectionName(pid))(testCode)
 
-  override def withAutoSuffixedSnapshot(testCode: CasbahMongoDriver => Any) =
+  override def withAutoSuffixedSnapshot[T](testCode: CasbahMongoDriver => T) =
     withSnapshotCollections(testCode)
 
 }

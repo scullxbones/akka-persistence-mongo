@@ -56,8 +56,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val (range, head) = await(inserted)
         range should have size 1
 
-        underTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _) onFailure {
-          case t => t.printStackTrace()
+        underTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _).onComplete {
+          case scala.util.Failure(t) => t.printStackTrace()
+          case _ => ()
         }
 
         val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
@@ -90,8 +91,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val (range, head) = await(inserted)
         range should have size 1
 
-        underExtendedTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _) onFailure {
-          case t => t.printStackTrace()
+        underExtendedTest.journalRange("unit-test", 1, 3, Int.MaxValue).runFold(List.empty[Event])(_ :+ _).onComplete {
+          case scala.util.Failure(t) => t.printStackTrace()
+          case _ => ()
         }
 
         val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {

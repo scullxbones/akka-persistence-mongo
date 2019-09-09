@@ -94,8 +94,8 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   private val arrays = {
-    val msg1 = BsonArray(BsonInt32(1) :: BsonString("2") :: Nil)
-    val msg2 = BsonArray(BsonDocument("a" -> BsonInt32(2)) :: BsonDocument("b" -> BsonString("3")) :: Nil)
+    val msg1 = BsonArray.fromIterable(BsonInt32(1) :: BsonString("2") :: Nil)
+    val msg2 = BsonArray.fromIterable(BsonDocument("a" -> BsonInt32(2)) :: BsonDocument("b" -> BsonString("3")) :: Nil)
     msg1 :: msg2 :: Nil
   }
 
@@ -165,7 +165,7 @@ object PayloadSpec {
 
     private def snapshotHandling(ref: Option[ActorRef]): Receive = stateless orElse {
       case MakeSnapshot =>
-        saveSnapshot(BsonArray(state))
+        saveSnapshot(BsonArray.fromIterable(state))
         context.become(snapshotHandling(Option(sender())))
       case SaveSnapshotSuccess(m) =>
         deleteMessages(m.sequenceNr) // clean journal for later testing of snapshot restore

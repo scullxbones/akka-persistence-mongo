@@ -40,5 +40,5 @@ trait MongoPersistenceSpec[D,C] extends BaseUnitTest with ContainerMongo with Be
   
   def withSuffixedSnapshot(pid: String)(testCode: C => Any):Any
   
-  def withAutoSuffixedSnapshot(testCode: D => Any):Any
+  def withAutoSuffixedSnapshot[T](testCode: D => T): Unit
 }

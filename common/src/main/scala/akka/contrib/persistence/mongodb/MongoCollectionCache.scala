@@ -49,7 +49,7 @@ object MongoCollectionCache {
       trieMap.getOrElseUpdate(collectionName, collectionCreator.apply(collectionName))
 
     override def invalidate(collectionName: String): Unit =
-      trieMap.remove(collectionName)
+      trieMap.remove(collectionName).foreach(_ => ())
   }
 
   /**
@@ -77,7 +77,7 @@ object MongoCollectionCache {
     }
 
     override def invalidate(collectionName: String): Unit =
-      trieMap.remove(collectionName)
+      trieMap.remove(collectionName).foreach(_ => ())
   }
 
   /**

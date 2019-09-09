@@ -4,7 +4,7 @@ import akka.actor.Actor
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import com.typesafe.config.Config
-import nl.grons.metrics.scala.MetricName
+import nl.grons.metrics4.scala.MetricName
 
 import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
@@ -97,7 +97,7 @@ class MongoJournal(config: Config) extends AsyncWriteJournal {
    * @param replayCallback called to replay a single message. Can be called from any
    *                       thread.
    */
-  override def asyncReplayMessages(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Unit] = 
+  override def asyncReplayMessages(processorId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: PersistentRepr => Unit): Future[Unit] =
   	impl.replayJournal(processorId, fromSequenceNr, toSequenceNr, max)(replayCallback)
 
   /**
@@ -148,7 +148,7 @@ trait MongoPersistenceJournallingApi {
 
   private[mongodb] def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit]
 
-  private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
+  private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit)(implicit ec: ExecutionContext): Future[Unit]
   
   private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
 
@@ -188,11 +188,10 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
     super.deleteFrom(persistenceId, toSequenceNr)
   }
 
-  private[mongodb] abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext): Future[Unit]
+  private[mongodb] abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit)(implicit ec: ExecutionContext): Future[Unit]
     = timeIt (replayTimer) { super.replayJournal(pid, from, to, max)(replayCallback) }
   
   private[mongodb] abstract override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
     = timeIt (maxTimer) { super.maxSequenceNr(pid, from) }
   
 }
-  
