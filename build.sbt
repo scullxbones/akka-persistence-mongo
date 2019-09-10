@@ -123,7 +123,7 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
       "io.netty"          % "netty-buffer"        % "4.1.17.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.17.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.17.Final" % "compile",
-      "org.reactivestreams" % "reactive-streams"  % "1.0.2"
+      "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     )
   )
   .configs(Travis)
