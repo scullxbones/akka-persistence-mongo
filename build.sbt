@@ -32,7 +32,7 @@ def commonDeps(sv:String) = Seq(
   "com.typesafe.akka"         %% "akka-actor"               % akkaV(sv) % "compile",
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
-  "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
+  "org.slf4j"                 % "slf4j-api"                 % "1.7.28"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.12.1"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.12.1"     % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.12.1"     % "test",
