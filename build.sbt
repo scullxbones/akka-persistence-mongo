@@ -33,12 +33,12 @@ def commonDeps(sv:String) = Seq(
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.22"  % "test",
-  "org.apache.logging.log4j"  % "log4j-api"                 % "2.5"     % "test",
-  "org.apache.logging.log4j"  % "log4j-core"                % "2.5"     % "test",
-  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.5"     % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % "2.12.1"     % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % "2.12.1"     % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.12.1"     % "test",
   "org.scalatest"             %% "scalatest"                % "3.0.8"   % "test",
   "junit"                     % "junit"                     % "4.11"    % "test",
-  "org.mockito"               % "mockito-all"               % "1.9.5"   % "test",
+  "org.mockito"               % "mockito-all"               % "1.10.19"   % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV(sv) % "test",
   "com.typesafe.akka"         %% "akka-testkit"             % akkaV(sv) % "test",
   "com.typesafe.akka"         %% "akka-persistence-tck"     % akkaV(sv) % "test",
@@ -120,10 +120,10 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
     libraryDependencies ++= Seq(
       "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0"        % "compile",
       "org.mongodb.scala" %% "mongo-scala-bson"   % "2.7.0"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.39.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.39.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.39.Final" % "compile",
-      "org.reactivestreams" % "reactive-streams"  % "1.0.2"
+      "io.netty"          % "netty-buffer"        % "4.1.17.Final" % "compile",
+      "io.netty"          % "netty-transport"     % "4.1.17.Final" % "compile",
+      "io.netty"          % "netty-handler"       % "4.1.17.Final" % "compile",
+      "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     )
   )
   .configs(Travis)
