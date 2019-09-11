@@ -199,12 +199,8 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
 
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.wasAcknowledged())
-        for {
-          n <- journal.estimatedDocumentCount().toFuture()
-          if n == 0
-          _ <- journal.drop().toFuture().recover{ case _ => Completed() } // ignore errors
-          _ = driver.removeJournalInCache(persistenceId)
-        } yield ()
+        driver.removeEmptyJournal(journal)
+          .map(_ => driver.removeJournalInCache(persistenceId))
       ()
     }
   }
