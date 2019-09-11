@@ -65,7 +65,8 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
   import driver.ScalaSerializers.serialization
 
   override private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
-    snaps(pid).flatMap(_.find(
+    val snaps = driver.getSnaps(pid)
+    snaps.flatMap(_.find(
         and(
           equal(SnapshottingFieldNames.PROCESSOR_ID, pid),
           lte(SnapshottingFieldNames.SEQUENCE_NUMBER, maxSeq),
@@ -85,12 +86,14 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
   }
 
   override private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = {
+    val snaps = driver.snaps(snapshot.metadata.persistenceId)
     val query = and(
       equal(PROCESSOR_ID, snapshot.metadata.persistenceId),
       equal(SEQUENCE_NUMBER, snapshot.metadata.sequenceNr),
       equal(TIMESTAMP, snapshot.metadata.timestamp)
     )
-    snaps(snapshot.metadata.persistenceId)
+
+    snaps.map(_.withWriteConcern(driver.snapsWriteConcern))
       .flatMap(
         _.replaceOne(
           query,
@@ -101,24 +104,29 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
   }
 
   override private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
+    val snaps = driver.getSnaps(pid)
     val criteria =
       Option(ts).filter(_ > 0).foldLeft(
         and(equal(PROCESSOR_ID,pid), equal(SEQUENCE_NUMBER,seq))
       ){ case(bson,stamp) => and(bson, equal(TIMESTAMP, stamp)) }
 
     for {
-      s <- snaps(pid)
+      s0 <- snaps
+      s = s0.withWriteConcern(driver.snapsWriteConcern)
       wr <- s.deleteMany(criteria).toFuture()
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
         driver.removeEmptySnapshot(s)
+            .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }
 
   override private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+    val snaps = driver.getSnaps(pid)
     for {
-      s <- snaps(pid)
+      s0 <- snaps
+      s = s0.withWriteConcern(driver.snapsWriteConcern)
       wr <- s.deleteMany(
               and(
                 equal(PROCESSOR_ID, pid),
@@ -129,20 +137,9 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
         driver.removeEmptySnapshot(s)
+          .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }
 
-  private[this] def snaps(suffix: String)(implicit ec: ExecutionContext) = {
-    driver.getSnaps(suffix).flatMap{ c =>
-      c.createIndex(
-        compoundIndex(
-          ascending(SnapshottingFieldNames.PROCESSOR_ID),
-          descending(SnapshottingFieldNames.SEQUENCE_NUMBER),
-          descending(SnapshottingFieldNames.TIMESTAMP)
-        ),
-        new IndexOptions().background(true).unique(true).name(driver.snapsIndexName)
-      ).toFuture().map(_ => c.withWriteConcern(driver.snapsWriteConcern))
-    }
-  }
 }
