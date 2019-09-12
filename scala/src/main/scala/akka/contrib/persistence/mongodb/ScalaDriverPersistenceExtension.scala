@@ -130,7 +130,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       }
 
   private[this] def getLocalCount(collection: MongoCollection[D])(implicit ec: ExecutionContext): Future[Long] = {
-    db.runCommand(BsonDocument("count" -> s"${collection.namespace}", "readConcern" -> BsonDocument("level" -> "local")))
+    db.runCommand(BsonDocument("count" -> s"${collection.namespace.getCollectionName}", "readConcern" -> BsonDocument("level" -> "local")))
       .toFuture()
       .map(_.getOrElse("n", 0L).asInt32().longValue())
   }
@@ -154,10 +154,8 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
         } else {
           getLocalCount(collection)
         }
-      // just to be sure...
-      if firstCount == 0L
-        // second count, always accurate and should be fast as we are pretty sure the result is zero
-        secondCount <-
+      // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
+      secondCount <- if (firstCount == 0L) {
           for {
             b36 <- isMongoVersionAtLeast(3,6)
             if b36 // lets optimize aggregate method, using appropriate index (that we have to grab from indexes list)
@@ -171,6 +169,9 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
                 collection.countDocuments().toFuture()
               }
           } yield count
+        } else {
+          Future.successful(firstCount)
+        }
       if secondCount == 0L
         _ <- collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
     } yield ()
