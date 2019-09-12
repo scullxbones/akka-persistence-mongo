@@ -8,7 +8,7 @@ import akka.stream.ActorMaterializer
 import com.mongodb.ConnectionString
 import com.mongodb.client.model.{CreateCollectionOptions, IndexOptions}
 import com.typesafe.config.Config
-import org.mongodb.scala.bson.BsonDocument
+import org.mongodb.scala.bson.{BsonDocument, BsonString}
 import org.mongodb.scala.model.CountOptions
 import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.{MongoClientSettings, _}
@@ -114,7 +114,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     case Some(v) => Future.successful(v)
     case None =>
       db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
-        .map(_.get("version").getOrElse("").asInstanceOf[String])
+        .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
         .map { v =>
           mongoVersion = Some(v)
           v
@@ -130,7 +130,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       }
 
   private[this] def getLocalCount(collection: MongoCollection[D])(implicit ec: ExecutionContext): Future[Long] = {
-    db.runCommand(BsonDocument("count" -> s"${collection.namespace}", "readConcern" -> "local"))
+    db.runCommand(BsonDocument("count" -> s"${collection.namespace}", "readConcern" -> BsonDocument("level" -> "local")))
       .toFuture()
       .map(_.getOrElse("n", 0L).asInt32().longValue())
   }
