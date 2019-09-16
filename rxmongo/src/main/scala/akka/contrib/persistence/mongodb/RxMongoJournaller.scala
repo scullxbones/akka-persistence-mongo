@@ -15,7 +15,6 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
-import reactivemongo.api.ReadConcern
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.{LastError, WriteResult}
 import reactivemongo.bson.{BSONDocument, _}
@@ -204,12 +203,8 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
-        for {
-          n <- journal.count(None, None, 0, None, ReadConcern.Local)
-          if n == 0
-          _ <- journal.drop(failIfNotFound = false)
-          _ = driver.removeJournalInCache(persistenceId)
-        } yield ()
+        driver.removeEmptyJournal(journal)
+        .map(_ => driver.removeJournalInCache(persistenceId))
       ()
     }
   }

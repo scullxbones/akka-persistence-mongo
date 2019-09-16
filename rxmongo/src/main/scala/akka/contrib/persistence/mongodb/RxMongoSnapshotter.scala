@@ -7,7 +7,6 @@
 package akka.contrib.persistence.mongodb
 
 import akka.persistence.SelectedSnapshot
-import reactivemongo.api.ReadConcern
 import reactivemongo.api.indexes._
 import reactivemongo.bson._
 
@@ -56,12 +55,8 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       wr <- s.delete().one(BSONDocument(criteria: _*))
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
-        for {
-          n <- s.count(None, None, 0, None, ReadConcern.Local)
-            if n == 0
-          _ <- s.drop(failIfNotFound = false)
-          _ = driver.removeSnapsInCache(pid)
-        } yield ()
+        driver.removeEmptySnapshot(s)
+          .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }
@@ -77,12 +72,8 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
               ))
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
-        for {
-          n <- s.count(None, None, 0, None, ReadConcern.Local)
-            if n == 0
-          _ <- s.drop(failIfNotFound = false)
-          _ = driver.removeSnapsInCache(pid)
-        } yield ()
+        driver.removeEmptySnapshot(s)
+          .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }

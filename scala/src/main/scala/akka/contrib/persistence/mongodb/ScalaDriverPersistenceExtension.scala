@@ -110,11 +110,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     removeEmptyCollection(snp, snapsIndexName)
 
   private[this] var mongoVersion: Option[String] = None
-  private[this] def getMongoVersion: Future[String] = mongoVersion match {
+  private[this] def getMongoVersion(implicit ec: ExecutionContext): Future[String] = mongoVersion match {
     case Some(v) => Future.successful(v)
     case None =>
       db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
-        .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
+        .map(_.getOrElse[BsonString]("version", BsonString("")).getValue)
         .map { v =>
           mongoVersion = Some(v)
           v
