@@ -114,7 +114,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     case Some(v) => Future.successful(v)
     case None =>
       db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
-        .map(_.getOrElse[BsonString]("version", BsonString("")).getValue)
+        .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
         .map { v =>
           mongoVersion = Some(v)
           v
