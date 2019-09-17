@@ -8,7 +8,8 @@ import akka.stream.ActorMaterializer
 import com.mongodb.ConnectionString
 import com.mongodb.client.model.{CreateCollectionOptions, IndexOptions}
 import com.typesafe.config.Config
-import org.mongodb.scala.bson.BsonDocument
+import org.mongodb.scala.bson.{BsonDocument, BsonString}
+import org.mongodb.scala.model.CountOptions
 import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.{MongoClientSettings, _}
 
@@ -101,6 +102,79 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
 
   private[mongodb] def snapshotCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
+
+  private[mongodb] def removeEmptyJournal(jnl: MongoCollection[D])(implicit ec: ExecutionContext): Future[Unit] =
+    removeEmptyCollection(jnl, journalIndexName)
+
+  private[mongodb] def removeEmptySnapshot(snp: MongoCollection[D])(implicit ec: ExecutionContext): Future[Unit] =
+    removeEmptyCollection(snp, snapsIndexName)
+
+  private[this] var mongoVersion: Option[String] = None
+  private[this] def getMongoVersion(implicit ec: ExecutionContext): Future[String] = mongoVersion match {
+    case Some(v) => Future.successful(v)
+    case None =>
+      db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
+        .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
+        .map { v =>
+          mongoVersion = Some(v)
+          v
+        }
+  }
+
+  private[this] def isMongoVersionAtLeast(inputNbs: Int*)(implicit ec: ExecutionContext): Future[Boolean] =
+    getMongoVersion.map {
+        case str if str.isEmpty => false
+        case str =>
+          val versionNbs = str.split('.').map(_.toInt)
+          inputNbs.zip(versionNbs).forall { case (i,v) => v >= i }
+      }
+
+  private[this] def getLocalCount(collection: MongoCollection[D])(implicit ec: ExecutionContext): Future[Long] = {
+    db.runCommand(BsonDocument("count" -> s"${collection.namespace.getCollectionName}", "readConcern" -> BsonDocument("level" -> "local")))
+      .toFuture()
+      .map(_.getOrElse("n", 0L).asInt32().longValue())
+  }
+
+  private[this] def getIndexAsBson(collection: MongoCollection[D], indexName: String)(implicit ec: ExecutionContext): Future[Option[BsonDocument]] =
+    for {
+      indexList <- collection.listIndexes[BsonDocument]().toFuture()
+      indexDoc = indexList.find(_.get("name").asString().getValue.equals(indexName))
+      indexKey = indexDoc match {
+          case Some(doc) => Some(doc.get("key").asDocument())
+          case None => None
+        }
+    } yield indexKey
+
+  private[this] def removeEmptyCollection(collection: MongoCollection[D], indexName: String)(implicit ec: ExecutionContext): Future[Unit] =
+    for {
+      b403 <- isMongoVersionAtLeast(4,0,3)
+      // first count, may be inaccurate in cluster environment
+      firstCount <- if (b403) {
+          collection.estimatedDocumentCount().toFuture()
+        } else {
+          getLocalCount(collection)
+        }
+      // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
+      secondCount <- if (firstCount == 0L) {
+          for {
+            b36 <- isMongoVersionAtLeast(3,6)
+            if b36 // lets optimize aggregate method, using appropriate index (that we have to grab from indexes list)
+              indexKey <- getIndexAsBson(collection, indexName)
+            count <- if (b36) {
+                indexKey match {
+                  case Some(index) => collection.countDocuments(BsonDocument(), CountOptions().hint(index)).toFuture()
+                  case None => collection.countDocuments().toFuture()
+                }
+              } else {
+                collection.countDocuments().toFuture()
+              }
+          } yield count
+        } else {
+          Future.successful(firstCount)
+        }
+      if secondCount == 0L
+        _ <- collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
+    } yield ()
 
   override private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C = { collection =>
     for {

@@ -9,14 +9,14 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
-import reactivemongo.api.{DefaultDB, FailoverStrategy, MongoConnection, MongoDriver}
+import reactivemongo.api._
 import reactivemongo.api.collections.bson.BSONCollection
-import reactivemongo.api.commands.{CommandError, WriteConcern}
+import reactivemongo.api.commands.{Command, CommandError, WriteConcern}
 import reactivemongo.api.indexes.{Index, IndexType}
-import reactivemongo.bson._
+import reactivemongo.bson.{BSONDocument, _}
 
-import scala.concurrent._
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
@@ -141,6 +141,58 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
   
   private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
+
+  private[mongodb] def removeEmptyJournal(jnl: BSONCollection)(implicit ec: ExecutionContext): Future[Unit] =
+    removeEmptyCollection(jnl, journalIndexName)
+
+  private[mongodb] def removeEmptySnapshot(snp: BSONCollection)(implicit ec: ExecutionContext): Future[Unit] =
+    removeEmptyCollection(snp, snapsIndexName)
+
+  private[this] var mongoVersion: Option[String] = None
+  private[this] def getMongoVersion(implicit ec: ExecutionContext): Future[String] = mongoVersion match {
+    case Some(v) => Future.successful(v)
+    case None =>
+      db.flatMap { database =>
+        val runner = Command.run(BSONSerializationPack, FailoverStrategy())
+        runner.apply(database, runner.rawCommand(BSONDocument("buildInfo" -> 1)))
+          .one[BSONDocument](ReadPreference.Primary)
+          .map(_.getAs[BSONString]("version").getOrElse(BSONString("")).value)
+          .map { v =>
+            mongoVersion = Some(v)
+            v
+          }
+      }
+  }
+
+  private[this] def isMongoVersionAtLeast(inputNbs: Int*)(implicit ec: ExecutionContext): Future[Boolean] =
+    getMongoVersion.map {
+      case str if str.isEmpty => false
+      case str =>
+        val versionNbs = str.split('.').map(_.toInt)
+        inputNbs.zip(versionNbs).forall { case (i,v) => v >= i }
+    }
+
+  private[this] def removeEmptyCollection(collection: BSONCollection, indexName: String)(implicit ec: ExecutionContext): Future[Unit] =
+    for {
+      // first count, may be inaccurate in cluster environment
+      firstCount <- collection.count(None, None, 0, None, ReadConcern.Local)
+      // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
+      secondCount <- if (firstCount == 0L) {
+        for {
+          b36 <- isMongoVersionAtLeast(3,6)
+          if b36 // lets optimize aggregate method, using appropriate index
+          count <- if (b36) {
+            collection.count(None, None, 0, Some(collection.hint(indexName)), ReadConcern.Majority)
+          } else {
+            collection.count(None, None, 0, None, ReadConcern.Majority)
+          }
+        } yield count
+      } else {
+        Future.successful(firstCount)
+      }
+      if secondCount == 0L
+      _ <- collection.drop(failIfNotFound = false)
+    } yield ()
   
 }
 

@@ -116,11 +116,8 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
       wr <- s.deleteMany(criteria).toFuture()
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
-        for {
-          n <- s.countDocuments().toFuture() if n == 0
-          _ <- s.drop().toFuture()
-          _ = driver.removeSnapsInCache(pid)
-        } yield ()
+        driver.removeEmptySnapshot(s)
+            .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }
@@ -139,11 +136,8 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
             ).toFuture()
     } yield {
       if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.wasAcknowledged())
-        for {
-          n <- s.countDocuments().toFuture() if n == 0L
-          _ <- s.drop().toFuture()
-          _ = driver.removeSnapsInCache(pid)
-        } yield ()
+        driver.removeEmptySnapshot(s)
+          .map(_ => driver.removeSnapsInCache(pid))
       ()
     }
   }
