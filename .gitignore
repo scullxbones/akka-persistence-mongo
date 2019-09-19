@@ -49,3 +49,7 @@ out/
 
 # Mac
 .DS_Store
+
+# vscode metals
+.metals/
+.bloop/

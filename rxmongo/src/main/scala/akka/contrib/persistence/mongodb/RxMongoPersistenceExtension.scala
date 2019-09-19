@@ -178,18 +178,15 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       firstCount <- collection.count(None, None, 0, None, ReadConcern.Local)
       // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
       secondCount <- if (firstCount == 0L) {
-        for {
-          b36 <- isMongoVersionAtLeast(3,6)
-          if b36 // lets optimize aggregate method, using appropriate index
-          count <- if (b36) {
-            collection.count(None, None, 0, Some(collection.hint(indexName)), ReadConcern.Majority)
-          } else {
-            collection.count(None, None, 0, None, ReadConcern.Majority)
-          }
-        } yield count
-      } else {
-        Future.successful(firstCount)
-      }
+          for {
+            b36 <- isMongoVersionAtLeast(3,6)
+            count <- if (b36) {
+                        collection.count(None, None, 0, Some(collection.hint(indexName)), ReadConcern.Majority)
+                      } else {
+                        collection.count(None, None, 0, None, ReadConcern.Majority)
+                      }
+          } yield count
+        } else Future.successful(firstCount)
       if secondCount == 0L
       _ <- collection.drop(failIfNotFound = false)
     } yield ()

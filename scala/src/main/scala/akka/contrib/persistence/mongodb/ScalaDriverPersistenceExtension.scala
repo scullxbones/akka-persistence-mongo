@@ -158,22 +158,15 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       secondCount <- if (firstCount == 0L) {
           for {
             b36 <- isMongoVersionAtLeast(3,6)
-            if b36 // lets optimize aggregate method, using appropriate index (that we have to grab from indexes list)
-              indexKey <- getIndexAsBson(collection, indexName)
+            indexKey <- getIndexAsBson(collection, indexName)
             count <- if (b36) {
-                indexKey match {
-                  case Some(index) => collection.countDocuments(BsonDocument(), CountOptions().hint(index)).toFuture()
-                  case None => collection.countDocuments().toFuture()
-                }
-              } else {
-                collection.countDocuments().toFuture()
-              }
+                indexKey.fold(collection.countDocuments())(index =>
+                  collection.countDocuments(BsonDocument(), CountOptions().hint(index))
+                ).toFuture()
+              } else collection.countDocuments().toFuture()
           } yield count
-        } else {
-          Future.successful(firstCount)
-        }
-      if secondCount == 0L
-        _ <- collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
+        } else Future.successful(firstCount)
+        _ = if (secondCount == 0L) collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
     } yield ()
 
   override private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C = { collection =>
