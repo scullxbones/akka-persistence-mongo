@@ -1,5 +1,31 @@
 ## Changelog for 2.x major version
 
+### 2.3.1
+* Remove unintended for-comp filter sugar
+* Improve collections count (#260)
+* Merge pull request #264 from scala-steward/update/netty-buffer-4.1.41.Final
+* Update netty-buffer, netty-handler, ... to 4.1.41.Final
+* Merge pull request #258 from scala-steward/update/slf4j-api-1.7.28
+* Merge pull request #252 from scala-steward/update/junit-4.12
+* Merge pull request #251 from scala-steward/update/netty-buffer-4.1.39.Final
+* Merge pull request #261 from gbrd/pr-use-snaps-cache-in-scala-driver
+* Update slf4j-api to 1.7.28
+* Merge branch 'master' into update/slf4j-api-1.7.28
+* Update junit to 4.12
+* Merge branch 'master' into update/junit-4.12
+* Update netty-buffer, netty-handler, ... to 4.1.39.Final
+* Merge branch 'master' into update/netty-buffer-4.1.39.Final
+* Merge pull request #256 from scala-steward/update/reactive-streams-1.0.3
+* Merge pull request #254 from scala-steward/update/mockito-all-1.10.19
+* Merge pull request #253 from scala-steward/update/log4j-core-2.12.1
+* Use snapshot collection cache in scala driver too.
+* Update slf4j-api to 1.7.28
+* Update reactive-streams to 1.0.3
+* Update mockito-all to 1.10.19
+* Update log4j-api, log4j-core, ... to 2.12.1
+* Update junit to 4.12
+* Update netty-buffer, netty-handler, ... to 4.1.39.Final
+
 ### 2.3.0
 * Merge pull request #247 from WellingR/feature/scala-2.13-support
 * Support scala 2.13
