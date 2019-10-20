@@ -21,7 +21,7 @@ def commonDeps(sv:String) = Seq(
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
   (sv match {
-    case "2.11"          => "nl.grons" %% "metrics4-akka_a24" % "4.0.8"
+    case "2.11"          => "nl.grons" %% "metrics4-akka_a24" % "4.1.1"
     case "2.12" | "2.13" => "nl.grons" %% "metrics4-akka_a25" % "4.0.8"
   })
     .exclude("com.typesafe.akka", "akka-actor_2.11")
