@@ -15,7 +15,6 @@ import akka.testkit._
 import com.mongodb.casbah.Imports._
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 
 import scala.collection.mutable
 import scala.concurrent.Await

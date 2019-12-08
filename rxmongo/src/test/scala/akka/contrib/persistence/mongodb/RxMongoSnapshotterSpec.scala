@@ -12,7 +12,6 @@ import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit._
 import org.junit.runner.RunWith
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration, ScalaFutures}
-import org.scalatest.junit.JUnitRunner
 import reactivemongo.api.Cursor
 import reactivemongo.bson.BSONDocument
 

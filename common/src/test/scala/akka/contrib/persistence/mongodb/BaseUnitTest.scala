@@ -3,14 +3,15 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
-import org.scalatest.{FlatSpecLike, Matchers}
 import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.Await
 import scala.util.Try
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-trait BaseUnitTest extends FlatSpecLike with MockitoSugar with Matchers with PatienceConfiguration {
+trait BaseUnitTest extends AnyFlatSpecLike with MockitoSugar with Matchers with PatienceConfiguration {
 
   override lazy val spanScaleFactor: Double = ConfigFactory.load().getDouble("akka.test.timefactor")
 

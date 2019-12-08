@@ -12,7 +12,6 @@ import akka.serialization.SerializationExtension
 import akka.testkit.TestKit
 import com.mongodb.casbah.Imports._
 import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class CasbahPersistenceSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with CasbahPersistenceSpec {

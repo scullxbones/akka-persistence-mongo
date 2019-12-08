@@ -12,7 +12,6 @@ import org.junit.runner.RunWith
 import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonInt32, BsonString, BsonValue}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.junit.JUnitRunner
 
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
