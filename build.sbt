@@ -118,8 +118,8 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.7.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.8.0"        % "compile",
       "io.netty"          % "netty-buffer"        % "4.1.41.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.41.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.41.Final" % "compile",
@@ -148,7 +148,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0" % "compile"
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0" % "compile"
     )
   )
   .configs(Travis)
