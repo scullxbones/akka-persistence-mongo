@@ -32,7 +32,7 @@ def commonDeps(sv:String) = Seq(
   "com.typesafe.akka"         %% "akka-actor"               % akkaV(sv) % "compile",
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
-  "org.slf4j"                 % "slf4j-api"                 % "1.7.28"  % "test",
+  "org.slf4j"                 % "slf4j-api"                 % "1.7.30"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.0"     % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.0"     % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.0"     % "test",
@@ -57,7 +57,7 @@ val commonSettings = Seq(
   libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
   dependencyOverrides ++= Seq(
     "com.typesafe" % "config" % "1.3.2",
-    "org.slf4j" % "slf4j-api" % "1.7.28",
+    "org.slf4j" % "slf4j-api" % "1.7.30",
     "com.typesafe.akka" %% "akka-stream" % akkaV(scalaBinaryVersion.value),
     "org.mongodb" % "mongo-java-driver" % MongoJavaDriverVersion
   ),
