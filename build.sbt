@@ -14,7 +14,7 @@ def akkaV(sv: String): String = sv match {
   case _ => LatestAkkaV
 }
 
-val MongoJavaDriverVersion = "3.11.2"
+val MongoJavaDriverVersion = "3.12.0"
 
 def commonDeps(sv:String) = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV(sv))
