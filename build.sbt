@@ -33,9 +33,9 @@ def commonDeps(sv:String) = Seq(
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.28"  % "test",
-  "org.apache.logging.log4j"  % "log4j-api"                 % "2.12.1"     % "test",
-  "org.apache.logging.log4j"  % "log4j-core"                % "2.12.1"     % "test",
-  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.12.1"     % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.0"     % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % "2.13.0"     % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.0"     % "test",
   "org.scalatest"             %% "scalatest"                % "3.0.8"   % "test",
   "junit"                     % "junit"                     % "4.12"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19"   % "test",
@@ -120,9 +120,9 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
     libraryDependencies ++= Seq(
       "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0"        % "compile",
       "org.mongodb.scala" %% "mongo-scala-bson"   % "2.8.0"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.41.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.41.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.41.Final" % "compile",
+      "io.netty"          % "netty-buffer"        % "4.1.44.Final" % "compile",
+      "io.netty"          % "netty-transport"     % "4.1.44.Final" % "compile",
+      "io.netty"          % "netty-handler"       % "4.1.44.Final" % "compile",
       "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     )
   )
