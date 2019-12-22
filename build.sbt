@@ -1,8 +1,8 @@
 val releaseV = "2.3.1"
 
 val scala211V = "2.11.12"
-val scala212V = "2.12.9"
-val scala213V = "2.13.0"
+val scala212V = "2.12.10"
+val scala213V = "2.13.1"
 
 val scalaV = scala211V
 
@@ -85,8 +85,8 @@ val commonSettings = Seq(
     "-Xlint"
   ),
   resolvers ++= Seq(
-    "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
-    "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
+    "Typesafe Releases" at "https://repo.typesafe.com/typesafe/releases/",
+    "Typesafe Snapshots" at "https://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
   parallelExecution in Test := true,

@@ -8,11 +8,11 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.SerializationExtension
+import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit._
 import reactivemongo.api.Cursor
-import reactivemongo.bson._
+import reactivemongo.api.bson._
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.concurrent._
@@ -24,7 +24,7 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   override def embedDB = "persistence-journaller-rxmongo"
 
-  implicit val serialization = SerializationExtension(system)
+  implicit val serialization: Serialization = SerializationExtension(system)
   implicit val as: ActorSystem = system
   implicit val am: Materializer = ActorMaterializer()
 
@@ -50,8 +50,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
       withJournal { journal =>
         val inserted = for {
           _     <- underTest.batchAppend(ISeq(AtomicWrite(records)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head  <- journal.find(BSONDocument()).cursor().headOption
+          range <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
@@ -61,11 +61,11 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
           case _ => ()
         }
 
-        val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+        val recone = head.get.getAsOpt[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         }).head
-        recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
-        recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
+        recone.getAsOpt[String](PROCESSOR_ID) shouldBe Some("unit-test")
+        recone.getAsOpt[Long](SEQUENCE_NUMBER) shouldBe Some(1)
 
       }
     }
@@ -85,8 +85,8 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
           // should 'retrieve' (and not 'build') the suffixed journal
           journal <- drv.getJournal("unit-test")
 
-          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head    <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
@@ -96,11 +96,11 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
           case _ => ()
         }
 
-        val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+        val recone = head.get.getAsOpt[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         }).head
-        recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
-        recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(1)
+        recone.getAsOpt[String](PROCESSOR_ID) shouldBe Some("unit-test")
+        recone.getAsOpt[Long](SEQUENCE_NUMBER) shouldBe Some(1)
 
       }
     }
@@ -112,19 +112,19 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
       withJournal { journal =>
         val inserted = for {
           _     <- underTest.batchAppend(ISeq(AtomicWrite(documents)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head  <- journal.find(BSONDocument()).cursor().headOption
+          range <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+        val recone = head.get.getAsOpt[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         }).head
-        recone.getAs[String](PROCESSOR_ID) shouldBe Some("unit-test")
-        recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
-        recone.getAs[String](TYPE) shouldBe Some("bson")
-        recone.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
+        recone.getAsOpt[String](PROCESSOR_ID) shouldBe Some("unit-test")
+        recone.getAsOpt[Long](SEQUENCE_NUMBER) shouldBe Some(10)
+        recone.getAsOpt[String](TYPE) shouldBe Some("bson")
+        recone.getAsOpt[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
         ()
       }
     }
@@ -142,19 +142,19 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           _     <- underTest.batchAppend(ISeq(AtomicWrite(withSerializedObjects)))
-          range <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head  <- journal.find(BSONDocument()).cursor().headOption
+          range <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head  <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
         val allDocuments = for {
             h   <- head.toList
-            ev  <- h.getAs[BSONArray](EVENTS).toList
+            ev  <- h.getAsOpt[BSONArray](EVENTS).toList
             doc <-  ev.values.collect { case e: BSONDocument => e }
         } yield doc
 
-        allDocuments.map(_.getAs[Int](SER_ID).get) should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
+        allDocuments.map(_.getAsOpt[Int](SER_ID).get) should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
         ()
       }
     }
@@ -174,19 +174,19 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           _       <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
           journal <- drv.getJournal(persistenceId)
-          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head    <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        val recone = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+        val recone = head.get.getAsOpt[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         }).head
-        recone.getAs[String](PROCESSOR_ID) shouldBe Some(persistenceId)
-        recone.getAs[Long](SEQUENCE_NUMBER) shouldBe Some(10)
-        recone.getAs[String](TYPE) shouldBe Some("bson")
-        recone.getAs[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
+        recone.getAsOpt[String](PROCESSOR_ID) shouldBe Some(persistenceId)
+        recone.getAsOpt[Long](SEQUENCE_NUMBER) shouldBe Some(10)
+        recone.getAsOpt[String](TYPE) shouldBe Some("bson")
+        recone.getAsOpt[BSONDocument](PayloadKey) shouldBe Some(BSONDocument("foo" -> "bar", "baz" -> 1))
         ()
       }
     }
@@ -207,17 +207,17 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
         val inserted: Future[(List[BSONDocument],Option[BSONDocument])] = for {
           _       <- underExtendedTest.batchAppend(ISeq(AtomicWrite(events)))
           journal <- drv.getJournal(persistenceId)
-          range   <- journal.find(BSONDocument()).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
-          head    <- journal.find(BSONDocument()).cursor().headOption
+          range   <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor[BSONDocument]().collect[List](maxDocs = 2, err = Cursor.FailOnError[List[BSONDocument]]())
+          head    <- journal.find(BSONDocument.empty, Option.empty[BSONDocument]).cursor().headOption
         } yield (range, head)
         val (range, head) = await(inserted)
         range should have size 1
 
-        val allDocuments = head.get.getAs[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
+        val allDocuments = head.get.getAsOpt[BSONArray](EVENTS).toStream.flatMap(_.values.collect {
           case e: BSONDocument => e
         })
 
-        allDocuments.map(_.getAs[Int](SER_ID).get).toList should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
+        allDocuments.map(_.getAsOpt[Int](SER_ID).get).toList should contain theSameElementsInOrderAs records.map(_=> serializer.identifier)
         ()
       }
     }

@@ -163,13 +163,13 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     * Convenient methods to retrieve EXISTING journal collection from persistenceId.
     * CAUTION: this method does NOT create the journal and its indexes.
     */
-  private[mongodb] def getJournal(persistenceId: String)(implicit ec: ExecutionContext): C = collection(getJournalCollectionName(persistenceId))
+  private[mongodb] def getJournal(persistenceId: String): C = collection(getJournalCollectionName(persistenceId))
 
   /**
     * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
     * CAUTION: this method does NOT create the snapshot and its indexes.
     */
-  private[mongodb] def getSnaps(persistenceId: String)(implicit ec: ExecutionContext): C = collection(getSnapsCollectionName(persistenceId))
+  private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
@@ -179,7 +179,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
   private[this] val journalCache = MongoCollectionCache[C](settings.CollectionCache, "journal", actorSystem)
 
-  private[mongodb] def journal(implicit ec: ExecutionContext): C = journal("")
+  private[mongodb] def journal: C = journal("")
 
   private[mongodb] def journal(persistenceId: String)(implicit ec: ExecutionContext): C = {
     val collectionName = getJournalCollectionName(persistenceId)
@@ -201,7 +201,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
   private[this] val snapsCache = MongoCollectionCache[C](settings.CollectionCache, "snaps", actorSystem)
 
-  private[mongodb] def snaps(implicit ec: ExecutionContext): C = snaps("")
+  private[mongodb] def snaps: C = snaps("")
 
   private[mongodb] def snaps(persistenceId: String)(implicit ec: ExecutionContext): C = {
     val collectionName = getSnapsCollectionName(persistenceId)
@@ -222,7 +222,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
   private[this] val realtimeCache = MongoCollectionCache[C](settings.CollectionCache, "realtime", actorSystem)
 
-  private[mongodb] def realtime(implicit ec: ExecutionContext): C =
+  private[mongodb] def realtime: C =
     realtimeCache.getOrElseCreate(realtimeCollectionName, collectionName => cappedCollection(collectionName))
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")

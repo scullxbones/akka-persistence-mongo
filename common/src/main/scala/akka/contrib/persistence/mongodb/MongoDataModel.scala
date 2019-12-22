@@ -12,7 +12,6 @@ import akka.serialization.{Serialization, SerializerWithStringManifest}
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.language.existentials
-import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 sealed trait Payload {
@@ -45,7 +44,7 @@ case class Serialized[C <: AnyRef](bytes: Array[Byte],
                                    className: String,
                                    tags: Set[String],
                                    serializerId: Option[Int],
-                                   serializedManifest: Option[String])(implicit ser: Serialization, loadClass: LoadClass, ct: ClassTag[C]) extends Payload {
+                                   serializedManifest: Option[String])(implicit ser: Serialization, loadClass: LoadClass) extends Payload {
   type Content = C
 
   val hint = "ser"
@@ -150,7 +149,7 @@ object Payload {
 
   import language.implicitConversions
 
-  implicit def bson2payload[D](document: D)(implicit ev: Manifest[D], dt: DocumentType[D]): Bson[D] = Bson(document, Set.empty[String])
+  implicit def bson2payload[D](document: D)(implicit dt: DocumentType[D]): Bson[D] = Bson(document, Set.empty[String])
 
   implicit def str2payload(string: String): StringPayload = StringPayload(string, Set.empty[String])
 

@@ -8,7 +8,8 @@ package akka.contrib.persistence.mongodb
 
 import akka.persistence.SelectedSnapshot
 import reactivemongo.api.indexes._
-import reactivemongo.bson._
+import reactivemongo.api.bson._
+import reactivemongo.api.bson.collection.BSONSerializationPack
 
 import scala.concurrent._
 
@@ -47,8 +48,8 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
   private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
     val criteria =
-      Seq[Producer[BSONElement]](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
-        Option[Producer[BSONElement]](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
+      Seq[ElementProducer](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
+        Option[ElementProducer](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
 
     for {
       s <- snaps(pid)
@@ -78,15 +79,21 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     }
   }
 
-  private[this] def snaps(suffix: String)(implicit ec: ExecutionContext) = {
+  private[this] def snaps(suffix: String)(implicit ec: ExecutionContext): driver.C = {
     val snaps = driver.getSnaps(suffix)
-    snaps.flatMap(_.indexesManager.ensure(Index(
+    snaps.flatMap(_.indexesManager.ensure(Index(BSONSerializationPack)(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),
         (SEQUENCE_NUMBER, IndexType.Descending),
         (TIMESTAMP, IndexType.Descending)),
       background = true,
       unique = true,
-      name = Some(driver.snapsIndexName))))
+      name = Some(driver.snapsIndexName),
+      dropDups = true,
+      sparse = false,
+      version = None,
+      partialFilter = None,
+      options = BSONDocument.empty
+    )))
     snaps
   }
 

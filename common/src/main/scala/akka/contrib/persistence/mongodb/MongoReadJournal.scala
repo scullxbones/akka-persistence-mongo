@@ -121,7 +121,6 @@ class ScalaDslMongoReadJournal(impl: MongoPersistenceReadJournallingApi)(implici
   override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
     require(tag != null, "Tag must not be null")
     require(impl.checkOffsetIsSupported(offset), s"Offset $offset is not supported by read journal")
-    implicit val ordering: Ordering[Offset] = implicitly[Ordering[Offset]]
     val pastSource =
       impl.currentEventsByTag(tag, offset)
         .toEventEnvelopes

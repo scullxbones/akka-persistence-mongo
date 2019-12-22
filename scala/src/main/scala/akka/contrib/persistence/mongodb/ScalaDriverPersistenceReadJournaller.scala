@@ -7,7 +7,6 @@ import akka.stream.scaladsl._
 import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import akka.stream.{Attributes, Materializer, Outlet, SourceShape}
 import com.mongodb.CursorType
-import com.mongodb.async.client.Subscription
 import org.bson.types.ObjectId
 import org.mongodb.scala._
 import org.mongodb.scala.bson._
@@ -17,15 +16,13 @@ import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.model.Sorts._
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Try
 
 object CurrentAllEvents {
-  def source(driver: ScalaMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
+  def source(driver: ScalaMongoDriver): Source[Event, NotUsed] = {
     import driver.ScalaSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map(
@@ -46,9 +43,7 @@ object CurrentAllEvents {
 }
 
 object CurrentPersistenceIds {
-  def source(driver: ScalaMongoDriver)(implicit m: Materializer): Source[String, NotUsed] = {
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
-
+  def source(driver: ScalaMongoDriver): Source[String, NotUsed] = {
     Source.fromFuture(driver.journalCollectionsAsFuture)
       .mapConcat(identity)
       .flatMapConcat(_.aggregate(project(include(PROCESSOR_ID)) :: group(s"$$$PROCESSOR_ID") :: Nil).asAkka)
@@ -65,9 +60,8 @@ object CurrentEventsByPersistenceId {
       lte(FROM, toSeq)
     )
 
-  def source(driver: ScalaMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
+  def source(driver: ScalaMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long): Source[Event, NotUsed] = {
     import driver.ScalaSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val query = queryFor(persistenceId, fromSeq, toSeq)
 
@@ -91,9 +85,8 @@ object CurrentEventsByPersistenceId {
 }
 
 object CurrentEventsByTag {
-  def source(driver: ScalaMongoDriver, tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
+  def source(driver: ScalaMongoDriver, tag: String, fromOffset: Offset): Source[(Event, Offset), NotUsed] = {
     import driver.ScalaSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val offset = fromOffset match {
       case NoOffset => None
@@ -216,7 +209,7 @@ class ScalaDriverRealtimeGraphStage(driver: ScalaMongoDriver, bufsz: Int = 16)(f
 
 }
 
-class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materializer) extends JournalStream[Source[(Event, Offset), NotUsed]] {
+class ScalaDriverJournalStream(driver: ScalaMongoDriver) extends JournalStream[Source[(Event, Offset), NotUsed]] {
   import driver.ScalaSerializers._
 
   implicit val ec: ExecutionContext = driver.querySideDispatcher
@@ -258,7 +251,7 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver)(implicit m: Materialize
 
 class ScalaDriverPersistenceReadJournaller(driver: ScalaMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
   val journalStream: ScalaDriverJournalStream = {
-    val stream = new ScalaDriverJournalStream(driver)(m)
+    val stream = new ScalaDriverJournalStream(driver)
     driver.actorSystem.registerOnTermination( stream.stopAllStreams() )
     stream
   }

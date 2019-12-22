@@ -44,8 +44,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   override private[mongodb] def ensureCollection(name: String)(implicit ec: ExecutionContext): C =
     ensureCollection(name, db.createCollection)
 
-  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Completed])
-                                    (implicit ec: ExecutionContext): C =
+  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Completed]): C =
     for {
       _ <- collectionCreator(name).toFuture().recover { case MongoErrors.NamespaceExists() => Completed }
       mongoCollection <- collection(name)
@@ -80,11 +79,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       .toFuture()
       .map(stats => stats.get("capped").exists(_.asBoolean.getValue))
 
-  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
+  private[mongodb] def getCollectionsAsFuture(collectionName: String): Future[List[MongoCollection[D]]] = {
     getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
   }
 
-  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[MongoCollection[D]]] = {
+  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean]): Future[List[MongoCollection[D]]] = {
     def excluded(name: String): Boolean =
       name == realtimeCollectionName ||
         name == metadataCollectionName ||
@@ -99,18 +98,18 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     } yield xs.toList
   }
 
-  private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
+  private[mongodb] def journalCollectionsAsFuture = getCollectionsAsFuture(journalCollectionName)
 
-  private[mongodb] def snapshotCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
+  private[mongodb] def snapshotCollectionsAsFuture = getCollectionsAsFuture(snapsCollectionName)
 
-  private[mongodb] def removeEmptyJournal(jnl: MongoCollection[D])(implicit ec: ExecutionContext): Future[Unit] =
+  private[mongodb] def removeEmptyJournal(jnl: MongoCollection[D]): Future[Unit] =
     removeEmptyCollection(jnl, journalIndexName)
 
-  private[mongodb] def removeEmptySnapshot(snp: MongoCollection[D])(implicit ec: ExecutionContext): Future[Unit] =
+  private[mongodb] def removeEmptySnapshot(snp: MongoCollection[D]): Future[Unit] =
     removeEmptyCollection(snp, snapsIndexName)
 
   private[this] var mongoVersion: Option[String] = None
-  private[this] def getMongoVersion(implicit ec: ExecutionContext): Future[String] = mongoVersion match {
+  private[this] def getMongoVersion: Future[String] = mongoVersion match {
     case Some(v) => Future.successful(v)
     case None =>
       db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
@@ -121,7 +120,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
         }
   }
 
-  private[this] def isMongoVersionAtLeast(inputNbs: Int*)(implicit ec: ExecutionContext): Future[Boolean] =
+  private[this] def isMongoVersionAtLeast(inputNbs: Int*): Future[Boolean] =
     getMongoVersion.map {
         case str if str.isEmpty => false
         case str =>
@@ -129,13 +128,13 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
           inputNbs.zip(versionNbs).forall { case (i,v) => v >= i }
       }
 
-  private[this] def getLocalCount(collection: MongoCollection[D])(implicit ec: ExecutionContext): Future[Long] = {
+  private[this] def getLocalCount(collection: MongoCollection[D]): Future[Long] = {
     db.runCommand(BsonDocument("count" -> s"${collection.namespace.getCollectionName}", "readConcern" -> BsonDocument("level" -> "local")))
       .toFuture()
       .map(_.getOrElse("n", 0L).asInt32().longValue())
   }
 
-  private[this] def getIndexAsBson(collection: MongoCollection[D], indexName: String)(implicit ec: ExecutionContext): Future[Option[BsonDocument]] =
+  private[this] def getIndexAsBson(collection: MongoCollection[D], indexName: String): Future[Option[BsonDocument]] =
     for {
       indexList <- collection.listIndexes[BsonDocument]().toFuture()
       indexDoc = indexList.find(_.get("name").asString().getValue.equals(indexName))
@@ -145,7 +144,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
         }
     } yield indexKey
 
-  private[this] def removeEmptyCollection(collection: MongoCollection[D], indexName: String)(implicit ec: ExecutionContext): Future[Unit] =
+  private[this] def removeEmptyCollection(collection: MongoCollection[D], indexName: String): Future[Unit] =
     for {
       b403 <- isMongoVersionAtLeast(4,0,3)
       // first count, may be inaccurate in cluster environment

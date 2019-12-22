@@ -15,9 +15,9 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
-import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.bson.collection.BSONCollection
 import reactivemongo.api.commands.{LastError, WriteResult}
-import reactivemongo.bson.{BSONDocument, _}
+import reactivemongo.api.bson.{BSONDocument, _}
 
 import scala.collection.immutable.Seq
 import scala.concurrent._
@@ -37,10 +37,12 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] def metadata(implicit ec: ExecutionContext) = driver.metadata
 
-  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) = BSONDocument(
-    PROCESSOR_ID -> pid,
-    TO -> BSONDocument("$gte" -> from),
-    FROM -> BSONDocument("$lte" -> to))
+  private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
+    BSONDocument(
+      PROCESSOR_ID -> pid,
+      TO -> BSONDocument("$gte" -> from),
+      FROM -> BSONDocument("$lte" -> to)
+    )
 
   private[this] implicit val system: ActorSystem = driver.actorSystem
   private[this] implicit val materializer: Materializer = ActorMaterializer()
@@ -60,7 +62,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         )
 
     val flow = Flow[BSONDocument]
-      .mapConcat(_.getAs[BSONArray](EVENTS).map(_.values.collect {
+      .mapConcat(_.getAsOpt[BSONArray](EVENTS).map(_.values.collect {
         case d: BSONDocument => driver.deserializeJournal(d)
       }).getOrElse(Stream.empty[Event]))
       .filter(_.sn >= from)
@@ -129,7 +131,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
-      import j.BatchCommands.AggregationFramework.{GroupField, Match, MaxField}
+      import j.aggregationFramework.{GroupField, Match, MaxField}
 
       j.aggregatorContext[BSONDocument](
         Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
@@ -138,7 +140,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       ).prepared
         .cursor
         .headOption
-        .map(_.flatMap(_.getAs[Long]("max")))
+        .map(_.flatMap(_.getAsOpt[Long]("max")))
     }
 
     for {
@@ -214,7 +216,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       metadata.flatMap(_.find(BSONDocument(PROCESSOR_ID -> pid), Option(BSONDocument(MAX_SN -> 1)))
         .cursor[BSONDocument]()
         .headOption
-        .map(d => d.flatMap(_.getAs[Long](MAX_SN)))))(l => Future.successful(Option(l)))
+        .map(d => d.flatMap(_.getAsOpt[Long](MAX_SN)))))(l => Future.successful(Option(l)))
   }
 
   private[mongodb] override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long] = {
@@ -223,7 +225,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       .sort(BSONDocument(TO -> -1))
       .cursor[BSONDocument]()
       .headOption
-      .map(d => d.flatMap(_.getAs[Long](TO)))
+      .map(d => d.flatMap(_.getAsOpt[Long](TO)))
       .flatMap(maxSequenceFromMetadata(pid))
       .map(_.getOrElse(0L)))
   }

@@ -50,6 +50,7 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
         override def apply(t: ClusterSettings.Builder): Unit = {
           t.serverSelectionTimeout(getLongQueryProperty("serverselectiontimeoutms").getOrElse(ServerSelectionTimeout.toMillis), TimeUnit.MILLISECONDS)
             .maxWaitQueueSize(getIntQueryProperty("waitqueuemultiple").getOrElse(ThreadsAllowedToBlockforConnectionMultiplier) * getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
+          ()
         }
       }
     ).applyToConnectionPoolSettings(new Block[ConnectionPoolSettings.Builder]{
@@ -59,24 +60,28 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
             .maxConnectionLifeTime(getLongQueryProperty("maxlifetimems").getOrElse(MaxConnectionLifeTime.toMillis), TimeUnit.MILLISECONDS)
             .minSize(getIntQueryProperty("minpoolsize").getOrElse(MinConnectionsPerHost))
             .maxSize(getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
+          ()
         }
       }
     ).applyToServerSettings(new Block[ServerSettings.Builder]{
         override def apply(t: ServerSettings.Builder): Unit = {
           t.heartbeatFrequency(getLongQueryProperty("heartbeatfrequencyms").getOrElse(HeartbeatFrequency.toMillis), TimeUnit.MILLISECONDS)
             .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS) // no 'minHeartbeatFrequency' in ConnectionString
+          ()
         }
       }
     ).applyToSocketSettings(new Block[SocketSettings.Builder] {
       override def apply(t: SocketSettings.Builder): Unit = {
           t.connectTimeout(getLongQueryProperty("connecttimeoutms").getOrElse(ConnectTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
             .readTimeout(getLongQueryProperty("sockettimeoutms").getOrElse(SocketTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
+          ()
         }
       }
     ).applyToSslSettings(new Block[SslSettings.Builder]{
       override def apply(t: SslSettings.Builder): Unit = {
           t.enabled(getBooleanQueryProperty("ssl").getOrElse(SslEnabled))
             .invalidHostNameAllowed(getBooleanQueryProperty("sslinvalidhostnameallowed").getOrElse(SslInvalidHostNameAllowed))
+          ()
         }
       }
     )

@@ -8,7 +8,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.testkit.{TestKit, _}
 import com.typesafe.config.ConfigFactory
-import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.bson.collection.BSONCollection
 import reactivemongo.api.{DefaultDB, FailoverStrategy}
 
 import scala.concurrent._

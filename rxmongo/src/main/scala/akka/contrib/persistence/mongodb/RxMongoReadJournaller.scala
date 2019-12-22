@@ -15,7 +15,7 @@ import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import org.reactivestreams.{Publisher, Subscriber, Subscription}
 import reactivemongo.akkastream._
 import reactivemongo.api.QueryOpts
-import reactivemongo.bson._
+import reactivemongo.api.bson._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
@@ -31,10 +31,10 @@ object CurrentAllEvents {
           .cursor[BSONDocument]()
           .documentSource()
           .map { doc =>
-            doc.getAs[BSONArray](EVENTS)
-              .map(_.elements
-                .map(_.value)
-                .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
+            doc.getAsOpt[BSONArray](EVENTS)
+              .map(_.values.collect{
+                case d:BSONDocument => driver.deserializeJournal(d)
+              })
               .getOrElse(Nil)
           }.mapConcat(identity)
       }.reduceLeftOption(_ concat _)
@@ -50,7 +50,7 @@ object CurrentPersistenceIds {
     Source.fromFuture(for {
         collections <- driver.journalCollectionsAsFuture
         tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
-                          import c.BatchCommands.AggregationFramework.{Group, Out, Project}
+                          import c.aggregationFramework.{Group, Out, Project}
                           val nameWithIndex = s"$temporaryCollectionName-$idx"
                           c.aggregatorContext[BSONDocument](
                             Project(BSONDocument(PROCESSOR_ID -> 1)),
@@ -66,7 +66,7 @@ object CurrentPersistenceIds {
         tmps         <- Future.sequence(tmpNames.map(driver.collection))
       } yield tmps )
       .flatMapConcat(cols => cols.map(_.find(BSONDocument(), Option.empty[BSONDocument]).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
-      .mapConcat(_.getAs[String]("_id").toList)
+      .mapConcat(_.getAsOpt[String]("_id").toList)
       .alsoTo(Sink.onComplete{ _ =>
         driver
           .getCollectionsAsFuture(temporaryCollectionName)
@@ -78,7 +78,7 @@ object CurrentPersistenceIds {
 }
 
 object CurrentEventsByPersistenceId {
-  def queryFor(persistenceId: String, fromSeq: Long, toSeq: Long) = BSONDocument(
+  def queryFor(persistenceId: String, fromSeq: Long, toSeq: Long): BSONDocument = BSONDocument(
     PROCESSOR_ID -> persistenceId,
     TO -> BSONDocument("$gte" -> fromSeq),
     FROM -> BSONDocument("$lte" -> toSeq)
@@ -97,10 +97,10 @@ object CurrentEventsByPersistenceId {
                 .cursor[BSONDocument]()
                 .documentSource()
             ).map( doc =>
-              doc.getAs[BSONArray](EVENTS)
-                .map(_.elements
-                  .map(_.value)
-                  .collect{ case d:BSONDocument => driver.deserializeJournal(d) })
+              doc.getAsOpt[BSONArray](EVENTS)
+                .map(_.values.collect{
+                  case d:BSONDocument => driver.deserializeJournal(d)
+                })
                 .getOrElse(Nil)
             ).mapConcat(identity)
   }
@@ -117,7 +117,7 @@ object CurrentEventsByTag {
     }
     val query = BSONDocument(
       TAGS -> tag
-    ).merge(offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id))))
+    ) ++ offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id)))
 
     Source.fromFuture(driver.journalCollectionsAsFuture)
           .flatMapConcat{ xs =>
@@ -129,13 +129,11 @@ object CurrentEventsByTag {
             ).reduceLeftOption(_ ++ _)
              .getOrElse(Source.empty)
           }.map{ doc =>
-            val id = doc.getAs[BSONObjectID](ID).get
-            doc.getAs[BSONArray](EVENTS)
-              .map(_.elements
-                .map(_.value)
-                .collect{ case d:BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time) }
-                .filter(_._1.tags.contains(tag))
-              )
+            val id = doc.getAsOpt[BSONObjectID](ID).get
+            doc.getAsOpt[BSONArray](EVENTS)
+              .map(_.values.collect{
+                case d:BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
+              }.filter(_._1.tags.contains(tag)))
               .getOrElse(Nil)
     }.mapConcat(identity)
   }
@@ -171,7 +169,7 @@ class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory:
         }
         else
           buffer = buffer ::: List(doc)
-        lastId = doc.getAs[BSONObjectID]("_id")
+        lastId = doc.getAsOpt[BSONObjectID]("_id")
       }
 
       private def errAc = getAsyncCallback[Throwable](failStage)
@@ -249,8 +247,8 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
           )
           .via(killSwitch.flow)
           .mapConcat { d =>
-            val id = d.getAs[BSONObjectID](ID).get
-            d.getAs[BSONArray](EVENTS).map(_.elements.map(e => e.value).collect {
+            val id = d.getAsOpt[BSONObjectID](ID).get
+            d.getAsOpt[BSONArray](EVENTS).map(_.values.collect {
               case d: BSONDocument => driver.deserializeJournal(d) -> ObjectIdOffset(id.stringify, id.time)
             }).getOrElse(Nil)
           }

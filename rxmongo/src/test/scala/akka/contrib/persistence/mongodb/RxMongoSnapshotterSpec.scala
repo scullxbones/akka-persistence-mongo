@@ -12,9 +12,9 @@ import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit._
 import org.junit.runner.RunWith
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration, ScalaFutures}
-import org.scalatest.junit.JUnitRunner
+import org.scalatestplus.junit.JUnitRunner
 import reactivemongo.api.Cursor
-import reactivemongo.bson.BSONDocument
+import reactivemongo.api.bson.BSONDocument
 
 import scala.concurrent._
 import duration._
@@ -25,7 +25,8 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
   override def embedDB = "persistence-snapshotter-rxmongo"
 
   implicit val serialization: Serialization = SerializationExtension.get(system)
-  implicit val serializer = RxMongoSerializersExtension(system).RxMongoSnapshotSerialization
+  val serializers: RxMongoSerializers = RxMongoSerializersExtension(system)
+  import serializers._
   implicit val as: ActorSystem = system
 
   val pid = "unit-test"
@@ -35,7 +36,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-1", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot-1"))
-      val legacyDocs = snapshots.map(serializer.legacyWrite)
+      val legacyDocs = snapshots.map(serializers.LegacyRxMongoSnapshotSerialization.legacyWrite)
 
       Await.result(ss.insert(ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
@@ -52,7 +53,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-2", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot-2"))
-      val legacyDocs = snapshots.map(serializer.legacyWrite)
+      val legacyDocs = snapshots.map(serializers.LegacyRxMongoSnapshotSerialization.legacyWrite)
 
       Await.result(ss.insert(ordered = true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
@@ -75,8 +76,8 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-3", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot-3"))
-      val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
-      val newDocs = snapshots.drop(5).map(serializer.write)
+      val legacyDocs = snapshots.take(5).map(serializers.LegacyRxMongoSnapshotSerialization.legacyWrite)
+      val newDocs = snapshots.drop(5).flatMap(serializers.SelectedSnapshotWriter.writeOpt(_).toIndexedSeq)
 
       whenReady(ss.insert(ordered = true).many(legacyDocs ++ newDocs), PatienceConfiguration.Timeout(3.seconds.dilated)){
         _.n shouldBe metadata.size
@@ -98,8 +99,8 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-4", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot-4"))
-      val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
-      val newDocs = snapshots.drop(5).map(serializer.write)
+      val legacyDocs = snapshots.take(5).map(serializers.LegacyRxMongoSnapshotSerialization.legacyWrite)
+      val newDocs = snapshots.drop(5).flatMap(serializers.SelectedSnapshotWriter.writeOpt(_).toIndexedSeq)
 
       Await.result(ss.insert(ordered = true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
        

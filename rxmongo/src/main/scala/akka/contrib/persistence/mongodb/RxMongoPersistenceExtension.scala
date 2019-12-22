@@ -10,10 +10,10 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
 import reactivemongo.api._
-import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.api.bson.collection.{BSONCollection, BSONSerializationPack}
 import reactivemongo.api.commands.{Command, CommandError, WriteConcern}
 import reactivemongo.api.indexes.{Index, IndexType}
-import reactivemongo.bson.{BSONDocument, _}
+import reactivemongo.api.bson.{BSONDocument, _}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -35,9 +35,9 @@ object RxMongoPersistenceDriver {
 }
 
 class RxMongoDriverProvider(actorSystem: ActorSystem) {
-  val driver: MongoDriver = {
-    val md = MongoDriver()
-    actorSystem.registerOnTermination(driver.close())
+  val driver: AsyncDriver = {
+    val md = AsyncDriver()
+    actorSystem.registerOnTermination(driver.close()(actorSystem.dispatcher))
     md
   }
 }
@@ -62,10 +62,11 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   implicit val waitFor: FiniteDuration = 10.seconds
 
   private[mongodb] lazy val connection: Future[MongoConnection] =
-    Future.fromTry(driver.connection(parsedMongoUri, strictUri = false))
+    driver.connect(parsedMongoUri)
 
   private[mongodb] def closeConnections(): Unit = {
     driver.close(5.seconds)
+    ()
   }
 
   private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
@@ -101,12 +102,17 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { collection =>
     val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-    collection.flatMap(c => c.indexesManager.ensure(Index(
+    collection.flatMap(c => c.indexesManager.ensure(Index(BSONSerializationPack)(
       key = ky,
       background = true,
       unique = unique,
       sparse = sparse,
-      name = Some(indexName))).map(_ => c))
+      name = Some(indexName),
+      dropDups = true,
+      version = None,
+      partialFilter = None,
+      options = BSONDocument.empty
+    )).map(_ => c))
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) =
@@ -156,7 +162,7 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
         val runner = Command.run(BSONSerializationPack, FailoverStrategy())
         runner.apply(database, runner.rawCommand(BSONDocument("buildInfo" -> 1)))
           .one[BSONDocument](ReadPreference.Primary)
-          .map(_.getAs[BSONString]("version").getOrElse(BSONString("")).value)
+          .map(_.getAsOpt[BSONString]("version").getOrElse(BSONString("")).value)
           .map { v =>
             mongoVersion = Some(v)
             v
