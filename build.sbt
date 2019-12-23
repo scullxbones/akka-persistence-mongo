@@ -148,7 +148,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0" % "compile"
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0" % "compile"
     )
   )
   .configs(Travis)
