@@ -1,5 +1,29 @@
 ## Changelog for 2.x major version
 
+### 2.3.2
+* Upgrade what was possible; fix some scalatest deprecations; scalatest 3.1.0 requires akka to jump first due to recompile requirement
+* Clean up outstanding warnings, deprecations, etc
+* Update to latest sbt-pgp sbt-sonatype
+* Merge pull request #282 from scala-steward/update/sbt-1.3.5
+* Merge pull request #284 from scala-steward/update/slf4j-api-1.7.30
+* Merge pull request #288 from scala-steward/update/reactivemongo-0.19.5
+* Merge pull request #287 from scala-steward/update/mongodb-driver-3.12.0
+* Update reactivemongo, ... to 0.19.5
+* Update mongodb-driver, ... to 3.12.0
+* Merge branch 'master' into update/slf4j-api-1.7.30
+* Merge pull request #273 from scala-steward/update/reactivemongo-0.18.8
+* Merge pull request #274 from scala-steward/update/metrics4-akka_a24-4.1.1
+* Merge pull request #277 from scala-steward/update/mongodb-driver-3.11.2
+* Merge pull request #283 from scala-steward/update/log4j-core-2.13.0
+* Merge pull request #286 from scala-steward/update/netty-buffer-4.1.44.Final
+* Update netty-buffer, netty-handler, ... to 4.1.44.Final
+* Update slf4j-api to 1.7.30
+* Update log4j-api, log4j-core, ... to 2.13.0
+* Update sbt to 1.3.5
+* Update mongodb-driver, ... to 3.11.2
+* Update metrics4-akka_a24 to 4.1.1
+* Update reactivemongo, ... to 0.18.8
+
 ### 2.3.1
 * Remove unintended for-comp filter sugar
 * Improve collections count (#260)
