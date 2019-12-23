@@ -1,7 +1,7 @@
 package akka.contrib.persistence.mongodb
 
 import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
+import org.scalatestplus.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class ScalaDriverPersistenceSnapshotTckSpec extends SnapshotTckSpec(classOf[ScalaDriverPersistenceExtension], "officialScalaSnapshotTck")

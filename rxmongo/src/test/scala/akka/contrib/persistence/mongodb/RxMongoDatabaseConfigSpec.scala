@@ -5,7 +5,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{PatienceConfiguration, ScalaFutures}
-import org.scalatest.junit.JUnitRunner
+import org.scalatestplus.junit.JUnitRunner
 import scala.concurrent.duration._
 
 /**

@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.ConfigLoanFixture._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
+import org.scalatestplus.junit.JUnitRunner
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

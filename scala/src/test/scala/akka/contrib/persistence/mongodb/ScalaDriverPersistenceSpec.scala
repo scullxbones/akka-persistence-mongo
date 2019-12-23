@@ -5,7 +5,7 @@ import akka.contrib.persistence.mongodb.ConfigLoanFixture.withConfig
 import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.junit.JUnitRunner
+import org.scalatestplus.junit.JUnitRunner
 
 import scala.concurrent.{Await, Future, duration}
 import duration._
