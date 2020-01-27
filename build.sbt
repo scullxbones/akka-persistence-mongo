@@ -8,7 +8,7 @@ val scalaV = scala211V
 
 
 val LegacyAkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
-val LatestAkkaV = "2.5.27"
+val LatestAkkaV = "2.6.2"
 def akkaV(sv: String): String = sv match {
   case "2.11" => LegacyAkkaV
   case _ => LatestAkkaV
