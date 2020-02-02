@@ -7,13 +7,12 @@ import com.typesafe.config.Config
 import nl.grons.metrics4.scala.MetricName
 
 import scala.collection.immutable.Seq
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 class MongoJournal(config: Config) extends AsyncWriteJournal {
   
   private[this] val impl = MongoPersistenceExtension(context.system)(config).journaler
-  private[this] implicit val ec: ExecutionContext = context.dispatcher
 
   /**
    * Plugin API: asynchronously writes a batch (`Seq`) of persistent messages to the
@@ -144,13 +143,13 @@ trait JournallingFieldNames {
 object JournallingFieldNames extends JournallingFieldNames
 
 trait MongoPersistenceJournallingApi {
-  private[mongodb] def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]]
+  def batchAppend(writes: Seq[AtomicWrite]): Future[Seq[Try[Unit]]]
 
-  private[mongodb] def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit]
+  def deleteFrom(persistenceId: String, toSequenceNr: Long): Future[Unit]
 
-  private[mongodb] def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit)(implicit ec: ExecutionContext): Future[Unit]
+  def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit): Future[Unit]
   
-  private[mongodb] def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
+  def maxSequenceNr(pid: String, from: Long): Future[Long]
 
   protected def squashToUnit[T](seq: Seq[Try[T]]): Seq[Try[Unit]] = seq.map(_.map(_ => ()))
 }
@@ -161,7 +160,7 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
 
   def driverName: String
 
-  override lazy val metricBaseName = MetricName(s"akka-persistence-mongo.journal.$driverName")
+  override lazy val metricBaseName: MetricName = MetricName(s"akka-persistence-mongo.journal.$driverName")
 
   // Timers
   private val appendTimer = timer("write.append")
@@ -172,26 +171,26 @@ trait MongoPersistenceJournalMetrics extends MongoPersistenceJournallingApi with
   // Histograms
   private val writeBatchSize = histogram("write.append.batch-size")
 
-  private def timeIt[A](timer: MongoTimer)(block: => Future[A])(implicit ec: ExecutionContext): Future[A] = {
+  private def timeIt[A](timer: MongoTimer)(block: => Future[A]): Future[A] = {
     val startedTimer = timer.start()
     val result = block
-    result.onComplete(_ => startedTimer.stop())
+    result.onComplete(_ => startedTimer.stop())(driver.pluginDispatcher)
     result
   }
   
-  private[mongodb] abstract override def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = timeIt (appendTimer) {
+  abstract override def batchAppend(writes: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = timeIt (appendTimer) {
     writeBatchSize.record(writes.map(_.size).sum)
     super.batchAppend(writes)
   }
 
-  private[mongodb] abstract override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = timeIt (deleteTimer) {
+  abstract override def deleteFrom(persistenceId: String, toSequenceNr: Long): Future[Unit] = timeIt (deleteTimer) {
     super.deleteFrom(persistenceId, toSequenceNr)
   }
 
-  private[mongodb] abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit)(implicit ec: ExecutionContext): Future[Unit]
+  abstract override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr => Unit): Future[Unit]
     = timeIt (replayTimer) { super.replayJournal(pid, from, to, max)(replayCallback) }
   
-  private[mongodb] abstract override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long]
+  abstract override def maxSequenceNr(pid: String, from: Long): Future[Long]
     = timeIt (maxTimer) { super.maxSequenceNr(pid, from) }
   
 }

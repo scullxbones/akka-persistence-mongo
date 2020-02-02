@@ -10,6 +10,7 @@ package akka.contrib.persistence.mongodb
 import java.util.concurrent.ConcurrentHashMap
 
 import akka.actor._
+import akka.stream.Materializer
 import com.codahale.metrics.MetricRegistry
 import com.typesafe.config.{Config, ConfigFactory}
 
@@ -33,7 +34,8 @@ object MongoPersistenceExtension extends ExtensionId[MongoPersistenceExtension] 
   override def get(actorSystem: ActorSystem): MongoPersistenceExtension = super.get(actorSystem)
 }
 
-trait MongoPersistenceExtension extends Extension {
+abstract class MongoPersistenceExtension(actorSystem: ActorSystem) extends Extension {
+  implicit val materializer: Materializer = Materializer(actorSystem)
 
   private val configuredExtensions = new ConcurrentHashMap[Config, ConfiguredExtension].asScala
 

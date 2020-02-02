@@ -6,11 +6,11 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorSystem, Props, Status}
 import akka.persistence.PersistentActor
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.scaladsl.{Keep, Sink}
-import akka.stream.{ActorMaterializer, KillSwitches}
+import akka.stream.{KillSwitches, Materializer}
 import akka.testkit._
 import com.mongodb.client.model.{BulkWriteOptions, InsertOneModel}
 import com.typesafe.config.{Config, ConfigFactory}
@@ -78,7 +78,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
   def suffixCollNamesEnabled: Boolean = config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") != null &&
     !config(extensionClass).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class").trim.isEmpty
 
-  def props(id: String, promise: Promise[Unit], eventCount: Int) = Props(new PersistentCountdown(id, promise, eventCount))
+  def props(id: String, promise: Promise[Unit], eventCount: Int): Props = Props(new PersistentCountdown(id, promise, eventCount))
 
   case class Append(s: String)
   case object RUAlive
@@ -108,7 +108,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val events = "this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil
 
@@ -135,7 +135,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val am: ActorMaterializer = ActorMaterializer()
+      implicit val am: Materializer = Materializer(as)
 
       val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
 
@@ -154,12 +154,11 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val ks =
         readJournal.allEvents()
           .viaMat(KillSwitches.single)(Keep.right)
-          .toMat(Sink.actorRef[EventEnvelope](probe.ref, 'complete))(Keep.left)
+          .toMat(Sink.actorRef[EventEnvelope](probe.ref, 'complete, Status.Failure))(Keep.left)
           .run()
       Thread.sleep(1000L)
 
       events slice (3, 6) foreach (ar2 ! _)
-      implicit val ec: ExecutionContextExecutor = as.dispatcher
 
       probe.receiveN(events.size, 3.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
       ks.shutdown()
@@ -169,7 +168,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val promises = ("1" :: "2" :: "3" :: "4" :: "5" :: Nil).map(id => id -> Promise[Unit]())
       
@@ -189,7 +188,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       implicit val ec: ExecutionContextExecutor = as.dispatcher
       val futures = promises.map { case (_, p) => p.future }
-      val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
+      val count = Await.result(Future.foldLeft(futures)(0) { case (cnt, _) => cnt + 1 }, 10.seconds.dilated)
       count shouldBe 5
 
       val readJournal =
@@ -211,7 +210,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
       
       implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
@@ -231,7 +230,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
 
-      readJournal.currentPersistenceIds().runWith(Sink.actorRef(probe.ref, 'complete))
+      readJournal.currentPersistenceIds().runWith(Sink.actorRef(probe.ref, 'complete, Status.Failure))
 
       probe.receiveN(6, 5.seconds.dilated) should contain allOf ("1", "2", "3", "4", "5")
 
@@ -250,8 +249,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
-      implicit val ec: ExecutionContextExecutor = as.dispatcher
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
       val PID_SIZE = 900
@@ -292,7 +290,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
       
       implicit def patienceConfig: PatienceConfig = PatienceConfig(timeout = 5.seconds.dilated, interval = 500.millis.dilated)
 
@@ -314,7 +312,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val ks =
         readJournal.persistenceIds()
           .viaMat(KillSwitches.single)(Keep.right)
-          .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+          .toMat(Sink.actorRef(probe.ref, 'complete, Status.Failure))(Keep.left)
           .run()
 
       ars slice (3, 5) foreach { ar =>
@@ -336,7 +334,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val events = ("this" :: "is" :: "just" :: "a" :: "test" :: "END" :: Nil) map Append.apply
 
@@ -363,7 +361,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val probe = TestProbe()
 
@@ -380,7 +378,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val ks = readJournal
         .eventsByPersistenceId("foo-live", 2L, 3L)
         .viaMat(KillSwitches.single)(Keep.right)
-        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .toMat(Sink.actorRef(probe.ref, 'complete, Status.Failure))(Keep.left)
         .run()
 
       Thread.sleep(1000L)
@@ -399,7 +397,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val probe = TestProbe()
 
@@ -416,7 +414,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val ks = readJournal
         .eventsByPersistenceId("foo-long-running", 2L, 3L)
         .viaMat(KillSwitches.single)(Keep.right)
-        .toMat(Sink.actorRef(probe.ref, 'complete))(Keep.left)
+        .toMat(Sink.actorRef(probe.ref, 'complete, Status.Failure))(Keep.left)
         .run()
 
       Thread.sleep(1.minute.toMillis)
@@ -437,7 +435,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -477,7 +475,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
     case (as, _) =>
       import concurrent.duration._
       implicit val system: ActorSystem = as
-      implicit val mat: ActorMaterializer = ActorMaterializer()
+      implicit val mat: Materializer = Materializer(as)
 
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -496,7 +494,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
 
       val sources = (1 to nrOfActors) map (nr => readJournal.eventsByPersistenceId(s"pid-$nr", 0, Long.MaxValue))
 
-      val sink = Sink.actorRef(probe.ref, "complete")
+      val sink = Sink.actorRef(probe.ref, "complete", Status.Failure)
 
       val ks = sources.reduce(_ merge _).viaMat(KillSwitches.single)(Keep.right).toMat(sink)(Keep.left).run()
 

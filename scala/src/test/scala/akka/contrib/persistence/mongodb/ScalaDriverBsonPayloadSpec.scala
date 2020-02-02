@@ -1,11 +1,11 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.{ActorRef, PoisonPill, Props, Status}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill, Props, Status}
 import akka.contrib.persistence.mongodb.ConfigLoanFixture.withConfig
 import akka.persistence._
 import akka.persistence.query.PersistenceQuery
+import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.runner.RunWith
@@ -14,8 +14,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.junit.JUnitRunner
 
-import scala.concurrent.duration._
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 @RunWith(classOf[JUnitRunner])
 class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
@@ -45,7 +45,7 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
 
   override def embedDB = "official-scala-bson"
 
-  override def beforeAll() = cleanup()
+  override def beforeAll(): Unit = cleanup()
 
   private val documents = {
     val msg1 = BsonDocument("a" -> BsonInt32(1), "b" -> BsonString("2"))
@@ -54,7 +54,7 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   "An official scala driver" should "support storage of `BsonDocument`s" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
+    implicit val as: ActorSystem = actorSystem
     val underTest = actorSystem.actorOf(PayloadSpec.props("documents"))
     val probe = TestProbe()
     probe.send(underTest, PayloadSpec.Command(documents.head))
@@ -65,8 +65,8 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   it should "support reading `BsonDocument` contents with read journal" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
-    implicit val mat: Materializer = ActorMaterializer()
+    implicit val as: ActorSystem = actorSystem
+    implicit val mat: Materializer = Materializer(as)
     val readJournal =
       PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
     val fut = readJournal.currentEventsByPersistenceId("documents", 0, Long.MaxValue)
@@ -75,7 +75,7 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   it should "support restoring persistent state of `BsonDocument`s from snapshot" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
+    implicit val as: ActorSystem = actorSystem
     val underTest = actorSystem.actorOf(PayloadSpec.props("documents"))
     val probe = TestProbe()
 
@@ -100,7 +100,7 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   it should "support storage of `BsonArray`s" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
+    implicit val as: ActorSystem = actorSystem
     val underTest = actorSystem.actorOf(PayloadSpec.props("arrays"))
     val probe = TestProbe()
     probe.send(underTest, PayloadSpec.Command(arrays.head))
@@ -111,8 +111,8 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   it should "support reading `BsonArray` contents with read journal" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
-    implicit val mat: Materializer = ActorMaterializer()
+    implicit val as: ActorSystem = actorSystem
+    implicit val mat: Materializer = Materializer(as)
     val readJournal =
       PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
     val fut = readJournal.currentEventsByPersistenceId("arrays", 0, Long.MaxValue)
@@ -121,7 +121,7 @@ class ScalaDriverBsonPayloadSpec extends BaseUnitTest with ContainerMongo with B
   }
 
   it should "support restoring persistent state of `BsonArray`s from snapshot" in withConfig(bsonConfig,"akka-contrib-mongodb-persistence-journal","scala-payload-config") { case (actorSystem, _) =>
-    implicit val as = actorSystem
+    implicit val as: ActorSystem = actorSystem
     val underTest = actorSystem.actorOf(PayloadSpec.props("arrays"))
     val probe = TestProbe()
 
