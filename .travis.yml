@@ -3,7 +3,7 @@ cache:
   - $HOME/.ivy2
   - $HOME/.sbt
 os: linux
-dist: bionic
+dist: trusty
 services:
    - docker
 language: scala
