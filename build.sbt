@@ -36,7 +36,7 @@ def commonDeps(sv:String) = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.0"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.0"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.0"  % "test",
-  "org.scalatest"             %% "scalatest"                % "3.0.8"   % "test",
+  "org.scalatest"             %% "scalatest"                % "3.1.1"   % "test",
   "junit"                     % "junit"                     % "4.12"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV(sv) % "test",
