@@ -36,6 +36,8 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
 
   private[this] def journal: Future[driver.C] = driver.journal.map(_.withWriteConcern(driver.journalWriteConcern))
 
+  private[this] def realtime: Future[driver.C] = driver.realtime
+
   private[this] def metadata: Future[driver.C] = driver.metadata.map(_.withWriteConcern(driver.metadataWriteConcern))
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
@@ -109,7 +111,19 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
       doBatchAppend(batch, journal)
     }
 
-    batchFuture.map(squashToUnit)
+    if (driver.realtimeEnablePersistence)
+      batchFuture.andThen {
+        case Success(batch) =>
+          val f = doBatchAppend(batch, realtime)
+          f.onComplete {
+            case scala.util.Failure(t) =>
+              logger.error("Error during write to realtime collection", t)
+            case _ => ()
+          }
+          f
+      }.map(squashToUnit)
+    else
+      batchFuture.map(squashToUnit)
   }
 
   private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long): Future[Unit] = {

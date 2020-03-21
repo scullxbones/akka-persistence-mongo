@@ -33,6 +33,8 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] def journal = driver.journal
 
+  private[this] def realtime = driver.realtime
+
   private[this] def metadata = driver.metadata
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
@@ -108,7 +110,19 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       doBatchAppend(batch, journal)
     }
 
-    batchFuture.map(squashToUnit)
+    if (driver.realtimeEnablePersistence)
+      batchFuture.andThen {
+        case Success(batch) =>
+          val f = doBatchAppend(batch, realtime)
+          f.onComplete {
+            case scala.util.Failure(t) =>
+              logger.error("Error during write to realtime collection", t)
+            case _ => ()
+          }
+          f
+      }.map(squashToUnit)
+    else
+      batchFuture.map(squashToUnit)
   }
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long): Future[Option[Long]] = {
