@@ -59,7 +59,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       ()
     } finally {
       Await.ready(for {
-        xs <- extendedDriver.getJournalCollections()
+        xs <- extendedDriver.getJournalCollections
         _  <- Future.traverse(xs)(_.drop(failIfNotFound = false))
         md <- extendedDriver.metadata
         _  <- md.drop(failIfNotFound = false)
@@ -74,7 +74,7 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
       ()
     } finally {
       Await.ready(for {
-        xs <- extendedDriver.getSnapshotCollections()
+        xs <- extendedDriver.getSnapshotCollections
         _ <- Future.traverse(xs)(_.drop(failIfNotFound = false))
       } yield (), 5.seconds.dilated)
       ()

@@ -6,9 +6,9 @@ import org.mongodb.scala._
 import org.mongodb.scala.bson.{BsonBinary, BsonDocument, BsonValue}
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Indexes._
-import org.mongodb.scala.model.{IndexOptions, ReplaceOptions}
+import org.mongodb.scala.model.ReplaceOptions
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
 
@@ -63,8 +63,9 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
 class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoPersistenceSnapshottingApi {
   import ScalaDriverPersistenceSnapshotter._
   import driver.ScalaSerializers.serialization
+  import driver.pluginDispatcher
 
-  override private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+  override def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long): Future[Option[SelectedSnapshot]] = {
     val snaps = driver.getSnaps(pid)
     snaps.flatMap(_.find(
         and(
@@ -85,7 +86,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
     )
   }
 
-  override private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = {
+  override def saveSnapshot(snapshot: SelectedSnapshot): Future[Unit] = {
     val snaps = driver.snaps(snapshot.metadata.persistenceId)
     val query = and(
       equal(PROCESSOR_ID, snapshot.metadata.persistenceId),
@@ -103,7 +104,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
       ).map(_ => ())
   }
 
-  override private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
+  override def deleteSnapshot(pid: String, seq: Long, ts: Long): Future[Unit] = {
     val snaps = driver.getSnaps(pid)
     val criteria =
       Option(ts).filter(_ > 0).foldLeft(
@@ -122,7 +123,7 @@ class ScalaDriverPersistenceSnapshotter(driver: ScalaMongoDriver) extends MongoP
     }
   }
 
-  override private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+  override def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long): Future[Unit] = {
     val snaps = driver.getSnaps(pid)
     for {
       s0 <- snaps

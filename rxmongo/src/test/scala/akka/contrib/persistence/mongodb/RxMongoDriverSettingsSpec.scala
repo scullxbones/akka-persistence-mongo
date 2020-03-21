@@ -6,27 +6,27 @@ import com.typesafe.config.{ConfigFactory, Config}
 class RxMongoDriverSettingsSpec extends BaseUnitTest {
   import concurrent.duration._
 
-  def reference = ConfigFactory.load()
+  def reference: Config = ConfigFactory.load()
 
-  def linear = ConfigFactory.parseString(
+  def linear: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.rxmongo.failover.growth = lin
     """.stripMargin)
 
-  def exponential = ConfigFactory.parseString(
+  def exponential: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.rxmongo.failover.growth = exp
       |akka.contrib.persistence.mongodb.rxmongo.failover.factor = 3
       |    """.stripMargin)
 
-  def delayRetries = ConfigFactory.parseString(
+  def delayRetries: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.rxmongo.failover.retries = 20
       |akka.contrib.persistence.mongodb.rxmongo.failover.initialDelay = 10ms
     """.stripMargin)
 
   def fixture[A](config: Config)(testCode: RxMongoDriverSettings => A): A = {
-    testCode(RxMongoDriverSettings(new ActorSystem.Settings(getClass.getClassLoader, config, "settings name")))
+    testCode(RxMongoDriverSettings(new ActorSystem.Settings(getClass.getClassLoader, config.withFallback(ConfigFactory.defaultReference()), "settings name")))
   }
 
   "A settings object" should "correctly load the defaults" in fixture(reference) { s =>

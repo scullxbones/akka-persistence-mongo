@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MONGODB_VERSION=3.6
+MONGODB_VERSION=4.2
 MONGODB_NOAUTH_PORT=27117
 MONGODB_AUTH_PORT=28117
 MONGODB_OPTS="--storageEngine wiredTiger --bind_ip_all"

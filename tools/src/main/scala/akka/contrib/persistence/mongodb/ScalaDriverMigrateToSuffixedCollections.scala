@@ -8,7 +8,6 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.RxStreamsInterop._
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
 import org.mongodb.scala.WriteConcern
@@ -17,13 +16,12 @@ import org.mongodb.scala.model.Accumulators._
 import org.mongodb.scala.model.Aggregates._
 import org.mongodb.scala.model.Filters.equal
 
+import scala.collection.immutable.Seq
 import scala.concurrent.Future
 import scala.util.Try
 
 
-class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends ScalaMongoDriver(system, ConfigFactory.empty()) {
-
-  implicit val mat: ActorMaterializer = ActorMaterializer()
+class ScalaDriverMigrateToSuffixedCollections()(implicit system: ActorSystem) extends ScalaMongoDriver(system, ConfigFactory.empty()) {
 
   /**
     * Performs migration from unique collection to multiple collections with suffixed names
@@ -52,8 +50,8 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     */
   private[this] def handleMigration(originCollectionName: String): Future[Boolean] = {
 
-    val makeJournal: String => C = journal
-    val makeSnaps: String => C = snaps
+    val makeJournal: String => Future[C] = journal
+    val makeSnaps: String => Future[C] = snaps
 
     // retrieve journal or snapshot properties
     val (makeCollection, getNewCollectionName, writeConcern, summaryTitle) = originCollectionName match {
@@ -67,7 +65,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
           case (prevFuture, tmpMap) =>
             for {
               acc <- prevFuture
-              res <- Future.fold(
+              res <- Future.foldLeft(
                 tmpMap.map { case (pid, count) =>
                   handleDocsByPid(pid, count, makeCollection, getNewCollectionName, originCollectionName, writeConcern)
                     .map { res => (res._1, res._2, res._3, res._4, count)}
@@ -81,7 +79,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     } else {
       buildTemporaryMap(makeCollection, getNewCollectionName, summaryTitle)
         .flatMap { tmpMap =>
-          Future.fold(
+          Future.foldLeft(
             tmpMap.map {
               case (newCollectionName, (pids, count)) =>
                 handleDocsByCollection(pids, count, makeCollection, originCollectionName, newCollectionName, writeConcern)
@@ -116,10 +114,10 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Builds a Map counting documents per persistence Id: Map(pid -> count)
     */
-  private[this] def buildTemporaryMapHeavyLoad(makeCollection: String => C, getNewCollectionName: String => String, originCollectionName: String, summaryTitle: String): Future[Map[String, Long]] = {
+  private[this] def buildTemporaryMapHeavyLoad(makeCollection: String => Future[C], getNewCollectionName: String => String, originCollectionName: String, summaryTitle: String): Future[Map[String, Long]] = {
     logger.info(s"\n\n${summaryTitle.toUpperCase}: Gathering documents by suffixed collection names.  T h i s   m a y   t a k e   a   w h i l e  ! ! !   It may seem to freeze, be patient...\n")
 
-    Source.fromFuture(makeCollection(""))
+    Source.future(makeCollection(""))
       .flatMapConcat(_.aggregate(List(group(s"$$$PROCESSOR_ID", sum("count", 1)))).asAkka)
       .runWith(Sink.fold[Map[String, Long], D](Map[String, Long]()) { case (tmpMap, tmpDoc) =>
         val count = tmpDoc.getInt32("count").getValue.toLong
@@ -138,22 +136,22 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     * Migrates documents corresponding to one persistence Id from an origin collection to some new collection,
     * and returns a tuple containing amounts of documents inserted, removed, failed and ignored
     */
-  private[this] def handleDocsByPid(pid: String, docCount: Long, makeCollection: String => C, getNewCollectionName: String => String, originCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long)] = {
+  private[this] def handleDocsByPid(pid: String, docCount: Long, makeCollection: String => Future[C], getNewCollectionName: String => String, originCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long)] = {
     if(pid == IgnoredPid) {
       Future.successful((0L, 0L, 0L, docCount)) // just counting...
     } else {
       logger.info(s"Processing persistence Id '$pid' for $docCount documents...")
-      Source.fromFuture(makeCollection(""))
+      Source.future(makeCollection(""))
         .flatMapConcat(_.find(equal(PROCESSOR_ID, pid)).asAkka)
         .runWith(Sink.foldAsync[(Long, Long, Long), D]((0L, 0L, 0L)) { case ((insOk, delOk, ko), doc) =>
           val id = doc.getObjectId("_id")
           val idStr = id.getValue.toString
-          Source.fromFuture(makeCollection(pid))
+          Source.future(makeCollection(pid))
             .flatMapConcat(_.withWriteConcern(writeConcern).insertOne(doc).asAkka)
             .runWith(Sink.headOption)
             .flatMap {
               case Some(_) => // doc has been inserted, we remove it from origin collection...
-                Source.fromFuture(makeCollection(""))
+                Source.future(makeCollection(""))
                   .flatMapConcat(_.withWriteConcern(writeConcern).deleteOne(equal("_id", id)).asAkka)
                   .runWith(Sink.headOption)
                   .flatMap {
@@ -192,10 +190,10 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Builds a Map grouping persistence ids by new suffixed collection names: Map(collectionName -> (Seq[pid], count))
     */
-  private[this] def buildTemporaryMap(makeCollection: String => C, getNewCollectionName: String => String, summaryTitle: String): Future[Map[String, (Seq[String], Long)]] = {
+  private[this] def buildTemporaryMap(makeCollection: String => Future[C], getNewCollectionName: String => String, summaryTitle: String): Future[Map[String, (Seq[String], Long)]] = {
     logger.info(s"\n\n${summaryTitle.toUpperCase}: Gathering documents by suffixed collection names.  T h i s   m a y   t a k e   a   w h i l e  ! ! !   It may seem to freeze, be patient...\n")
 
-    Source.fromFuture(makeCollection(""))
+    Source.future(makeCollection(""))
       .flatMapConcat(_.aggregate(List(group(s"$$$PROCESSOR_ID", sum("count", 1)))).asAkka)
       .runWith(Sink.seq)
       .map(_.groupBy(doc => getNewCollectionName(Option(doc.getString("_id").getValue).getOrElse(""))))
@@ -207,14 +205,14 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Migrates documents from an origin collection to some new collection, and returns a tuple containing amounts of documents inserted, removed, failed, ignored and handled.
     */
-  private[this] def handleDocsByCollection(pids: Seq[String], docCount: Long, makeCollection: String => C, originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long, Long)] = {
+  private[this] def handleDocsByCollection(pids: Seq[String], docCount: Long, makeCollection: String => Future[C], originCollectionName: String, newCollectionName: String, writeConcern: WriteConcern): Future[(Long, Long, Long, Long, Long)] = {
     if (originCollectionName == newCollectionName) {
       Future.successful((0L, 0L, 0L, docCount, docCount)) // just counting...
     } else {
       logger.info(s"Processing suffixed collection '$newCollectionName' for $docCount documents...")
-      Future.fold(
+      Future.foldLeft(
         pids.map { pid =>
-          Source.fromFuture(makeCollection(""))
+          Source.future(makeCollection(""))
             .flatMapConcat(_.find(equal(PROCESSOR_ID, pid)).asAkka)
             .runWith(Sink.seq)
             .flatMap(docs => insertManyDocs(docs, makeCollection, newCollectionName, writeConcern).map {res =>
@@ -250,8 +248,8 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
   /**
     * Inserts many documents in some new collection and returns the amount of inserted documents (zero in case of failure)
     */
-  private[this] def insertManyDocs(docs: Seq[D], makeCollection: String => C, newCollectionName: String, writeConcern: WriteConcern, tryNb: Int = 1): Future[Long] = {
-    Source.fromFuture(makeCollection(docs.head.getString(PROCESSOR_ID).getValue))
+  private[this] def insertManyDocs(docs: Seq[D], makeCollection: String => Future[C], newCollectionName: String, writeConcern: WriteConcern, tryNb: Int = 1): Future[Long] = {
+    Source.future(makeCollection(docs.head.getString(PROCESSOR_ID).getValue))
       .flatMapConcat(_.withWriteConcern(writeConcern).insertMany(docs).asAkka)
       .runWith(Sink.headOption)
       .flatMap {
@@ -272,7 +270,7 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     * Removes many documents from an origin collection and returns the amount of removed documents (zero in case of total failure)
     */
   private[this] def removeManyDocs(pid: String, originCollectionName: String, writeConcern: WriteConcern, toRemove: Long, alreadyRemoved: Long = 0L, tryNb: Int = 1): Future[Long] = {
-    Source.fromFuture(collection(originCollectionName))
+    Source.future(collection(originCollectionName))
       .flatMapConcat(_.withWriteConcern(writeConcern).deleteMany(equal(PROCESSOR_ID, pid)).asAkka)
       .runWith(Sink.headOption)
       .flatMap {
@@ -319,12 +317,12 @@ class ScalaDriverMigrateToSuffixedCollections(system: ActorSystem) extends Scala
     * Empties metadata collection, it will be rebuilt from suffixed collections through usual Akka persistence process
     */
   private[this] def emptyMetadata(tryNb: Int = 1): Future[Unit] = {
-    Source.fromFuture(collection(metadataCollectionName))
+    Source.future(collection(metadataCollectionName))
       .flatMapConcat(_.countDocuments(Document()).asAkka)
       .runWith(Sink.head)
       .flatMap { count =>
         if (count > 0L) {
-          Source.fromFuture(collection(metadataCollectionName))
+          Source.future(collection(metadataCollectionName))
             .flatMapConcat(_.withWriteConcern(metadataWriteConcern).deleteMany(Document()).asAkka)
             .runWith(Sink.headOption)
             .flatMap {
