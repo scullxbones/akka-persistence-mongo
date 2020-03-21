@@ -2,7 +2,7 @@ package akka.contrib.persistence.mongodb
 
 import akka.actor.{ActorLogging, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.persistence.fsm.PersistentFSM
-import akka.persistence.fsm.PersistentFSM.FSMState
+import PersistentFSM.FSMState
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.BeforeAndAfterAll
@@ -46,18 +46,18 @@ object PersistentFsmSpec {
     def empty(): ShoppingCart
   }
   case object EmptyShoppingCart extends ShoppingCart {
-    def addItem(item: Item) = NonEmptyShoppingCart(item :: Nil)
+    def addItem(item: Item): ShoppingCart = NonEmptyShoppingCart(item :: Nil)
     def empty():ShoppingCart = this
   }
   case class NonEmptyShoppingCart(items: Seq[Item]) extends ShoppingCart {
-    def addItem(item: Item) = NonEmptyShoppingCart(items :+ item)
+    def addItem(item: Item): ShoppingCart = NonEmptyShoppingCart(items :+ item)
     def empty():ShoppingCart = EmptyShoppingCart
   }
 
   case class PurchaseWasMade(items:Seq[Item])
   case object ShoppingCardDiscarded
 
-  def props(reportActor: ActorRef, id: String) = Props(new TestActor(reportActor, id))
+  def props(reportActor: ActorRef, id: String): Props = Props(new TestActor(reportActor, id))
 
   class TestActor(reportActor: ActorRef, val persistenceId: String) extends PersistentFSM[UserState, ShoppingCart, DomainEvent] with ActorLogging {
 
@@ -148,6 +148,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
   def config(extensionClass: Class[_]): Config =
     ConfigFactory.parseString(s"""
       |include "/application.conf"
+      |akka.actor.allow-java-serialization = on
       |akka.contrib.persistence.mongodb.mongo.driver = "${extensionClass.getName}"
       |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://$host:$noAuthPort/$embedDB"
       |akka.contrib.persistence.mongodb.mongo.breaker.timeout.call = 0s
@@ -167,7 +168,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
 
   "A mongo persistence driver" should
     "support persistent FSM purchase sequence" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "persistent-fsm") { case (as, config) =>
-      implicit val system = as
+      implicit val system: ActorSystem = as
 
       val probe = TestProbe()
       val actor = as.actorOf(props(probe.ref, "persistent-fsm-1"),"1")
@@ -186,7 +187,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
 
   it should
     "support persistent FSM shop and discard" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "persistent-fsm") { case (as, config) =>
-      implicit val system = as
+      implicit val system: ActorSystem = as
 
       val probe = TestProbe()
       val actor = as.actorOf(props(probe.ref, "persistent-fsm-2"),"2")
@@ -206,7 +207,7 @@ abstract class PersistentFsmSpec(extensionClass: Class[_], database: String, ext
 
   it should
     "support persist and recovery of FSM cart" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "persistent-fsm") { case (as, config) =>
-      implicit val system = as
+      implicit val system: ActorSystem = as
 
       val probe = TestProbe()
       val actor = as.actorOf(props(probe.ref, "persistent-fsm-3"),"3a")

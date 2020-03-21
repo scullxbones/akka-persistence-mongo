@@ -23,7 +23,7 @@ class MongoReadJournal(system: ExtendedActorSystem, config: Config)
   extends WithMongoPersistencePluginDispatcher(system, config) with ReadJournalProvider {
 
   private[this] val impl = MongoPersistenceExtension(system)(config).readJournal
-  private[this] implicit val materializer: Materializer = ActorMaterializer()(system)
+  private[this] implicit val materializer: Materializer = Materializer(system)
 
   override def scaladslReadJournal(): scaladsl.ReadJournal = new ScalaDslMongoReadJournal(impl)
 

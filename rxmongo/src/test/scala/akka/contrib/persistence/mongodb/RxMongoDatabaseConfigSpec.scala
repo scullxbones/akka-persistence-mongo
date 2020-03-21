@@ -17,8 +17,6 @@ import scala.concurrent.duration._
 @RunWith(classOf[JUnitRunner])
 class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
-  import scala.concurrent.ExecutionContext.Implicits.global
-
   override def afterAll(): Unit = {
     cleanup()
   }
@@ -30,7 +28,7 @@ class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with Be
         |}
       """.stripMargin)
 
-  override def embedDB = "admin"
+  override def embedDB = "configspec"
 
   "Persistence store database config" should "be User-Specified-Database" in withConfig(config, "akka-contrib-mongodb-persistence-journal") { case (actorSystem, c) =>
     val underTest = new RxMongoDriver(actorSystem, c, new RxMongoDriverProvider(actorSystem))

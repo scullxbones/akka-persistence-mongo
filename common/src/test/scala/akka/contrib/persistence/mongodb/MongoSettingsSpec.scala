@@ -5,24 +5,24 @@ import akka.actor.ActorSystem
 
 class MongoSettingsSpec extends BaseUnitTest {
 
-  def reference = ConfigFactory.parseString(
+  def reference: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.mongo.driver = foo
     """.stripMargin)
 
-  def withUri = ConfigFactory.parseString(
+  def withUri: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.mongo.mongouri = "mongodb://appuser:apppass@localhost:27017/sample_db_name"
       |akka.contrib.persistence.mongodb.mongo.driver = foo
     """.stripMargin)
 
-  def withMultiLegacy = ConfigFactory.parseString(
+  def withMultiLegacy: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.mongo.urls = ["mongo1.example.com:27017","mongo2.example.com:27017"]
       |akka.contrib.persistence.mongodb.mongo.driver = foo
     """.stripMargin)
 
-  def withMultiLegacyAndCreds = ConfigFactory.parseString(
+  def withMultiLegacyAndCreds: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.mongo.urls = ["mongo1.example.com:27017","mongo2.example.com:27017","mongo3.example.com:27017"]
       |akka.contrib.persistence.mongodb.mongo.username = my_user
@@ -30,7 +30,7 @@ class MongoSettingsSpec extends BaseUnitTest {
       |akka.contrib.persistence.mongodb.mongo.driver = foo
     """.stripMargin)
 
-  def withCredentialsLegacy = ConfigFactory.parseString(
+  def withCredentialsLegacy: Config = ConfigFactory.parseString(
     """
       |akka.contrib.persistence.mongodb.mongo.urls = ["mongo1.example.com:27017"]
       |akka.contrib.persistence.mongodb.mongo.username = user
@@ -40,7 +40,7 @@ class MongoSettingsSpec extends BaseUnitTest {
       """.stripMargin)
 
   def fixture[A](config: Config)(testCode: MongoSettings => A): A = {
-    testCode(MongoSettings(new ActorSystem.Settings(getClass.getClassLoader,config,"settings name")))
+    testCode(MongoSettings(new ActorSystem.Settings(getClass.getClassLoader,config.withFallback(ConfigFactory.defaultReference()),"settings name")))
   }
 
   "A settings object" should "correctly load the defaults" in fixture(reference) { s =>

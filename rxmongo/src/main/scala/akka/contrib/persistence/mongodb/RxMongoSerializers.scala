@@ -33,7 +33,6 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
   import RxMongoSerializers._
 
   implicit val loadClass: LoadClass = dynamicAccess
-  private implicit val system: ActorSystem = actorSystem
   implicit val serialization: Serialization = SerializationExtension(actorSystem)
 
   implicit val dt: DocumentType[BSONDocument] = new DocumentType[BSONDocument] { }
@@ -108,7 +107,7 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
       case _ => throw new IllegalStateException("Failed to read or default version field")
     }
 
-    private def deserializeVersionOne(d: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event =
+    private def deserializeVersionOne(d: BSONDocument)(implicit serialization: Serialization): Event =
       Event(
         pid = d.as[String](PROCESSOR_ID),
         sn = d.as[Long](SEQUENCE_NUMBER),
@@ -141,7 +140,7 @@ class RxMongoSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSystem)
       }
 
 
-    private def deserializeDocumentLegacy(document: BSONDocument)(implicit serialization: Serialization, system: ActorSystem): Event = {
+    private def deserializeDocumentLegacy(document: BSONDocument)(implicit serialization: Serialization): Event = {
       val persistenceId = document.as[String](PROCESSOR_ID)
       val sequenceNr = document.as[Long](SEQUENCE_NUMBER)
       val tags = document.getAsOpt[BSONArray](TAGS).toList.flatMap(_.values.collect{ case BSONString(s) => s }).toSet

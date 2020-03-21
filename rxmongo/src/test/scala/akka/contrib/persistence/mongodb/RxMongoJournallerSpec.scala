@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.stream.Materializer
 import akka.testkit._
 import reactivemongo.api.Cursor
 import reactivemongo.api.bson._
@@ -26,9 +26,9 @@ class RxMongoJournallerSpec extends TestKit(ActorSystem("unit-test")) with RxMon
 
   implicit val serialization: Serialization = SerializationExtension(system)
   implicit val as: ActorSystem = system
-  implicit val am: Materializer = ActorMaterializer()
+  implicit val am: Materializer = Materializer(system)
 
-  def await[T](block: Future[T])(implicit ec: ExecutionContext): T = {
+  def await[T](block: Future[T]): T = {
     Await.result(block, 3.seconds.dilated)
   }
 

@@ -13,10 +13,11 @@ package akka.contrib.persistence.mongodb
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.JournallingFieldNames._
 import akka.contrib.persistence.mongodb.SnapshottingFieldNames._
+import akka.stream.Materializer
 import com.typesafe.config.Config
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
@@ -75,6 +76,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
   protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
   implicit val actorSystem: ActorSystem = as
+  implicit val materializer: Materializer = Materializer(as)
 
   lazy val settings: MongoSettings = {
     val defaults = MongoSettings(as.settings)
@@ -92,16 +94,63 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     closeConnections()
   }
 
-  private[mongodb] def collection(name: String)(implicit ec: ExecutionContext): C
+  def collection(name: String): Future[C]
 
-  private[mongodb] def ensureCollection(name: String)(implicit ec: ExecutionContext): C
+  def collectionNames: Future[List[String]]
 
-  private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C
+  def ensureCollection(name: String): Future[C]
 
-  private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C
+  def cappedCollection(name: String): Future[C]
 
-  private[mongodb] def closeConnections(): Unit
+  def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*): C => Future[C]
 
+  def removeEmptyCollection(collection: C, indexName: String): Future[Unit]
+
+  def closeConnections(): Unit
+
+  def getMongoVersionFromBuildInfo: Future[String]
+
+  private[mongodb] lazy val mongoVersion: Future[ServerVersion] = {
+    getMongoVersionFromBuildInfo.map {
+      case ServerVersion(v) => v
+      case _ =>
+        ServerVersion.Unsupported(-1.0,"UNKNOWN")
+    }
+  }
+
+  def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean]): Future[List[C]] = {
+    def excluded(name: String): Boolean =
+      name == metadataCollectionName ||
+        name.startsWith("system.")
+
+    def allPass(name: String): Boolean = true
+
+    for {
+      names     <- collectionNames
+      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(allPass)).map(collection))
+    } yield list
+  }
+
+  def getCollectionsAsFuture(collectionName: String): Future[List[C]] =
+    getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
+
+  def getJournalCollections: Future[List[C]] =
+    getCollectionsAsFuture(journalCollectionName)
+
+  def journalCollectionsAsFuture: Future[List[C]] =
+    getCollectionsAsFuture(journalCollectionName)
+
+  def getSnapshotCollections: Future[List[C]] =
+    getCollectionsAsFuture(snapsCollectionName)
+
+  def snapshotCollectionsAsFuture: Future[List[C]] =
+    getCollectionsAsFuture(snapsCollectionName)
+
+  def removeEmptyJournal(jnl: C): Future[Unit] =
+    removeEmptyCollection(jnl, journalIndexName)
+
+  def removeEmptySnapshot(snp: C): Future[Unit] =
+    removeEmptyCollection(snp, snapsIndexName)
 
   private val canSuffixCollectionNamesBuilder: Option[CanSuffixCollectionNames] = suffixBuilderClassOption match {
     case Some(suffixBuilderClass) if !suffixBuilderClass.trim.isEmpty =>
@@ -144,7 +193,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
   /**
     * Convenient methods to retrieve journal name from persistenceId
     */
-  private[mongodb] def getJournalCollectionName(persistenceId: String): String =
+  def getJournalCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => journalCollectionName
       case _ => appendSuffixToName(journalCollectionName)(getSuffixFromPersistenceId(persistenceId))
@@ -153,7 +202,7 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
   /**
     * Convenient methods to retrieve snapshot name from persistenceId
     */
-  private[mongodb] def getSnapsCollectionName(persistenceId: String): String =
+  def getSnapsCollectionName(persistenceId: String): String =
     persistenceId match {
       case "" => snapsCollectionName
       case _ => appendSuffixToName(snapsCollectionName)(getSuffixFromPersistenceId(persistenceId))
@@ -163,13 +212,13 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     * Convenient methods to retrieve EXISTING journal collection from persistenceId.
     * CAUTION: this method does NOT create the journal and its indexes.
     */
-  private[mongodb] def getJournal(persistenceId: String): C = collection(getJournalCollectionName(persistenceId))
+  def getJournal(persistenceId: String): Future[C] = collection(getJournalCollectionName(persistenceId))
 
   /**
     * Convenient methods to retrieve EXISTING snapshot collection from persistenceId.
     * CAUTION: this method does NOT create the snapshot and its indexes.
     */
-  private[mongodb] def getSnaps(persistenceId: String): C = collection(getSnapsCollectionName(persistenceId))
+  def getSnaps(persistenceId: String): Future[C] = collection(getSnapsCollectionName(persistenceId))
 
   private[mongodb] lazy val indexes: Seq[IndexSettings] = Seq(
     IndexSettings(journalIndexName, unique = true, sparse = false, JournallingFieldNames.PROCESSOR_ID -> 1, FROM -> 1, TO -> 1),
@@ -177,11 +226,11 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
     IndexSettings(journalTagIndexName, unique = false, sparse = true, TAGS -> 1)
   )
 
-  private[this] val journalCache = MongoCollectionCache[C](settings.CollectionCache, "journal", actorSystem)
+  private[this] val journalCache = MongoCollectionCache[Future[C]](settings.CollectionCache, "journal", actorSystem)
 
-  private[mongodb] def journal: C = journal("")
+  def journal: Future[C] = journal("")
 
-  private[mongodb] def journal(persistenceId: String)(implicit ec: ExecutionContext): C = {
+  def journal(persistenceId: String): Future[C] = {
     val collectionName = getJournalCollectionName(persistenceId)
 
     journalCache.getOrElseCreate(collectionName, theCollectionName => {
@@ -189,52 +238,56 @@ abstract class MongoPersistenceDriver(as: ActorSystem, config: Config)
 
       indexes.foldLeft(journalCollection) { (acc, index) =>
         import index._
-        ensureIndex(name, unique, sparse, fields: _*)(ec)(acc)
+        acc.flatMap(ensureIndex(name, unique, sparse, fields: _*)(_))
       }
     })
   }
 
-  private[mongodb] def removeJournalInCache(persistenceId: String): Unit = {
+  def removeJournalInCache(persistenceId: String): Unit = {
     val collectionName = getJournalCollectionName(persistenceId)
     journalCache.invalidate(collectionName)
   }
 
-  private[this] val snapsCache = MongoCollectionCache[C](settings.CollectionCache, "snaps", actorSystem)
+  private[this] val snapsCache = MongoCollectionCache[Future[C]](settings.CollectionCache, "snaps", actorSystem)
 
-  private[mongodb] def snaps: C = snaps("")
+  def snaps: Future[C] = snaps("")
 
-  private[mongodb] def snaps(persistenceId: String)(implicit ec: ExecutionContext): C = {
+  def snaps(persistenceId: String): Future[C] = {
     val collectionName = getSnapsCollectionName(persistenceId)
     snapsCache.getOrElseCreate(collectionName, theCollectionName => {
       val snapsCollection = ensureCollection(theCollectionName)
 
-      ensureIndex(snapsIndexName, unique = true, sparse = false,
-        SnapshottingFieldNames.PROCESSOR_ID -> 1,
-        SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
-        TIMESTAMP -> -1)(ec)(snapsCollection)
+      snapsCollection.flatMap(
+        ensureIndex(snapsIndexName, unique = true, sparse = false,
+          SnapshottingFieldNames.PROCESSOR_ID -> 1,
+          SnapshottingFieldNames.SEQUENCE_NUMBER -> -1,
+          TIMESTAMP -> -1)(_)
+      )
     })
   }
 
-  private[mongodb] def removeSnapsInCache(persistenceId: String): Unit = {
+  def removeSnapsInCache(persistenceId: String): Unit = {
     val collectionName = getSnapsCollectionName(persistenceId)
     snapsCache.invalidate(collectionName)
   }
 
-  private[this] val realtimeCache = MongoCollectionCache[C](settings.CollectionCache, "realtime", actorSystem)
+  private[this] val realtimeCache = MongoCollectionCache[Future[C]](settings.CollectionCache, "realtime", actorSystem)
 
-  private[mongodb] def realtime: C =
+  private[mongodb] def realtime: Future[C] =
     realtimeCache.getOrElseCreate(realtimeCollectionName, collectionName => cappedCollection(collectionName))
 
   private[mongodb] val querySideDispatcher = actorSystem.dispatchers.lookup("akka-contrib-persistence-query-dispatcher")
 
-  private[this] val metadataCache = MongoCollectionCache[C](settings.CollectionCache, "metadata", actorSystem)
+  private[this] val metadataCache = MongoCollectionCache[Future[C]](settings.CollectionCache, "metadata", actorSystem)
 
-  private[mongodb] def metadata(implicit ec: ExecutionContext): C =
+  def metadata: Future[C] =
     metadataCache.getOrElseCreate(metadataCollectionName, collectionName => {
       val metadataCollection = ensureCollection(collectionName)
-      ensureIndex("akka_persistence_metadata_pid",
-        unique = true, sparse = true,
-        JournallingFieldNames.PROCESSOR_ID -> 1)(ec)(metadataCollection)
+      metadataCollection.flatMap(
+        ensureIndex("akka_persistence_metadata_pid",
+          unique = true, sparse = true,
+          JournallingFieldNames.PROCESSOR_ID -> 1)(_)
+      )
     })
 
   // useful in some methods in each driver
