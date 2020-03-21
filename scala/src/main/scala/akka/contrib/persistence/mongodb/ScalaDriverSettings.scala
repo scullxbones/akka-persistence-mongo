@@ -4,12 +4,11 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
-import com.mongodb.{Block, ConnectionString}
+import com.mongodb.ConnectionString
 import com.typesafe.config.Config
 import org.mongodb.scala.MongoClientSettings
 import org.mongodb.scala.connection._
 
-import scala.language.implicitConversions
 import scala.util.Try
 
 object ScalaDriverSettings extends ExtensionId[ScalaDriverSettings] with ExtensionIdProvider {
@@ -46,44 +45,34 @@ class ScalaDriverSettings(config: Config) extends OfficialDriverSettings(config)
 
     val bldr: MongoClientSettings.Builder = MongoClientSettings.builder()
       .applyConnectionString(new ConnectionString(uri))
-      .applyToClusterSettings(new Block[ClusterSettings.Builder]{
-        override def apply(t: ClusterSettings.Builder): Unit = {
-          t.serverSelectionTimeout(getLongQueryProperty("serverselectiontimeoutms").getOrElse(ServerSelectionTimeout.toMillis), TimeUnit.MILLISECONDS)
-            .maxWaitQueueSize(getIntQueryProperty("waitqueuemultiple").getOrElse(ThreadsAllowedToBlockforConnectionMultiplier) * getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
-          ()
-        }
+      .applyToClusterSettings((t: ClusterSettings.Builder) => {
+        t.serverSelectionTimeout(getLongQueryProperty("serverselectiontimeoutms").getOrElse(ServerSelectionTimeout.toMillis), TimeUnit.MILLISECONDS)
+          .maxWaitQueueSize(getIntQueryProperty("waitqueuemultiple").getOrElse(ThreadsAllowedToBlockforConnectionMultiplier) * getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
+        ()
       }
-    ).applyToConnectionPoolSettings(new Block[ConnectionPoolSettings.Builder]{
-        override def apply(t: ConnectionPoolSettings.Builder): Unit = {
-          t.maxWaitTime(getLongQueryProperty("waitqueuetimeoutms").getOrElse(MaxWaitTime.toMillis), TimeUnit.MILLISECONDS)
-            .maxConnectionIdleTime(getLongQueryProperty("maxidletimems").getOrElse(MaxConnectionIdleTime.toMillis), TimeUnit.MILLISECONDS)
-            .maxConnectionLifeTime(getLongQueryProperty("maxlifetimems").getOrElse(MaxConnectionLifeTime.toMillis), TimeUnit.MILLISECONDS)
-            .minSize(getIntQueryProperty("minpoolsize").getOrElse(MinConnectionsPerHost))
-            .maxSize(getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
-          ()
-        }
-      }
-    ).applyToServerSettings(new Block[ServerSettings.Builder]{
-        override def apply(t: ServerSettings.Builder): Unit = {
-          t.heartbeatFrequency(getLongQueryProperty("heartbeatfrequencyms").getOrElse(HeartbeatFrequency.toMillis), TimeUnit.MILLISECONDS)
-            .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS) // no 'minHeartbeatFrequency' in ConnectionString
-          ()
-        }
-      }
-    ).applyToSocketSettings(new Block[SocketSettings.Builder] {
-      override def apply(t: SocketSettings.Builder): Unit = {
-          t.connectTimeout(getLongQueryProperty("connecttimeoutms").getOrElse(ConnectTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
-            .readTimeout(getLongQueryProperty("sockettimeoutms").getOrElse(SocketTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
-          ()
-        }
-      }
-    ).applyToSslSettings(new Block[SslSettings.Builder]{
-      override def apply(t: SslSettings.Builder): Unit = {
-          t.enabled(getBooleanQueryProperty("ssl").getOrElse(SslEnabled))
-            .invalidHostNameAllowed(getBooleanQueryProperty("sslinvalidhostnameallowed").getOrElse(SslInvalidHostNameAllowed))
-          ()
-        }
-      }
+    ).applyToConnectionPoolSettings((t: ConnectionPoolSettings.Builder) => {
+      t.maxWaitTime(getLongQueryProperty("waitqueuetimeoutms").getOrElse(MaxWaitTime.toMillis), TimeUnit.MILLISECONDS)
+        .maxConnectionIdleTime(getLongQueryProperty("maxidletimems").getOrElse(MaxConnectionIdleTime.toMillis), TimeUnit.MILLISECONDS)
+        .maxConnectionLifeTime(getLongQueryProperty("maxlifetimems").getOrElse(MaxConnectionLifeTime.toMillis), TimeUnit.MILLISECONDS)
+        .minSize(getIntQueryProperty("minpoolsize").getOrElse(MinConnectionsPerHost))
+        .maxSize(getIntQueryProperty("maxpoolsize").getOrElse(ConnectionsPerHost))
+      ()
+    }
+    ).applyToServerSettings((t: ServerSettings.Builder) => {
+      t.heartbeatFrequency(getLongQueryProperty("heartbeatfrequencyms").getOrElse(HeartbeatFrequency.toMillis), TimeUnit.MILLISECONDS)
+        .minHeartbeatFrequency(MinHeartbeatFrequency.toMillis, TimeUnit.MILLISECONDS) // no 'minHeartbeatFrequency' in ConnectionString
+      ()
+    }
+    ).applyToSocketSettings((t: SocketSettings.Builder) => {
+      t.connectTimeout(getLongQueryProperty("connecttimeoutms").getOrElse(ConnectTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
+        .readTimeout(getLongQueryProperty("sockettimeoutms").getOrElse(SocketTimeout.toMillis).toIntWithoutWrapping, TimeUnit.MILLISECONDS)
+      ()
+    }
+    ).applyToSslSettings((t: SslSettings.Builder) => {
+      t.enabled(getBooleanQueryProperty("ssl").getOrElse(SslEnabled))
+        .invalidHostNameAllowed(getBooleanQueryProperty("sslinvalidhostnameallowed").getOrElse(SslInvalidHostNameAllowed))
+      ()
+    }
     )
 
     if (SslEnabled) {

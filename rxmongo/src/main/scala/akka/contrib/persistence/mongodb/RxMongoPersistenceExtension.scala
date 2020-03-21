@@ -7,16 +7,15 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
 import reactivemongo.api._
 import reactivemongo.api.bson.collection.{BSONCollection, BSONSerializationPack}
-import reactivemongo.api.commands.{Command, CommandError, WriteConcern}
-import reactivemongo.api.indexes.{Index, IndexType}
 import reactivemongo.api.bson.{BSONDocument, _}
+import reactivemongo.api.commands.{CommandError, WriteConcern}
+import reactivemongo.api.indexes.{Index, IndexType}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object RxMongoPersistenceDriver {
@@ -48,9 +47,9 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   val RxMongoSerializers: RxMongoSerializers = RxMongoSerializersExtension(system)
 
   // Collection type
-  type C = Future[BSONCollection]
+  override type C = BSONCollection
 
-  type D = BSONDocument
+  override type D = BSONDocument
 
   private def rxSettings = RxMongoDriverSettings(system.settings)
   private[mongodb] val driver = driverProvider.driver
@@ -61,132 +60,89 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   implicit val waitFor: FiniteDuration = 10.seconds
 
-  private[mongodb] lazy val connection: Future[MongoConnection] =
+  lazy val connection: Future[MongoConnection] =
     driver.connect(parsedMongoUri)
 
-  private[mongodb] def closeConnections(): Unit = {
+  def closeConnections(): Unit = {
     driver.close(5.seconds)
     ()
   }
 
-  private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
-  private[mongodb] def failoverStrategy: FailoverStrategy = {
+  def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
+  def failoverStrategy: FailoverStrategy = {
     val rxMSettings = rxSettings
     FailoverStrategy(
       initialDelay = rxMSettings.InitialDelay,
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
-  private[mongodb] def db(implicit ec: ExecutionContext): Future[DefaultDB] =
+  def db: Future[DefaultDB] =
     for {
       conn <- connection
       db   <- conn.database(name = dbName, failoverStrategy = failoverStrategy)
     } yield db
 
-  private[mongodb] override def collection(name: String)(implicit ec: ExecutionContext) = db.map(_[BSONCollection](name))
+  override def collection(name: String): Future[BSONCollection] =
+    db.map(_[BSONCollection](name))
 
-  private[mongodb] override def ensureCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] =
+  override def ensureCollection(name: String): Future[BSONCollection] =
     ensureCollection(name, _.create())
 
-  private[this] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit])
-                                    (implicit ec: ExecutionContext): Future[BSONCollection] = {
+  private[this] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit]): Future[BSONCollection] =
     for {
       coll <- collection(name)
       _ <- collectionCreator(coll).recover { case CommandError.Code(MongoErrors.NamespaceExists.code) => coll }
     } yield coll
+
+  def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
+  def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
+  def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
+
+  override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*): C => Future[C] = {
+    collection =>
+      val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
+      collection.indexesManager.ensure(Index(BSONSerializationPack)(
+        key = ky,
+        background = true,
+        unique = unique,
+        sparse = sparse,
+        name = Some(indexName),
+        dropDups = true,
+        version = None,
+        partialFilter = None,
+        options = BSONDocument.empty
+      )).map(_ => collection)
   }
 
-  private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
-  private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
-  private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
-
-  private[mongodb] override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*)(implicit ec: ExecutionContext) = { collection =>
-    val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-    collection.flatMap(c => c.indexesManager.ensure(Index(BSONSerializationPack)(
-      key = ky,
-      background = true,
-      unique = unique,
-      sparse = sparse,
-      name = Some(indexName),
-      dropDups = true,
-      version = None,
-      partialFilter = None,
-      options = BSONDocument.empty
-    )).map(_ => c))
-  }
-
-  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext) =
-    for {
-      cc <- ensureCollection(name, _.createCapped(realtimeCollectionSize, None))
-      s <- cc.stats
-      _ <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
-    } yield cc
-
-  private[mongodb] def getCollectionsAsFuture(collectionName: String)(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
-    getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
-  }
-
-  private[mongodb] def getJournalCollections()(implicit ec: ExecutionContext) =
-    getCollectionsAsFuture(journalCollectionName)
-
-  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean])(implicit ec: ExecutionContext): Future[List[BSONCollection]] = {
-    def excluded(name: String): Boolean =
-      name == realtimeCollectionName ||
-        name == metadataCollectionName ||
-        name.startsWith("system.")
-
-    def allPass(name: String): Boolean = true
-
+  def collectionNames: Future[List[String]] =
     for {
       database  <- db
       names     <- database.collectionNames
-      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(allPass)).map(collection))
-    } yield list
-  }
+    } yield names
 
-  private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
-  
-  private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollectionsAsFuture(snapsCollectionName)
+  override def cappedCollection(name: String): Future[C] =
+    for {
+      cc <- ensureCollection(name, _.createCapped(realtimeCollectionSize, None))
+      s  <- cc.stats
+      _  <- if (s.capped) Future.successful(()) else cc.convertToCapped(realtimeCollectionSize, None)
+    } yield cc
 
-  private[mongodb] def removeEmptyJournal(jnl: BSONCollection)(implicit ec: ExecutionContext): Future[Unit] =
-    removeEmptyCollection(jnl, journalIndexName)
-
-  private[mongodb] def removeEmptySnapshot(snp: BSONCollection)(implicit ec: ExecutionContext): Future[Unit] =
-    removeEmptyCollection(snp, snapsIndexName)
-
-  private[this] var mongoVersion: Option[String] = None
-  private[this] def getMongoVersion(implicit ec: ExecutionContext): Future[String] = mongoVersion match {
-    case Some(v) => Future.successful(v)
-    case None =>
+  def getMongoVersionFromBuildInfo: Future[String] =
       db.flatMap { database =>
-        val runner = Command.run(BSONSerializationPack, FailoverStrategy())
-        runner.apply(database, runner.rawCommand(BSONDocument("buildInfo" -> 1)))
+        database.runCommand(BSONDocument("buildInfo" -> 1), FailoverStrategy())
           .one[BSONDocument](ReadPreference.Primary)
           .map(_.getAsOpt[BSONString]("version").getOrElse(BSONString("")).value)
-          .map { v =>
-            mongoVersion = Some(v)
-            v
-          }
       }
-  }
 
-  private[this] def isMongoVersionAtLeast(inputNbs: Int*)(implicit ec: ExecutionContext): Future[Boolean] =
-    getMongoVersion.map {
-      case str if str.isEmpty => false
-      case str =>
-        val versionNbs = str.split('.').map(_.toInt)
-        inputNbs.zip(versionNbs).forall { case (i,v) => v >= i }
-    }
-
-  private[this] def removeEmptyCollection(collection: BSONCollection, indexName: String)(implicit ec: ExecutionContext): Future[Unit] =
+  def removeEmptyCollection(collection: C, indexName: String): Future[Unit] = {
     for {
       // first count, may be inaccurate in cluster environment
       firstCount <- collection.count(None, None, 0, None, ReadConcern.Local)
       // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
       secondCount <- if (firstCount == 0L) {
           for {
-            b36 <- isMongoVersionAtLeast(3,6)
-            count <- if (b36) {
+            version <- mongoVersion
+            count <- if (version.atLeast(ServerVersion.`3.6.0`)) {
                         collection.count(None, None, 0, Some(collection.hint(indexName)), ReadConcern.Majority)
                       } else {
                         collection.count(None, None, 0, None, ReadConcern.Majority)
@@ -196,10 +152,10 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       if secondCount == 0L
       _ <- collection.drop(failIfNotFound = false)
     } yield ()
-  
+  }
 }
 
-class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
+class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension(actorSystem) {
 
   val driverProvider: RxMongoDriverProvider = new RxMongoDriverProvider(actorSystem)
 
@@ -214,7 +170,7 @@ class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersist
     }
 
     override lazy val snapshotter = new RxMongoSnapshotter(driver)
-    override lazy val readJournal = new RxMongoReadJournaller(driver, ActorMaterializer()(actorSystem))
+    override lazy val readJournal = new RxMongoReadJournaller(driver)
   }
 
 }

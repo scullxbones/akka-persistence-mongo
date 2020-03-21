@@ -24,7 +24,7 @@ class MongoExtensionSpec extends BaseUnitTest {
 
 }
 
-class StubbyMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {
+class StubbyMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension(actorSystem) {
 
   case class StubbyConfiguredExtension(config: Config) extends ConfiguredExtension {
     override def journaler: MongoPersistenceJournallingApi = null

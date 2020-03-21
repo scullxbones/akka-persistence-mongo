@@ -1,10 +1,10 @@
 package akka.contrib.persistence.mongodb
 
-import akka.actor.Status
+import akka.actor.{ActorSystem, Status}
 import akka.persistence.query.scaladsl.{CurrentEventsByTagQuery, EventsByTagQuery}
 import akka.persistence.query.{EventEnvelope, Offset, PersistenceQuery}
-import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.{KillSwitches, Materializer}
 import akka.testkit._
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.{Filters => f}
@@ -57,7 +57,7 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
     }
   }
 
-  override implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(1L, Seconds)), interval = scaled(Span(250L, Millis)))
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1L, Seconds)), interval = scaled(Span(250L, Millis)))
 
   def eventsFromAtom(d: Document): List[Document] = {
     d.get(EVENTS)
@@ -80,8 +80,8 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
 
     whichCollection(pid)
       .find(query)
-      .map((d: Document) => eventsFromAtom(d).flatMap(tagsFromEvent).toSet)
       .asScala
+      .map((d: Document) => eventsFromAtom(d).flatMap(tagsFromEvent).toSet)
       .reduceLeftOption(_ ++ _).getOrElse(Set.empty)
   }
 
@@ -90,14 +90,16 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
       f.and(f.eq(PROCESSOR_ID, pid), f.eq(FROM, fromSn))
 
     whichCollection(pid)
-      .find(query).map(tagsFromAtom _).asScala
+      .find(query)
+      .asScala
+      .map(tagsFromAtom)
       .reduceLeftOption(_ ++ _).getOrElse(Set.empty)
   }
 
   def whichCollection(pid: String): MongoCollection[Document] = {
     config(extensionClass).withFallback(ConfigFactory.defaultReference()).getString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class") match {
       case "" => akkaPersistenceJournal
-      case x  => mongoCollection(SuffixCollectionNamesTest.suffixedCollectionName(pid))
+      case _  => mongoCollection(SuffixCollectionNamesTest.suffixedCollectionName(pid))
     }
   }
 
@@ -106,7 +108,7 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
   private val pids = "foo" :: "bar" :: "baz" :: Nil
 
   "Several taggers" should "persist tags" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "tagging-test") { case (as, _) =>
-    implicit val system = as
+    implicit val system: ActorSystem = as
     val respondTo = TestProbe()
     val deathWatch = TestProbe()
     val actorPidPairs = pids.map(pid => pid -> as.actorOf(Taggarific.props(pid),s"tag-$pid"))
@@ -138,8 +140,8 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
   }
 
   "Query by tag" should "return events that are tagged" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "tagging-test") { case (as, _) =>
-    implicit val system = as
-    implicit val am = ActorMaterializer()
+    implicit val system: ActorSystem = as
+    implicit val am: Materializer = Materializer(as)
     val readJournal = PersistenceQuery(system).readJournalFor[CurrentEventsByTagQuery](MongoReadJournal.Identifier)
     val result = readJournal.currentEventsByTag("qux", Offset.noOffset).runWith(Sink.seq)
     val ees = Await.result(result, 5.seconds.dilated)
@@ -148,8 +150,8 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
   }
 
   "Query by tag" should "not return events that don't match tags" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "tagging-test") { case (as, _) =>
-    implicit val system = as
-    implicit val am = ActorMaterializer()
+    implicit val system: ActorSystem = as
+    implicit val am: Materializer = Materializer(as)
     val readJournal = PersistenceQuery(system).readJournalFor[CurrentEventsByTagQuery](MongoReadJournal.Identifier)
     val result = readJournal.currentEventsByTag("foo", Offset.noOffset).runWith(Sink.seq)
     val ees = Await.result(result, 5.seconds.dilated)
@@ -157,8 +159,8 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
   }
 
   "Query by tag" should "not allow unsupported offset types" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "tagging-test") { case (as, _) =>
-    implicit val system = as
-    implicit val am = ActorMaterializer()
+    implicit val system: ActorSystem = as
+    implicit val am: Materializer = Materializer(as)
     val readJournal = PersistenceQuery(system).readJournalFor[CurrentEventsByTagQuery](MongoReadJournal.Identifier)
     intercept[IllegalArgumentException]{
       readJournal.currentEventsByTag("foo", Offset.sequence(1L)).runWith(Sink.seq)
@@ -167,8 +169,8 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
   }
 
   "Current by tag" should "return live events as persisted" in withConfig(config(extensionClass), "akka-contrib-mongodb-persistence-journal", "tagging-test") { case (as, _) =>
-    implicit val system = as
-    implicit val am = ActorMaterializer()
+    implicit val system: ActorSystem = as
+    implicit val am: Materializer = Materializer(as)
     val target = TestProbe()
     val deathWatch = TestProbe()
     val readJournal = PersistenceQuery(system).readJournalFor[EventsByTagQuery](MongoReadJournal.Identifier)
@@ -176,7 +178,7 @@ abstract class JournalTaggingSpec(extensionClass: Class[_], database: String, ex
       readJournal
         .eventsByTag("qux", Offset.noOffset)
         .viaMat(KillSwitches.single)(Keep.right)
-        .toMat(Sink.actorRef(target.ref, "done"))(Keep.left).run()
+        .toMat(Sink.actorRef(target.ref, "done", Status.Failure))(Keep.left).run()
     try {
       target.receiveN(3).map(_.asInstanceOf[EventEnvelope].persistenceId) should contain only(pids:_*)
       val newPa = as.actorOf(Taggarific.props("qux"),"tag-qux")
