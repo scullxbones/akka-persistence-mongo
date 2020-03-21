@@ -23,7 +23,7 @@
 
 * Cross-compiled for 2.11 / 2.12 / 2.13 - Java 8 targeted
 * Bugfixes only
-* Latest release - `2.3.2` ~ compatible with Akka 2.5.12+ (see [#179](https://github.com/scullxbones/akka-persistence-mongo/issues/179) for details)
+* Latest release - `3.0.0` ~ compatible with Akka 2.5.12+ (see [#179](https://github.com/scullxbones/akka-persistence-mongo/issues/179) for details)
 
 ### Using Akka 2.4? Use 1.x Series.
 [![Build Status](https://travis-ci.org/scullxbones/akka-persistence-mongo.svg?branch=akka24)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
