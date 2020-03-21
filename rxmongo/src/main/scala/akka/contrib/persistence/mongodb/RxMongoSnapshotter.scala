@@ -17,10 +17,11 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
   import SnapshottingFieldNames._
   import driver.RxMongoSerializers._
+  import driver.pluginDispatcher
 
   private[this] val writeConcern = driver.snapsWriteConcern
 
-  private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+  override def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long): Future[Option[SelectedSnapshot]] = {
     val selected =
       snaps(pid).flatMap(
         _.find(BSONDocument(
@@ -34,7 +35,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     selected
   }
 
-  private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext) = {
+  override def saveSnapshot(snapshot: SelectedSnapshot): Future[Unit] = {
     val query = BSONDocument(
       PROCESSOR_ID -> snapshot.metadata.persistenceId,
       SEQUENCE_NUMBER -> snapshot.metadata.sequenceNr,
@@ -46,7 +47,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       ).map(_ => ())
   }
 
-  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext) = {
+  override def deleteSnapshot(pid: String, seq: Long, ts: Long): Future[Unit] = {
     val criteria =
       Seq[ElementProducer](PROCESSOR_ID -> pid, SEQUENCE_NUMBER -> seq) ++
         Option[ElementProducer](TIMESTAMP -> ts).filter(_ => ts > 0).toSeq
@@ -62,7 +63,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     }
   }
 
-  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext) = {
+  override def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long): Future[Unit] = {
     for {
       s <- snaps(pid)
       wr <- s.delete()
@@ -79,7 +80,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
     }
   }
 
-  private[this] def snaps(suffix: String)(implicit ec: ExecutionContext): driver.C = {
+  private[this] def snaps(suffix: String): Future[driver.C] = {
     val snaps = driver.getSnaps(suffix)
     snaps.flatMap(_.indexesManager.ensure(Index(BSONSerializationPack)(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),

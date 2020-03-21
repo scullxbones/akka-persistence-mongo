@@ -24,7 +24,7 @@ object CurrentAllEvents {
   def source(driver: ScalaMongoDriver): Source[Event, NotUsed] = {
     import driver.ScalaSerializers._
 
-    Source.fromFuture(driver.journalCollectionsAsFuture)
+    Source.future(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map(
         _.find()
           .projection(include(EVENTS))
@@ -44,7 +44,7 @@ object CurrentAllEvents {
 
 object CurrentPersistenceIds {
   def source(driver: ScalaMongoDriver): Source[String, NotUsed] = {
-    Source.fromFuture(driver.journalCollectionsAsFuture)
+    Source.future(driver.journalCollectionsAsFuture)
       .mapConcat(identity)
       .flatMapConcat(_.aggregate(project(include(PROCESSOR_ID)) :: group(s"$$$PROCESSOR_ID") :: Nil).asAkka)
       .map { doc => Option(doc.getString("_id").getValue).getOrElse("") }
@@ -65,7 +65,7 @@ object CurrentEventsByPersistenceId {
 
     val query = queryFor(persistenceId, fromSeq, toSeq)
 
-    Source.fromFuture(driver.getJournal(persistenceId))
+    Source.future(driver.getJournal(persistenceId))
       .flatMapConcat(
         _.find(query)
           .sort(ascending(TO))
@@ -97,7 +97,7 @@ object CurrentEventsByTag {
     )
 
     Source
-      .fromFuture(driver.journalCollectionsAsFuture)
+      .future(driver.journalCollectionsAsFuture)
       .flatMapConcat(
         _.map(_.find(query).sort(ascending(ID)).asAkka)
          .reduceLeftOption(_ ++ _)
@@ -218,9 +218,9 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver) extends JournalStream[S
     _.cursorType(CursorType.TailableAwait)
      .maxAwaitTime(30.seconds)
 
-  def cursor(query: Option[conversions.Bson]): Source[(Event, Offset),NotUsed] =
+  def cursor(query: Option[conversions.Bson]): Source[(Event, Offset),NotUsed] = {
     if (driver.realtimeEnablePersistence)
-      Source.fromFuture(driver.realtime)
+      Source.future(driver.realtime)
         .flatMapConcat { rt =>
           Source.fromGraph(
             new ScalaDriverRealtimeGraphStage(driver)(maybeLastId => {
@@ -247,15 +247,15 @@ class ScalaDriverJournalStream(driver: ScalaMongoDriver) extends JournalStream[S
         .named("rt-cursor-source")
     else
       Source.empty
+  }
 }
 
-class ScalaDriverPersistenceReadJournaller(driver: ScalaMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
+class ScalaDriverPersistenceReadJournaller(driver: ScalaMongoDriver) extends MongoPersistenceReadJournallingApi {
   val journalStream: ScalaDriverJournalStream = {
     val stream = new ScalaDriverJournalStream(driver)
     driver.actorSystem.registerOnTermination( stream.stopAllStreams() )
     stream
   }
-
 
   override def currentAllEvents(implicit m: Materializer, ec: ExecutionContext): Source[Event, NotUsed] =
     CurrentAllEvents.source(driver)

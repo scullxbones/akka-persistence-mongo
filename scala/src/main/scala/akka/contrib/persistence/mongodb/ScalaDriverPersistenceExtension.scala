@@ -4,7 +4,6 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.contrib.persistence.mongodb.MongoPersistenceDriver.{Acknowledged, Journaled, ReplicaAcknowledged, Unacknowledged, WriteSafety}
-import akka.stream.ActorMaterializer
 import com.mongodb.ConnectionString
 import com.mongodb.client.model.{CreateCollectionOptions, IndexOptions}
 import com.typesafe.config.Config
@@ -13,24 +12,24 @@ import org.mongodb.scala.model.CountOptions
 import org.mongodb.scala.model.Indexes._
 import org.mongodb.scala.{MongoClientSettings, _}
 
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
-import scala.concurrent.{ExecutionContext, Future}
 
 class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersistenceDriver(system, config) {
-  override type C = Future[MongoCollection[D]]
+  override type C = MongoCollection[BsonDocument]
   override type D = BsonDocument
 
   val ScalaSerializers: ScalaDriverSerializers = ScalaDriverSerializersExtension(system)
   val scalaDriverSettings: ScalaDriverSettings = ScalaDriverSettings(system)
 
-  private[this] val mongoClientSettings: MongoClientSettings =
+  val mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
       .configure(mongoUri)
       .applicationName("akka-persistence-mongodb")
       .build()
 
-  private[mongodb] lazy val client = MongoClient(mongoClientSettings)
-  private[mongodb] lazy val db: MongoDatabase = {
+  lazy val client: MongoClient = MongoClient(mongoClientSettings)
+  lazy val db: MongoDatabase = {
     val dbName =
       databaseName.orElse(
         Option(new ConnectionString(mongoUri).getDatabase)
@@ -38,21 +37,21 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
     client.getDatabase(dbName)
   }
 
-  override private[mongodb] def collection(name: String)(implicit ec: ExecutionContext): C =
+  override def collection(name: String): Future[C] =
     Future.successful(db.getCollection(name))
 
-  override private[mongodb] def ensureCollection(name: String)(implicit ec: ExecutionContext): C =
+  override def ensureCollection(name: String): Future[C] =
     ensureCollection(name, db.createCollection)
 
-  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Completed]): C =
+  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Completed]): Future[C] =
     for {
       _ <- collectionCreator(name).toFuture().recover { case MongoErrors.NamespaceExists() => Completed }
       mongoCollection <- collection(name)
     } yield mongoCollection
 
-  private[mongodb] def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
-  private[mongodb] def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
-  private[mongodb] def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
+  def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
+  def snapsWriteConcern: WriteConcern = toWriteConcern(snapsWriteSafety, snapsWTimeout, snapsFsync)
+  def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern =
     (writeSafety, wtimeout.toMillis, fsync) match {
       case (Unacknowledged, w, f)      => WriteConcern.UNACKNOWLEDGED.withWTimeout(w, TimeUnit.MILLISECONDS).withFsync(f)
@@ -61,16 +60,20 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       case (ReplicaAcknowledged, w, f) => WriteConcern.MAJORITY.withWTimeout(w, TimeUnit.MILLISECONDS).withJournal(!f)
     }
 
-  override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): C = {
+  override def cappedCollection(name: String): Future[C] = {
     val cappedCollectionCreator = (ccName: String) =>
       db.createCollection(ccName, new CreateCollectionOptions().capped(true).sizeInBytes(realtimeCollectionSize))
-    for {
-      collection <- ensureCollection(name, cappedCollectionCreator)
-      capped <- isCappedCollection(name)
-      cc <- if (capped) Future.successful(collection) else for {
+
+    def recreate(collection: C): Future[C] =
+      for {
         _ <- collection.drop().toFuture()
         recreatedCappedCollection <- ensureCollection(name, cappedCollectionCreator)
       } yield recreatedCappedCollection
+
+    for {
+      collection  <- ensureCollection(name, cappedCollectionCreator)
+      capped      <- isCappedCollection(name)
+      cc          <- if (capped) Future.successful(collection) else recreate(collection)
     } yield cc
   }
 
@@ -79,54 +82,12 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       .toFuture()
       .map(stats => stats.get("capped").exists(_.asBoolean.getValue))
 
-  private[mongodb] def getCollectionsAsFuture(collectionName: String): Future[List[MongoCollection[D]]] = {
-    getAllCollectionsAsFuture(Option(_.startsWith(collectionName)))
-  }
+  override def collectionNames: Future[List[String]] =
+    db.listCollectionNames().toFuture().map(_.toList)
 
-  private[mongodb] def getAllCollectionsAsFuture(nameFilter: Option[String => Boolean]): Future[List[MongoCollection[D]]] = {
-    def excluded(name: String): Boolean =
-      name == realtimeCollectionName ||
-        name == metadataCollectionName ||
-        name.startsWith("system.")
-
-    def passAll(name: String): Boolean = true
-
-    for {
-      names <-  db.listCollectionNames().toFuture()
-      list  =   names.filterNot(excluded).filter(nameFilter.getOrElse(passAll))
-      xs    <-  Future.sequence(list.map(collection))
-    } yield xs.toList
-  }
-
-  private[mongodb] def journalCollectionsAsFuture = getCollectionsAsFuture(journalCollectionName)
-
-  private[mongodb] def snapshotCollectionsAsFuture = getCollectionsAsFuture(snapsCollectionName)
-
-  private[mongodb] def removeEmptyJournal(jnl: MongoCollection[D]): Future[Unit] =
-    removeEmptyCollection(jnl, journalIndexName)
-
-  private[mongodb] def removeEmptySnapshot(snp: MongoCollection[D]): Future[Unit] =
-    removeEmptyCollection(snp, snapsIndexName)
-
-  private[this] var mongoVersion: Option[String] = None
-  private[this] def getMongoVersion: Future[String] = mongoVersion match {
-    case Some(v) => Future.successful(v)
-    case None =>
-      db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
-        .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
-        .map { v =>
-          mongoVersion = Some(v)
-          v
-        }
-  }
-
-  private[this] def isMongoVersionAtLeast(inputNbs: Int*): Future[Boolean] =
-    getMongoVersion.map {
-        case str if str.isEmpty => false
-        case str =>
-          val versionNbs = str.split('.').map(_.toInt)
-          inputNbs.zip(versionNbs).forall { case (i,v) => v >= i }
-      }
+  override def getMongoVersionFromBuildInfo: Future[String] =
+    db.runCommand(BsonDocument("buildInfo" -> 1)).toFuture()
+      .map(_.get("version").getOrElse(BsonString("")).asString().getValue)
 
   private[this] def getLocalCount(collection: MongoCollection[D]): Future[Long] = {
     db.runCommand(BsonDocument("count" -> s"${collection.namespace.getCollectionName}", "readConcern" -> BsonDocument("level" -> "local")))
@@ -144,11 +105,11 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
         }
     } yield indexKey
 
-  private[this] def removeEmptyCollection(collection: MongoCollection[D], indexName: String): Future[Unit] =
+  override def removeEmptyCollection(collection: MongoCollection[D], indexName: String): Future[Unit] =
     for {
-      b403 <- isMongoVersionAtLeast(4,0,3)
+      version <- mongoVersion
       // first count, may be inaccurate in cluster environment
-      firstCount <- if (b403) {
+      firstCount <- if (version.atLeast(ServerVersion.`4.0`("3"))) {
           collection.estimatedDocumentCount().toFuture()
         } else {
           getLocalCount(collection)
@@ -156,9 +117,8 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
       // just to be sure: second count, always accurate and should be fast as we are pretty sure the result is zero
       secondCount <- if (firstCount == 0L) {
           for {
-            b36 <- isMongoVersionAtLeast(3,6)
             indexKey <- getIndexAsBson(collection, indexName)
-            count <- if (b36) {
+            count <- if (version.atLeast(ServerVersion.`3.6.0`)) {
                 indexKey.fold(collection.countDocuments())(index =>
                   collection.countDocuments(BsonDocument(), CountOptions().hint(index))
                 ).toFuture()
@@ -168,24 +128,24 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
         _ = if (secondCount == 0L) collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
     } yield ()
 
-  override private[mongodb] def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*)(implicit ec: ExecutionContext): C => C = { collection =>
-    for {
-      c <- collection
-      _ <- c.createIndex(
-        compoundIndex(fields.map {
-          case (name, d) if d > 0 => ascending(name)
-          case (name, _) => descending(name)
-        }: _*),
-        new IndexOptions().unique(unique).sparse(sparse).name(indexName)
-      ).toFuture()
-    } yield c
+  override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*): C => Future[C] = {
+    collection =>
+      for {
+        _ <- collection.createIndex(
+          compoundIndex(fields.map {
+            case (name, d) if d > 0 => ascending(name)
+            case (name, _) => descending(name)
+          }: _*),
+          new IndexOptions().unique(unique).sparse(sparse).name(indexName)
+        ).toFuture()
+      } yield collection
   }
 
-  override private[mongodb] def closeConnections(): Unit =
+  override def closeConnections(): Unit =
     client.close()
 }
 
-class ScalaDriverPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension {
+class ScalaDriverPersistenceExtension(val actorSystem: ActorSystem) extends MongoPersistenceExtension(actorSystem) {
 
   override def configured(config: Config): Configured = Configured(config)
 
@@ -198,7 +158,7 @@ class ScalaDriverPersistenceExtension(val actorSystem: ActorSystem) extends Mong
     }
     override lazy val snapshotter = new ScalaDriverPersistenceSnapshotter(driver)
 
-    override lazy val readJournal = new ScalaDriverPersistenceReadJournaller(driver, ActorMaterializer()(actorSystem))
+    override lazy val readJournal = new ScalaDriverPersistenceReadJournaller(driver)
   }
 
 }
