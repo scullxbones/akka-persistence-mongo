@@ -216,9 +216,9 @@ class ScalaDriverPersistenceJournaller(val driver: ScalaMongoDriver) extends Mon
     journal.flatMap(_.find(BsonDocument(PROCESSOR_ID -> pid))
       .projection(BsonDocument(TO -> 1))
       .sort(BsonDocument(
-        TO -> -1,
-        // this is a workaround for DocumentDB as it would otherwise sort on the compound index due to different optimizations. has no negative effect on MongoDB
-        PROCESSOR_ID -> 1
+        // the PROCESSOR_ID is a workaround for DocumentDB as it would otherwise sort on the compound index due to different optimizations. has no negative effect on MongoDB
+        PROCESSOR_ID -> 1,
+        TO -> -1
       ))
       .first()
       .toFutureOption()
