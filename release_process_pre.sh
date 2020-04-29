@@ -22,7 +22,7 @@ echo $PREVIOUS | grep -E -q '^v[0-9]+\.[0-9]+\.[0-9]+$' || die "Previous version
 echo $NEXT | grep -E -q '^v[0-9]+\.[0-9]+\.[0-9]+$' || die "Next version must follow pattern v#.#.#, was $NEXT"
 
 sed -i '' -e "s/$PREVIOUS_WO_V/$NEXT_WO_V/" README.md
-sed -i '' -e "s/$PREVIOUS_WO_V/$NEXT_WO_V/" docs/akka25.md
+sed -i '' -e "s/$PREVIOUS_WO_V/$NEXT_WO_V/" docs/akka26.md
 sed -i '' -e "s/^val releaseV = \"$PREVIOUS_WO_V\"$/val releaseV = \"$NEXT_WO_V\"/" build.sbt
 
 read -r -d '' BLOCK <<SECTION
@@ -31,7 +31,7 @@ read -r -d '' BLOCK <<SECTION
 
 SECTION
 
-perl -ni -e "print; print \"\n$BLOCK\n\" if $. == 1" docs/changelog25.md
+perl -ni -e "print; print \"\n$BLOCK\n\" if $. == 1" docs/changelog26.md
 
 git add .
 git commit -m 'Prepare for '$NEXT' release' -S
@@ -52,6 +52,7 @@ API_JSON
 
 curl -v -H "Content-Type: application/json" -XPOST \
     -d @api.json \
-    https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN
+    -H 'Authorization: token $GH_TOKEN'  \
+    https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases
 
 rm api.json

@@ -8,15 +8,13 @@ services:
    - docker
 language: scala
 scala:
-   - 2.11.12
-   - 2.12.9
-   - 2.13.0
+   - 2.12.10
+   - 2.13.1
 env:
   matrix:
-    - MONGODB_VERSION=3.0 MONGODB_OPTS="--storageEngine wiredTiger"
-    - MONGODB_VERSION=3.2 MONGODB_OPTS="--storageEngine wiredTiger"
-    - MONGODB_VERSION=3.4 MONGODB_OPTS="--storageEngine wiredTiger"
     - MONGODB_VERSION=3.6 MONGODB_OPTS="--storageEngine wiredTiger --bind_ip_all"
+    - MONGODB_VERSION=4.0 MONGODB_OPTS="--storageEngine wiredTiger --bind_ip_all"
+    - MONGODB_VERSION=4.2 MONGODB_OPTS="--storageEngine wiredTiger --bind_ip_all"
   global:
     - MONGODB_AUTH_PORT=28117
     - MONGODB_NOAUTH_PORT=27117

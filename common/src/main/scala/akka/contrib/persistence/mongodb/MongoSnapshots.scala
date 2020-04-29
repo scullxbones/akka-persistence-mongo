@@ -1,24 +1,23 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.Actor
-import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.persistence.snapshot.SnapshotStore
+import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import com.typesafe.config.Config
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 class MongoSnapshots(config: Config) extends SnapshotStore {
 
   private[this] val impl = MongoPersistenceExtension(context.system)(config).snapshotter
-  private[this] implicit val ec = context.dispatcher
-  
+
   /**
    * Plugin API: asynchronously loads a snapshot.
    *
    * @param processorId processor id.
    * @param criteria selection criteria for loading.
    */
-  override def loadAsync(processorId: String, criteria: SnapshotSelectionCriteria) = 
+  override def loadAsync(processorId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] =
     impl.findYoungestSnapshotByMaxSequence(processorId, criteria.maxSequenceNr, criteria.maxTimestamp)
 
   /**
@@ -27,7 +26,7 @@ class MongoSnapshots(config: Config) extends SnapshotStore {
    * @param metadata snapshot metadata.
    * @param snapshot snapshot.
    */
-  override def saveAsync(metadata: SnapshotMetadata, snapshot: Any) = 
+  override def saveAsync(metadata: SnapshotMetadata, snapshot: Any): Future[Unit] =
     impl.saveSnapshot(SelectedSnapshot(metadata,snapshot))
 
   /**
@@ -71,11 +70,11 @@ trait SnapshottingFieldNames {
 object SnapshottingFieldNames extends SnapshottingFieldNames
 
 trait MongoPersistenceSnapshottingApi {
-  private[mongodb] def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Option[SelectedSnapshot]]
+  def findYoungestSnapshotByMaxSequence(pid: String, maxSeq: Long, maxTs: Long): Future[Option[SelectedSnapshot]]
 
-  private[mongodb] def saveSnapshot(snapshot: SelectedSnapshot)(implicit ec: ExecutionContext): Future[Unit]
+  def saveSnapshot(snapshot: SelectedSnapshot): Future[Unit]
   
-  private[mongodb] def deleteSnapshot(pid: String, seq: Long, ts: Long)(implicit ec: ExecutionContext): Future[Unit]
+  def deleteSnapshot(pid: String, seq: Long, ts: Long): Future[Unit]
   
-  private[mongodb] def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long)(implicit ec: ExecutionContext): Future[Unit]
+  def deleteMatchingSnapshots(pid: String, maxSeq: Long, maxTs: Long): Future[Unit]
 }

@@ -8,7 +8,7 @@ package akka.contrib.persistence.mongodb
 import akka.actor.{ActorSystem, Props}
 import akka.contrib.persistence.mongodb.RxStreamsInterop._
 import akka.persistence.PersistentActor
-import akka.stream.ActorMaterializer
+import akka.stream.Materializer
 import akka.stream.scaladsl.{Sink, Source}
 import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
@@ -17,8 +17,6 @@ import org.scalatest.BeforeAndAfterAll
 import scala.concurrent.{Await, Future, Promise}
 
 class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll {
-
-  import scala.concurrent.ExecutionContext.Implicits.global
 
   override def embedDB = s"migrate-to-suffixed-collections-test"
 
@@ -42,7 +40,7 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
     $extendedConfig
    |""".stripMargin).withFallback(ConfigFactory.defaultReference())
 
-  def props(id: String, promise: Promise[Unit]) = Props(new Persistent(id, promise))
+  def props(id: String, promise: Promise[Unit]): Props = Props(new Persistent(id, promise))
 
   case class Append(s: String)
 
@@ -69,7 +67,7 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
 
     // Populate database
     val system1: ActorSystem = ActorSystem("prepare-migration", config())
-    implicit val mat1: ActorMaterializer = ActorMaterializer()(system1)
+    implicit val mat1: Materializer = Materializer(system1)
     val ec1 = system1.dispatcher
 
     val promises = ("foo1" :: "foo2" :: "foo3" :: "foo4" :: "foo5" :: Nil).map(id => id -> Promise[Unit]())
@@ -79,12 +77,12 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
     ars foreach (_ ! end)
 
     val futures = promises.map { case (_, p) => p.future }
-    val count = Await.result(Future.fold(futures)(0) { case (cnt, _) => cnt + 1 }(ec1), 10.seconds.dilated(system1))
+    val count = Await.result(Future.foldLeft(futures)(0) { case (cnt, _) => cnt + 1 }(ec1), 10.seconds.dilated(system1))
     count shouldBe 5
 
     val underTest1 = new ScalaMongoDriver(system1, config())
     Await.result(
-      Source.fromFuture(underTest1.journal)
+      Source.future(underTest1.journal)
         .flatMapConcat(_.countDocuments().asAkka)
         .runWith(Sink.head)(mat1),
       10.seconds.dilated(system1)) shouldBe 5
@@ -96,10 +94,9 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
     // perform heavy load migration
     val configExtension = SuffixCollectionNamesTest.extendedConfig
     val system2 = ActorSystem("migration", config(configExtension))
-    implicit val mat2: ActorMaterializer = ActorMaterializer()(system2)
-    val ec2 = system2.dispatcher
+    implicit val mat2: Materializer = Materializer(system2)
 
-    val migrate = new ScalaDriverMigrateToSuffixedCollections(system2)
+    val migrate = new ScalaDriverMigrateToSuffixedCollections()(system2)
     Await.ready(migrate.migrateToSuffixCollections, 10.seconds.dilated(system2))
 
     system2.terminate()
@@ -107,12 +104,12 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
 
     // checking...
     val system3 = ActorSystem("check-migration", config(configExtension))
-    implicit val mat3: ActorMaterializer = ActorMaterializer()(system3)
+    implicit val mat3: Materializer = Materializer(system3)
     val ec3 = system3.dispatcher
 
     val underTest3 = new ScalaMongoDriver(system3, config(configExtension))
     Await.result(
-      Source.fromFuture(underTest3.journal)
+      Source.future(underTest3.journal)
         .flatMapConcat(_.countDocuments().asAkka)
         .runWith(Sink.head)(mat3),
       10.seconds.dilated(system3)) shouldBe 0
@@ -130,13 +127,13 @@ class ScalaDriverMigrateToSuffixedCollectionsHeavyLoadSpec extends BaseUnitTest 
 
     (1 to 5) foreach { id =>
       Await.result(
-        Source.fromFuture(underTest3.getJournal(s"foo$id"))
+        Source.future(underTest3.getJournal(s"foo$id"))
           .flatMapConcat(_.countDocuments(org.mongodb.scala.model.Filters.equal(PROCESSOR_ID, s"foo$id")).asAkka)
           .runWith(Sink.head)(mat3),
         10.seconds.dilated(system3)) shouldBe 1
       (1 to 5) filterNot (_ == id) foreach { otherId =>
         Await.result(
-          Source.fromFuture(underTest3.getJournal(s"foo$otherId"))
+          Source.future(underTest3.getJournal(s"foo$otherId"))
             .flatMapConcat(_.countDocuments(org.mongodb.scala.model.Filters.equal(PROCESSOR_ID, s"foo$id")).asAkka)
             .runWith(Sink.head)(mat3),
           10.seconds.dilated(system3)) shouldBe 0

@@ -1,17 +1,17 @@
 package akka.contrib.persistence.mongodb
 
 import akka.actor.ActorSystem
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.stream.Materializer
 import akka.stream.scaladsl._
 import com.typesafe.config.ConfigFactory
-import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.{BeforeAndAfterEach, Suite}
 
 trait AkkaStreamFixture extends BeforeAndAfterEach {
   self: Suite =>
 
   private var _system: ActorSystem = _
-  private var _materializer: ActorMaterializer = _
+  private var _materializer: Materializer = _
 
   private def config = ConfigFactory.parseString(
     """
@@ -25,7 +25,7 @@ trait AkkaStreamFixture extends BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     _system = ActorSystem(s"test-${System.currentTimeMillis()}", config)
-    _materializer = ActorMaterializer()
+    _materializer = Materializer(_system)
   }
 
   override protected def afterEach(): Unit = {

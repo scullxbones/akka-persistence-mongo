@@ -9,15 +9,14 @@
 
 package akka.contrib.persistence.mongodb
 
-import akka.actor.ActorSystem
+import akka.NotUsed
 import akka.persistence._
 import akka.stream.scaladsl.{Flow, Sink, Source}
-import akka.stream.{ActorMaterializer, Materializer}
 import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
 import reactivemongo.api.bson.collection.BSONCollection
-import reactivemongo.api.commands.{LastError, WriteResult}
 import reactivemongo.api.bson.{BSONDocument, _}
+import reactivemongo.api.commands.{LastError, WriteResult}
 
 import scala.collection.immutable.Seq
 import scala.concurrent._
@@ -28,14 +27,15 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   import JournallingFieldNames._
   import driver.RxMongoSerializers._
+  import driver.{materializer, pluginDispatcher}
 
   protected val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private[this] def journal(implicit ec: ExecutionContext) = driver.journal
+  private[this] def journal = driver.journal
 
-  private[this] def realtime(implicit ec: ExecutionContext) = driver.realtime
+  private[this] def realtime = driver.realtime
 
-  private[this] def metadata(implicit ec: ExecutionContext) = driver.metadata
+  private[this] def metadata = driver.metadata
 
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
     BSONDocument(
@@ -44,16 +44,13 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       FROM -> BSONDocument("$lte" -> to)
     )
 
-  private[this] implicit val system: ActorSystem = driver.actorSystem
-  private[this] implicit val materializer: Materializer = ActorMaterializer()
-
   private[this] val writeConcern = driver.journalWriteConcern
 
-  private[mongodb] def journalRange(pid: String, from: Long, to: Long, max: Int)(implicit ec: ExecutionContext) = { //Enumerator.flatten
+  def journalRange(pid: String, from: Long, to: Long, max: Int): Source[Event, NotUsed] = { //Enumerator.flatten
     val journal = driver.getJournal(pid)
     val source =
       Source
-        .fromFuture(journal)
+        .future(journal)
         .flatMapConcat(
           _.find(journalRangeQuery(pid, from, to), Option(BSONDocument(EVENTS -> 1)))
             .sort(BSONDocument(TO -> 1))
@@ -80,7 +77,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
   }
 
-  private[this] def doBatchAppend(batch: Seq[Try[BSONDocument]], collection: Future[BSONCollection])(implicit ec: ExecutionContext): Future[Seq[Try[BSONDocument]]] = {
+  private[this] def doBatchAppend(batch: Seq[Try[BSONDocument]], collection: Future[BSONCollection]): Future[Seq[Try[BSONDocument]]] = {
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
       collection.flatMap(_.insert(ordered = true).many(collected).map(_ => batch))
@@ -93,7 +90,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     }
   }
 
-  private[mongodb] override def batchAppend(writes: Seq[AtomicWrite])(implicit ec: ExecutionContext): Future[Seq[Try[Unit]]] = {
+  override def batchAppend(writes: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     val batchFuture = if (driver.useSuffixedCollectionNames) {
       val fZero = Future.successful(Seq.empty[Try[BSONDocument]])
 
@@ -126,10 +123,9 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       }.map(squashToUnit)
     else
       batchFuture.map(squashToUnit)
-
   }
 
-  private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Option[Long]] = {
+  private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long): Future[Option[Long]] = {
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
       import j.aggregationFramework.{GroupField, Match, MaxField}
 
@@ -149,7 +145,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     } yield rez
   }
 
-  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long)(implicit ec: ExecutionContext): Future[Unit] = {
+  private[this] def setMaxSequenceMetadata(persistenceId: String, maxSequenceNr: Long): Future[Unit] = {
     for {
       md <- metadata
       _ <- md.update(ordered = false, writeConcern).one(
@@ -171,7 +167,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     } yield ()
   }
 
-  private[mongodb] override def deleteFrom(persistenceId: String, toSequenceNr: Long)(implicit ec: ExecutionContext) = {
+  override def deleteFrom(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
     for {
       journal <- driver.getJournal(persistenceId)
       ms <- findMaxSequence(persistenceId, toSequenceNr)
@@ -211,7 +207,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     }
   }
 
-  private[this] def maxSequenceFromMetadata(pid: String)(previous: Option[Long])(implicit ec: ExecutionContext): Future[Option[Long]] = {
+  private[this] def maxSequenceFromMetadata(pid: String)(previous: Option[Long]): Future[Option[Long]] = {
     previous.fold(
       metadata.flatMap(_.find(BSONDocument(PROCESSOR_ID -> pid), Option(BSONDocument(MAX_SN -> 1)))
         .cursor[BSONDocument]()
@@ -219,10 +215,14 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
         .map(d => d.flatMap(_.getAsOpt[Long](MAX_SN)))))(l => Future.successful(Option(l)))
   }
 
-  private[mongodb] override def maxSequenceNr(pid: String, from: Long)(implicit ec: ExecutionContext): Future[Long] = {
+  override def maxSequenceNr(pid: String, from: Long): Future[Long] = {
     val journal = driver.getJournal(pid)
     journal.flatMap(_.find(BSONDocument(PROCESSOR_ID -> pid), Option(BSONDocument(TO -> 1)))
-      .sort(BSONDocument(TO -> -1))
+      .sort(BSONDocument(
+        // the PROCESSOR_ID is a workaround for DocumentDB as it would otherwise sort on the compound index due to different optimizations. has no negative effect on MongoDB
+        PROCESSOR_ID -> 1,
+        TO -> -1
+      ))
       .cursor[BSONDocument]()
       .headOption
       .map(d => d.flatMap(_.getAsOpt[Long](TO)))
@@ -230,7 +230,7 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       .map(_.getOrElse(0L)))
   }
 
-  private[mongodb] override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit)(implicit ec: ExecutionContext) =
+  override def replayJournal(pid: String, from: Long, to: Long, max: Long)(replayCallback: PersistentRepr ⇒ Unit): Future[Unit] =
     if (max == 0L) Future.successful(())
     else {
       val maxInt = max.toIntWithoutWrapping

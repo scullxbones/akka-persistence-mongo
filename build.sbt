@@ -1,48 +1,39 @@
-val releaseV = "2.3.2"
+val releaseV = "3.0.0"
 
-val scala211V = "2.11.12"
 val scala212V = "2.12.10"
 val scala213V = "2.13.1"
 
-val scalaV = scala211V
-
-
-val LegacyAkkaV = "2.5.12" //min version to have Serialization.withTransportInformation
-val LatestAkkaV = "2.5.27"
-def akkaV(sv: String): String = sv match {
-  case "2.11" => LegacyAkkaV
-  case _ => LatestAkkaV
-}
+val scalaV = scala212V
+val akkaV = "2.6.1"
 
 val MongoJavaDriverVersion = "3.12.0"
 
-def commonDeps(sv:String) = Seq(
-  ("com.typesafe.akka"  %% "akka-persistence" % akkaV(sv))
+val commonDeps = Seq(
+  ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  (sv match {
-    case "2.11"          => "nl.grons" %% "metrics4-akka_a24" % "4.1.1"
-    case "2.12" | "2.13" => "nl.grons" %% "metrics4-akka_a25" % "4.0.8"
-  })
+  ("nl.grons" %% "metrics4-akka_a25" % "4.0.8")
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12")
     .exclude("com.typesafe.akka", "akka-actor_2.13"),
-  "com.typesafe.akka"         %% "akka-persistence-query"   % akkaV(sv) % "compile",
-  "com.typesafe.akka"         %% "akka-persistence"         % akkaV(sv) % "compile",
-  "com.typesafe.akka"         %% "akka-actor"               % akkaV(sv) % "compile",
+  "com.typesafe.akka"         %% "akka-persistence-query"   % akkaV     % "compile",
+  "com.typesafe.akka"         %% "akka-persistence"         % akkaV     % "compile",
+  "com.typesafe.akka"         %% "akka-actor"               % akkaV     % "compile",
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.30"  % "test",
-  "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.0"  % "test",
-  "org.apache.logging.log4j"  % "log4j-core"                % "2.13.0"  % "test",
-  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.0"  % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.2"  % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % "2.13.2"  % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.2"  % "test",
   "org.scalatest"             %% "scalatest"                % "3.0.8"   % "test",
-  "junit"                     % "junit"                     % "4.12"    % "test",
+//  "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
+//  "org.scalatestplus"         %% "junit-4-12"               % "3.1.0.0" % "test",
+  "junit"                     % "junit"                     % "4.13"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
-  "com.typesafe.akka"         %% "akka-slf4j"               % akkaV(sv) % "test",
-  "com.typesafe.akka"         %% "akka-testkit"             % akkaV(sv) % "test",
-  "com.typesafe.akka"         %% "akka-persistence-tck"     % akkaV(sv) % "test",
-  "com.typesafe.akka"         %% "akka-cluster-sharding"    % akkaV(sv) % "test"
+  "com.typesafe.akka"         %% "akka-slf4j"               % akkaV     % "test",
+  "com.typesafe.akka"         %% "akka-testkit"             % akkaV     % "test",
+  "com.typesafe.akka"         %% "akka-persistence-tck"     % akkaV     % "test",
+  "com.typesafe.akka"         %% "akka-cluster-sharding"    % akkaV     % "test"
 )
 
 lazy val Travis = config("travis").extend(Test)
@@ -53,12 +44,12 @@ ThisBuild / scalaVersion := scalaV
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
-  crossScalaVersions := Seq(scala211V, scala212V, scala213V),
-  libraryDependencies ++= commonDeps(scalaBinaryVersion.value),
+  crossScalaVersions := Seq(scala212V, scala213V),
+  libraryDependencies ++= commonDeps,
   dependencyOverrides ++= Seq(
     "com.typesafe" % "config" % "1.3.2",
     "org.slf4j" % "slf4j-api" % "1.7.30",
-    "com.typesafe.akka" %% "akka-stream" % akkaV(scalaBinaryVersion.value),
+    "com.typesafe.akka" %% "akka-stream" % akkaV,
     "org.mongodb" % "mongo-java-driver" % MongoJavaDriverVersion
   ),
   version := releaseV,
@@ -89,10 +80,10 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "https://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  parallelExecution in Test := true,
+  parallelExecution in Test := false,
   testOptions in Test += Tests.Argument("-oDS"),
   testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
-  fork in Test := true,
+  fork in Test := false,
   publishTo := sonatypePublishTo.value,
   publishConfiguration := publishConfiguration.value.withOverwrite(true),
   publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
@@ -102,27 +93,16 @@ lazy val `akka-persistence-mongo-common` = (project in file("common"))
   .settings(commonSettings:_*)
   .configs(Travis)
 
-lazy val `akka-persistence-mongo-casbah` = (project in file("casbah"))
-  .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
-  .settings(crossScalaVersions := Seq(scala211V, scala212V)) // not available for 2.13
-  .settings(
-    libraryDependencies ++= Seq(
-      "org.mongodb" %% "casbah" % "3.1.1" % "compile"
-    )
-  )
-  .configs(Travis)
-
 lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.9.0"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.9.0"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.44.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.44.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.44.Final" % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.8.0"        % "compile",
+      "io.netty"          % "netty-buffer"        % "4.1.49.Final" % "compile",
+      "io.netty"          % "netty-transport"     % "4.1.49.Final" % "compile",
+      "io.netty"          % "netty-handler"       % "4.1.49.Final" % "compile",
       "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     )
   )
@@ -134,7 +114,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "0.19.5" % "compile")
+        .map("org.reactivemongo" %% _ % "0.19.7" % "compile")
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")
@@ -154,7 +134,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .configs(Travis)
 
 lazy val `akka-persistence-mongo` = (project in file("."))
-  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-casbah`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
+  .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
   .settings(
     crossScalaVersions := Nil,
     skip in publish := true,

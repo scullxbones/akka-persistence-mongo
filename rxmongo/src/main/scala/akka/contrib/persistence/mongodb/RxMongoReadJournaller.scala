@@ -23,9 +23,8 @@ import scala.util.Random
 object CurrentAllEvents {
   def source(driver: RxMongoDriver)(implicit m: Materializer): Source[Event, NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
-    Source.fromFuture(driver.journalCollectionsAsFuture)
+    Source.future(driver.journalCollectionsAsFuture)
       .flatMapConcat(_.map { c =>
         c.find(BSONDocument(), Option(BSONDocument(EVENTS -> 1)))
           .cursor[BSONDocument]()
@@ -47,7 +46,7 @@ object CurrentPersistenceIds {
     implicit val ec: ExecutionContext = driver.querySideDispatcher
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
-    Source.fromFuture(for {
+    Source.future(for {
         collections <- driver.journalCollectionsAsFuture
         tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
                           import c.aggregationFramework.{Group, Out, Project}
@@ -86,11 +85,10 @@ object CurrentEventsByPersistenceId {
 
   def source(driver: RxMongoDriver, persistenceId: String, fromSeq: Long, toSeq: Long)(implicit m: Materializer): Source[Event, NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val query = queryFor(persistenceId, fromSeq, toSeq)
 
-    Source.fromFuture(driver.getJournal(persistenceId))
+    Source.future(driver.getJournal(persistenceId))
             .flatMapConcat(
               _.find(query, Option(BSONDocument(EVENTS -> 1)))
                 .sort(BSONDocument(TO -> 1))
@@ -109,7 +107,6 @@ object CurrentEventsByPersistenceId {
 object CurrentEventsByTag {
   def source(driver: RxMongoDriver, tag: String, fromOffset: Offset)(implicit m: Materializer): Source[(Event, Offset), NotUsed] = {
     import driver.RxMongoSerializers._
-    implicit val ec: ExecutionContext = driver.querySideDispatcher
 
     val offset = fromOffset match {
       case NoOffset => None
@@ -119,7 +116,7 @@ object CurrentEventsByTag {
       TAGS -> tag
     ) ++ offset.fold(BSONDocument.empty)(id => BSONDocument(ID -> BSONDocument("$gt" -> id)))
 
-    Source.fromFuture(driver.journalCollectionsAsFuture)
+    Source.future(driver.journalCollectionsAsFuture)
           .flatMapConcat{ xs =>
             xs.map(c =>
               c.find(query, Option.empty[BSONDocument])
@@ -205,7 +202,7 @@ class RxMongoRealtimeGraphStage(driver: RxMongoDriver, bufsz: Int = 16)(factory:
           }
         }
 
-        override def onDownstreamFinish(): Unit = {
+        override def onDownstreamFinish(cause: Throwable): Unit = {
           subscription.foreach(_.cancel())
           completeStage()
         }
@@ -227,7 +224,7 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
 
   def cursor(query: Option[BSONDocument]): Source[(Event, Offset),NotUsed] =
     if (driver.realtimeEnablePersistence)
-      Source.fromFuture(driver.realtime)
+      Source.future(driver.realtime)
         .flatMapConcat { rt =>
           Source.fromGraph(
             new RxMongoRealtimeGraphStage(driver)(maybeId => {
@@ -257,7 +254,7 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
       Source.empty
 }
 
-class RxMongoReadJournaller(driver: RxMongoDriver, m: Materializer) extends MongoPersistenceReadJournallingApi {
+class RxMongoReadJournaller(driver: RxMongoDriver)(implicit m: Materializer) extends MongoPersistenceReadJournallingApi {
 
   val journalStream: RxMongoJournalStream = {
     val stream = new RxMongoJournalStream(driver)(m)
