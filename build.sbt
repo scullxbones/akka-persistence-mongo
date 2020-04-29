@@ -1,10 +1,10 @@
 val releaseV = "3.0.0"
 
-val scala212V = "2.12.10"
-val scala213V = "2.13.1"
+val scala212V = "2.12.11"
+val scala213V = "2.13.2"
 
-val scalaV = scala212V
-val akkaV = "2.6.1"
+val scalaV = scala213V
+val akkaV = "2.6.4"
 
 val MongoJavaDriverVersion = "3.12.0"
 
@@ -12,7 +12,7 @@ val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  ("nl.grons" %% "metrics4-akka_a25" % "4.0.8")
+  ("nl.grons" %% "metrics4-akka_a25" % "4.1.5")
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12")
     .exclude("com.typesafe.akka", "akka-actor_2.13"),
@@ -25,9 +25,9 @@ val commonDeps = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.2"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.2"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.2"  % "test",
-  "org.scalatest"             %% "scalatest"                % "3.0.8"   % "test",
-//  "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
-//  "org.scalatestplus"         %% "junit-4-12"               % "3.1.0.0" % "test",
+  "org.scalatest"             %% "scalatest"                % "3.1.1"   % "test",
+  "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
+  "org.scalatestplus"         %% "junit-4-12"               % "3.1.0.0" % "test",
   "junit"                     % "junit"                     % "4.13"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV     % "test",
@@ -98,8 +98,8 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.8.0"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.8.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.9.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.9.0"        % "compile",
       "io.netty"          % "netty-buffer"        % "4.1.49.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.49.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.49.Final" % "compile",
