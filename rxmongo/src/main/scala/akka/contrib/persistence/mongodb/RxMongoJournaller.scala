@@ -218,7 +218,11 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   override def maxSequenceNr(pid: String, from: Long): Future[Long] = {
     val journal = driver.getJournal(pid)
     journal.flatMap(_.find(BSONDocument(PROCESSOR_ID -> pid), Option(BSONDocument(TO -> 1)))
-      .sort(BSONDocument(TO -> -1))
+      .sort(BSONDocument(
+        // the PROCESSOR_ID is a workaround for DocumentDB as it would otherwise sort on the compound index due to different optimizations. has no negative effect on MongoDB
+        PROCESSOR_ID -> 1,
+        TO -> -1
+      ))
       .cursor[BSONDocument]()
       .headOption
       .map(d => d.flatMap(_.getAsOpt[Long](TO)))
