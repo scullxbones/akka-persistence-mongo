@@ -3,4 +3,4 @@
 git push origin master
 git push origin --tags
 
-sbt "; +publishSigned; sonatypeBundleRelease"
+sbt "; +publishSigned; sonatypeReleaseAll"

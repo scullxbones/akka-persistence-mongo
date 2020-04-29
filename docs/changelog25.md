@@ -7,9 +7,9 @@
 * Merge pull request #282 from scala-steward/update/sbt-1.3.5
 * Merge pull request #284 from scala-steward/update/slf4j-api-1.7.30
 * Merge pull request #288 from scala-steward/update/reactivemongo-0.19.5
-* Merge pull request #287 from scala-steward/update/mongodb-driver-3.12.0
+* Merge pull request #287 from scala-steward/update/mongodb-driver-3.12.3
 * Update reactivemongo, ... to 0.19.5
-* Update mongodb-driver, ... to 3.12.0
+* Update mongodb-driver, ... to 3.12.3
 * Merge branch 'master' into update/slf4j-api-1.7.30
 * Merge pull request #273 from scala-steward/update/reactivemongo-0.18.8
 * Merge pull request #274 from scala-steward/update/metrics4-akka_a24-4.1.1

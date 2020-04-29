@@ -52,6 +52,7 @@ API_JSON
 
 curl -v -H "Content-Type: application/json" -XPOST \
     -d @api.json \
-    https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases?access_token=$GH_TOKEN
+    -H 'Authorization: token $GH_TOKEN'  \
+    https://api.github.com/repos/scullxbones/akka-persistence-mongo/releases
 
 rm api.json

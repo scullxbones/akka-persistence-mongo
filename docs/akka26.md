@@ -608,7 +608,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies += "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "2.3.2"
+libraryDependencies += "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "3.0.0"
 ```
 Notice that even if you currently don't use it, migration process is performed through Official Scala driver.
 
