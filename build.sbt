@@ -114,7 +114,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "0.19.7" % "compile")
+        .map("org.reactivemongo" %% _ % "0.20.10" % "compile")
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")
