@@ -6,7 +6,7 @@ val scala213V = "2.13.2"
 val scalaV = scala213V
 val akkaV = "2.6.4"
 
-val MongoJavaDriverVersion = "3.12.0"
+val MongoJavaDriverVersion = "3.12.4"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
@@ -25,9 +25,9 @@ val commonDeps = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.3"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.3"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.3"  % "test",
-  "org.scalatest"             %% "scalatest"                % "3.1.1"   % "test",
+  "org.scalatest"             %% "scalatest"                % "3.1.2"   % "test",
   "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
-  "org.scalatestplus"         %% "junit-4-12"               % "3.1.0.0" % "test",
+  "org.scalatestplus"         %% "junit-4-12"               % "3.1.2.0" % "test",
   "junit"                     % "junit"                     % "4.13"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV     % "test",
