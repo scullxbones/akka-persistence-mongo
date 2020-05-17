@@ -483,7 +483,7 @@ For example, say that:
 journal name would be "akka_persistence_journal_*suffix*" while snapshot name would be "akka_persistence_snaps_*suffix*"
 
 ##### Important note:
-Capped collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
+Some collections keep their name, respectively "akka_persistence_realtime" and "akka_persistence_metadata" by default. They remain out of *suffixed collection names* feature scope.
 
 <a name="suffixusage"/>
 
@@ -553,7 +553,7 @@ Writes remain *atomic at the batch level*, as explained [above](#model) but, as 
 
 Events are first *grouped* by collection, then batch-persisted, each group of events in its own correspondent suffixed journal. This means our 100 events may be persisted in mongo as *several* documents, decreasing performances but allowing multiple journals.
 
-If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collections for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
+If enabled (via the `akka.contrib.persistence.mongodb.mongo.realtime-enable-persistence` configuration property) inserts inside capped collection for live queries are performed the usual way, in one step. No grouping here, our 100 events are still persisted as a single document in "akka_persistence_realtime" collection.
 
 ##### Reading
 Instead of reading a single journal, we now collect all journals and, for each of them, perform the appropriate Mongo queries.
@@ -568,11 +568,11 @@ Of course, for reading via the "xxxByPersistenceId" methods, we directly point t
 We provide a **basic** migration tool from **1.x** unique journal and snapshot to *suffixed collection names*. Unless the [migration of 0.x journal](#migration), this process cannot be performed on the fly, as it directly deals with (and builds) collections inside the database. So, yes, you have to stop your application during the migration process...
 
 ###### How does it work ?
-The main idea is to parse unique journal, pick up every record, insert it in newly created appropriate suffixed journal, and finally remove it from unique journal. Additionally, we do the same for snapshots, and remove all records from "akka_persistence_metadata" capped collection. This capped collection will be built again through usual event sourcing process...
+The main idea is to parse unique journal, pick up every record, insert it in newly created appropriate suffixed journal, and finally remove it from unique journal. We do the same for snapshots, and optionally remove all records from "akka_persistence_metadata" collection, allowing it to be built again through usual event sourcing process...
 
 Of course, this process would be very long, but thanks to *aggregation*, we actually "gather" records by future suffixed collection, then by *persistence Id*, append (i.e. *INSERT*) them **in one step** (meaning all records of each *persistence Id*) to that new suffixed collection, and remove (i.e. *DELETE*) them **in one step**, from unique original collection.
 
-Additionally, we offer the possibility to try these *INSERT* and *DELETE* operations multiple times, as the process runs such operations in parallel and may lead to Mongo timeouts. We also offer the same possibility for removing all records from "akka_persistence_metadata" capped collection (see configuration below)
+Additionally, we offer the possibility to try these *INSERT* and *DELETE* operations multiple times, as the process runs such operations in parallel and may lead to Mongo timeouts. We also offer the same possibility for removing all records from "akka_persistence_metadata" collection (see configuration below)
 
 ###### Heavy load
 In case running operations in parallel leads to Mongo overload (for example errors like `com.mongodb.MongoWaitQueueFullException: Too many threads are already waiting for a connection`) we provide the ability to really perform the migration in a "*one at a time*" manner. We then process one *persistence Id* after the other, and for each *persistence Id*, append (i.e. *INSERT*) one record after the other and, if successful, remove (i.e. *DELETE*) it just after it has been transferred.
@@ -640,8 +640,9 @@ akka.contrib.persistence.mongodb.mongo.suffix-migration.parallelism = 1
 
 * in both cases:
 
-    how many attempts to empty "akka_persistence_metadata" capped collection may occur:
+    the ability to clear "akka_persistence_metadata" collection (defaults to false) and how many attempts may occur:
 ```
+akka.contrib.persistence.mongodb.mongo.suffix-migration.empty-metadata = true
 akka.contrib.persistence.mongodb.mongo.suffix-migration.max-empty-metadata-retry = 1
 ```
 Careful, the value `0` means **unlimited** retries (not recommended)

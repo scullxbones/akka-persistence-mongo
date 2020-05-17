@@ -117,6 +117,7 @@ class MongoSettings(val config: Config) {
   val SuffixDropEmptyCollections: Boolean = config.getBoolean("suffix-drop-empty-collections")
 
   val SuffixMigrationHeavyLoad: Boolean = Option(config.getBoolean("suffix-migration.heavy-load")).getOrElse(false)
+  val SuffixMigrationEmptyMetadata: Boolean = Option(config.getBoolean("suffix-migration.empty-metadata")).getOrElse(false)
 
   val SuffixMigrationMaxInsertRetry: Int = Option(config.getInt("suffix-migration.max-insert-retry")).filter(_ >= 0).getOrElse(1)
   val SuffixMigrationMaxDeleteRetry: Int = Option(config.getInt("suffix-migration.max-delete-retry")).filter(_ >= 0).getOrElse(1)
