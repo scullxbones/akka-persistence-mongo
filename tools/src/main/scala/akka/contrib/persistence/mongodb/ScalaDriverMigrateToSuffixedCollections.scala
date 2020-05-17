@@ -35,7 +35,7 @@ class ScalaDriverMigrateToSuffixedCollections()(implicit system: ActorSystem) ex
       _ <- checkUseSuffixedCollectionNames
       res1 <- handleMigration(journalCollectionName)
       res2 <- handleMigration(snapsCollectionName)
-      _ <- emptyMetadata()
+      _ <- if (settings.SuffixMigrationEmptyMetadata) emptyMetadata() else Future.successful(())
     } yield {
       if (res1 && res2) {
         logger.info("Automatic migration to collections with suffixed names has completed")
