@@ -1,5 +1,20 @@
 ## Changelog for 3.x major version
 
+### 3.0.2
+* Merge pull request #344 from scala-steward/update/log4j-core-2.13.3
+* Merge pull request #342 from scala-steward/update/netty-buffer-4.1.50.Final
+* Merge branch 'master' into update/log4j-core-2.13.3
+* Merge pull request #343 from scala-steward/update/junit-4-12-3.1.2.0
+* Merge pull request #339 from scala-steward/update/scalatest-3.1.2
+* Merge pull request #337 from scala-steward/update/mongodb-driver-3.12.4
+* Merge pull request #340 from JeanFrancoisGuena/master
+* Update log4j-api, log4j-core, ... to 2.13.3
+* Update junit-4-12 to 3.1.2.0
+* Update netty-buffer, netty-handler, ... to 4.1.50.Final
+* Try to fix #338 issue: clearing metadata is optional now
+* Update scalatest to 3.1.2
+* Update mongodb-driver, ... to 3.12.4
+
 ### 3.0.1
 * Update scalatest and akka in-sync
 * Merge pull request #291 from scala-steward/update/reactivemongo-0.19.7
