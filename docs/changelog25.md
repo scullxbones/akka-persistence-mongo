@@ -1,5 +1,10 @@
 ## Changelog for 2.x major version
 
+### 2.3.3
+* Update push parameters for post release script
+* Merge pull request #341 from JeanFrancoisGuena/akka25
+* Try to fix #338 issue: clearing metadata is optional now
+
 ### 2.3.2
 * Upgrade what was possible; fix some scalatest deprecations; scalatest 3.1.0 requires akka to jump first due to recompile requirement
 * Clean up outstanding warnings, deprecations, etc
