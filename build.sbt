@@ -110,11 +110,11 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
+  .settings(commonSettings)
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "0.19.7" % "compile")
+        .map("org.reactivemongo" %% _ % "1.0.0-rc.2" % Compile)
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")

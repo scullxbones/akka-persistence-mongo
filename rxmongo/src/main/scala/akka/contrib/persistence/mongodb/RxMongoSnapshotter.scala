@@ -56,7 +56,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
       s <- snaps(pid)
       wr <- s.delete().one(BSONDocument(criteria: _*))
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty)
         driver.removeEmptySnapshot(s)
           .map(_ => driver.removeSnapsInCache(pid))
       ()
@@ -73,7 +73,7 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
                 TIMESTAMP -> BSONDocument("$lte" -> maxTs)
               ))
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && wr.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty)
         driver.removeEmptySnapshot(s)
           .map(_ => driver.removeSnapsInCache(pid))
       ()
@@ -82,14 +82,13 @@ class RxMongoSnapshotter(driver: RxMongoDriver) extends MongoPersistenceSnapshot
 
   private[this] def snaps(suffix: String): Future[driver.C] = {
     val snaps = driver.getSnaps(suffix)
-    snaps.flatMap(_.indexesManager.ensure(Index(BSONSerializationPack)(
+    snaps.flatMap(_.indexesManager.ensure(Index(
       key = Seq((PROCESSOR_ID, IndexType.Ascending),
         (SEQUENCE_NUMBER, IndexType.Descending),
         (TIMESTAMP, IndexType.Descending)),
-      background = true,
-      unique = true,
       name = Some(driver.snapsIndexName),
-      dropDups = true,
+      unique = true,
+      background = true,
       sparse = false,
       version = None,
       partialFilter = None,
