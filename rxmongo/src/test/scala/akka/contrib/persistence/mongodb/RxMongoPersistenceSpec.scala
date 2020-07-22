@@ -9,7 +9,7 @@ package akka.contrib.persistence.mongodb
 import akka.testkit.{TestKit, _}
 import com.typesafe.config.ConfigFactory
 import reactivemongo.api.bson.collection.BSONCollection
-import reactivemongo.api.{DefaultDB, FailoverStrategy}
+import reactivemongo.api.{DB, FailoverStrategy}
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -28,10 +28,10 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   }
 
   val driver = new SpecDriver
-  lazy val specDb: Future[DefaultDB] = driver.db
+  lazy val specDb: Future[DB] = driver.db
 
   val extendedDriver = new ExtendedSpecDriver
-  lazy val extendedSpecDb: Future[DefaultDB] = extendedDriver.db
+  lazy val extendedSpecDb: Future[DB] = extendedDriver.db
 
   def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
     Await.result(

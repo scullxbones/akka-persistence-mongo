@@ -63,7 +63,10 @@ class RxMongoPersistenceDriverAuthSpec extends BaseUnitTest with ContainerMongo 
 
   import ExecutionContext.Implicits.global
 
-  val authMode: String = if( envMongoVersion.contains("2.6") ) "?authMode=mongocr" else "?authMode=scram-sha1"
+  val authMode: String = {
+    if (envMongoVersion contains "2.6") "?authenticationMechanism=mongocr"
+    else "?authenticationMechanism=scram-sha1"
+  }
 
   val authConfig: Config = ConfigFactory.parseString(
     s"""
