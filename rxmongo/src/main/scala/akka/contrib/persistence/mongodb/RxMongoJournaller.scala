@@ -16,7 +16,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import reactivemongo.akkastream._
 import reactivemongo.api.bson.collection.BSONCollection
 import reactivemongo.api.bson.{BSONDocument, _}
-import reactivemongo.api.commands.{LastError, WriteResult}
+import reactivemongo.api.commands.WriteResult
 
 import scala.collection.immutable.Seq
 import scala.concurrent._
@@ -40,8 +40,8 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] def journalRangeQuery(pid: String, from: Long, to: Long) =
     BSONDocument(
       PROCESSOR_ID -> pid,
-      TO -> BSONDocument("$gte" -> from),
-      FROM -> BSONDocument("$lte" -> to)
+      TO -> BSONDocument(f"$$gte" -> from),
+      FROM -> BSONDocument(f"$$lte" -> to)
     )
 
   private[this] val writeConcern = driver.journalWriteConcern
@@ -68,11 +68,6 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
     source.via(flow)
   }
 
-  private[this] def writeResultToUnit(wr: WriteResult, doc: BSONDocument): Try[BSONDocument] = {
-    if (wr.ok) Success(doc)
-    else throw new Exception(wr.writeErrors.map(e => s"${e.errmsg} - [${e.code}]").mkString(",")) with NoStackTrace
-  }
-
   private[this] def buildBatch(writes: Seq[AtomicWrite]): Seq[Try[BSONDocument]] = {
     writes.map(aw => Try(driver.serializeJournal(Atom[BSONDocument](aw, driver.useLegacySerialization))))
   }
@@ -80,12 +75,18 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
   private[this] def doBatchAppend(batch: Seq[Try[BSONDocument]], collection: Future[BSONCollection]): Future[Seq[Try[BSONDocument]]] = {
     if (batch.forall(_.isSuccess)) {
       val collected = batch.toStream.collect { case Success(doc) => doc }
-      collection.flatMap(_.insert(ordered = true).many(collected).map(_ => batch))
+
+      collection.flatMap(
+        _.insert(ordered = true).many(collected).map(_ => batch))
+
     } else {
       Future.sequence(batch.map {
-        case Success(document: BSONDocument) =>
-          collection.flatMap(_.insert(ordered = false, writeConcern).one(document).map(writeResultToUnit(_, document)))
-        case f: Failure[_] => Future.successful(Failure[BSONDocument](f.exception))
+        case Success(document) =>
+          collection.flatMap(_.insert(ordered = false, writeConcern).
+            one(document).map(_ => Success(document)))
+
+        case Failure(cause) =>
+          Future.successful(Failure[BSONDocument](cause))
       })
     }
   }
@@ -127,16 +128,17 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
   private[this] def findMaxSequence(persistenceId: String, maxSequenceNr: Long): Future[Option[Long]] = {
     def performAggregation(j: BSONCollection): Future[Option[Long]] = {
-      import j.aggregationFramework.{GroupField, Match, MaxField}
+      import j.AggregationFramework.{GroupField, Match, MaxField}
 
       j.aggregatorContext[BSONDocument](
-        Match(BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> maxSequenceNr))),
-        GroupField(PROCESSOR_ID)("max" -> MaxField(TO)) :: Nil,
+        pipeline = List(
+          Match(BSONDocument(
+            PROCESSOR_ID -> persistenceId,
+            TO -> BSONDocument(f"$$lte" -> maxSequenceNr))),
+          GroupField(PROCESSOR_ID)("max" -> MaxField(TO))),
         batchSize = Option(1)
-      ).prepared
-        .cursor
-        .headOption
-        .map(_.flatMap(_.getAsOpt[Long]("max")))
+      ).prepared.cursor.headOption.
+        map(_.flatMap(_.getAsOpt[Long]("max")))
     }
 
     for {
@@ -151,15 +153,18 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
       _ <- md.update(ordered = false, writeConcern).one(
             BSONDocument(PROCESSOR_ID -> persistenceId),
             BSONDocument(
-              "$setOnInsert" -> BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
+              f"$$setOnInsert" -> BSONDocument(
+                PROCESSOR_ID -> persistenceId, MAX_SN -> maxSequenceNr)
             ),
             upsert = true,
             multi = false
           )
       _ <- md.update(ordered = false, writeConcern).one(
-            BSONDocument(PROCESSOR_ID -> persistenceId, MAX_SN -> BSONDocument("$lte" -> maxSequenceNr)),
+        BSONDocument(
+          PROCESSOR_ID -> persistenceId,
+          MAX_SN -> BSONDocument(f"$$lte" -> maxSequenceNr)),
             BSONDocument(
-              "$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
+              f"$$set" -> BSONDocument(MAX_SN -> maxSequenceNr)
             ),
             upsert = false,
             multi = false
@@ -175,32 +180,41 @@ class RxMongoJournaller(val driver: RxMongoDriver) extends MongoPersistenceJourn
 
 
       //first remove docs that have to be removed, it avoid settings some docs with from > to and trying to set same from on several docs
-      docWithAllEventsToRemove = BSONDocument(PROCESSOR_ID -> persistenceId, TO -> BSONDocument("$lte" -> toSequenceNr))
+      docWithAllEventsToRemove = BSONDocument(
+        PROCESSOR_ID -> persistenceId,
+        TO -> BSONDocument(f"$$lte" -> toSequenceNr))
       removed <- journal.delete().one(docWithAllEventsToRemove)
-      if removed.ok
-
 
       //then update the (potential) doc that should have only one (not all) event removed
       //note the query: we exclude documents that have to < toSequenceNr, it should have been deleted just before,
       // but we avoid here some potential race condition that would lead to have from > to and several documents with same from
       query = journalRangeQuery(persistenceId, toSequenceNr, toSequenceNr)
       update = BSONDocument(
-        "$pull" -> BSONDocument(
+        f"$$pull" -> BSONDocument(
           EVENTS -> BSONDocument(
             PROCESSOR_ID -> persistenceId,
-            SEQUENCE_NUMBER -> BSONDocument("$lte" -> toSequenceNr))),
-        "$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
+            SEQUENCE_NUMBER -> BSONDocument(f"$$lte" -> toSequenceNr))),
+        f"$$set" -> BSONDocument(FROM -> (toSequenceNr + 1)))
 
-      duplicateKeyCodes = Seq(11000,11001,12582)
-      _ <- journal.update(ordered = false, writeConcern).one(query, update, upsert = false, multi = true) recover {
-        case le : LastError if le.code.exists(duplicateKeyCodes.contains) || le.writeErrors.exists(we => duplicateKeyCodes.contains(we.code)) =>
+      duplicateKeyCodes = Seq(11000, 11001, 12582)
+      _ <- journal.update(ordered = false, writeConcern).one(
+        query, update,
+        upsert = false,
+        multi = true).recover {
         // Duplicate key error:
         // it's ok, (and work is done) it can occur only if another thread was doing the same deleteFrom() with same args, and has just done it before this thread
         // (dup key => Same (pid,from,to) => Same targeted "from" in mongo document => it was the same toSequenceNr value)
+
+        case WriteResult.Code(code) if (duplicateKeyCodes contains code) =>
+          ()
+
+        case le: WriteResult if (le.writeErrors.exists(
+          we => duplicateKeyCodes.contains(we.code))) =>
+          ()
       }
 
     } yield {
-      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty && removed.ok)
+      if (driver.useSuffixedCollectionNames && driver.suffixDropEmpty)
         driver.removeEmptyJournal(journal)
         .map(_ => driver.removeJournalInCache(persistenceId))
       ()

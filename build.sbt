@@ -4,15 +4,15 @@ val scala212V = "2.12.11"
 val scala213V = "2.13.2"
 
 val scalaV = scala213V
-val akkaV = "2.6.4"
+val akkaV = "2.6.8"
 
-val MongoJavaDriverVersion = "3.12.4"
+val MongoJavaDriverVersion = "3.12.6"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  ("nl.grons" %% "metrics4-akka_a25" % "4.1.5")
+  ("nl.grons" %% "metrics4-akka_a25" % "4.1.9")
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12")
     .exclude("com.typesafe.akka", "akka-actor_2.13"),
@@ -25,9 +25,9 @@ val commonDeps = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.3"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.3"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.13.3"  % "test",
-  "org.scalatest"             %% "scalatest"                % "3.1.2"   % "test",
+  "org.scalatest"             %% "scalatest"                % "3.2.0"   % "test",
   "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
-  "org.scalatestplus"         %% "junit-4-12"               % "3.1.2.0" % "test",
+  "org.scalatestplus"         %% "junit-4-12"               % "3.2.0.0" % "test",
   "junit"                     % "junit"                     % "4.13"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV     % "test",
@@ -98,11 +98,11 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "4.0.5"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.0.5"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.50.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.50.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.50.Final" % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "2.9.0"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.9.0"        % "compile",
+      "io.netty"          % "netty-buffer"        % "4.1.51.Final" % "compile",
+      "io.netty"          % "netty-transport"     % "4.1.51.Final" % "compile",
+      "io.netty"          % "netty-handler"       % "4.1.51.Final" % "compile",
       "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     )
   )
@@ -110,11 +110,11 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
-  .settings(commonSettings:_*)
+  .settings(commonSettings)
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "0.19.7" % "compile")
+        .map("org.reactivemongo" %% _ % "1.0.0-rc.2" % Compile)
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")

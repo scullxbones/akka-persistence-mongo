@@ -12,9 +12,9 @@ import akka.persistence.query.{NoOffset, Offset}
 import akka.stream.{Attributes, Materializer, Outlet, SourceShape}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
+
 import org.reactivestreams.{Publisher, Subscriber, Subscription}
 import reactivemongo.akkastream._
-import reactivemongo.api.QueryOpts
 import reactivemongo.api.bson._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,23 +47,26 @@ object CurrentPersistenceIds {
     val temporaryCollectionName: String = s"persistenceids-${System.currentTimeMillis()}-${Random.nextInt(1000)}"
 
     Source.future(for {
-        collections <- driver.journalCollectionsAsFuture
-        tmpNames    <- Future.sequence(collections.zipWithIndex.map { case (c,idx) =>
-                          import c.aggregationFramework.{Group, Out, Project}
-                          val nameWithIndex = s"$temporaryCollectionName-$idx"
-                          c.aggregatorContext[BSONDocument](
-                            Project(BSONDocument(PROCESSOR_ID -> 1)),
-                            Group(BSONString(s"$$$PROCESSOR_ID"))() ::
-                            Out(nameWithIndex) ::
-                            Nil,
-                            batchSize = Option(1000)
-                          ).prepared
-                            .cursor
-                            .headOption
-                            .map(_ => nameWithIndex)
-                        })
-        tmps         <- Future.sequence(tmpNames.map(driver.collection))
-      } yield tmps )
+      collections <- driver.journalCollectionsAsFuture
+      tmpNames <- Future.sequence(collections.zipWithIndex.map {
+        case (c, idx) =>
+          import c.AggregationFramework.{Group, Out, Project}
+
+          val nameWithIndex = s"$temporaryCollectionName-$idx"
+
+          c.aggregatorContext[BSONDocument](
+            pipeline = List(
+              Project(BSONDocument(PROCESSOR_ID -> 1)),
+              Group(BSONString(s"$$$PROCESSOR_ID"))(),
+              Out(nameWithIndex)),
+            batchSize = Option(1000)
+          ).prepared
+            .cursor
+            .headOption
+            .map(_ => nameWithIndex)
+      })
+      tmps <- Future.sequence(tmpNames.map(driver.collection))
+    } yield tmps)
       .flatMapConcat(cols => cols.map(_.find(BSONDocument(), Option.empty[BSONDocument]).cursor[BSONDocument]().documentSource()).reduce(_ ++ _))
       .mapConcat(_.getAsOpt[String]("_id").toList)
       .alsoTo(Sink.onComplete{ _ =>
@@ -237,9 +240,8 @@ class RxMongoJournalStream(driver: RxMongoDriver)(implicit m: Materializer) exte
                   rt.find(q, Option.empty[BSONDocument])
                 case (Some(q), Some(id)) =>
                   rt.find(q ++ BSONDocument(ID -> BSONDocument("$gt" -> id)), Option.empty[BSONDocument])
-              }).options(QueryOpts().tailable.awaitData)
-                .cursor[BSONDocument]()
-                .documentPublisher()
+              }).tailable.awaitData.
+              cursor[BSONDocument]().documentPublisher()
             })
           )
           .via(killSwitch.flow)

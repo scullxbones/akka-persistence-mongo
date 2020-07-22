@@ -11,7 +11,6 @@ import com.typesafe.config.{Config, ConfigFactory}
 import reactivemongo.api._
 import reactivemongo.api.bson.collection.{BSONCollection, BSONSerializationPack}
 import reactivemongo.api.bson.{BSONDocument, _}
-import reactivemongo.api.commands.{CommandError, WriteConcern}
 import reactivemongo.api.indexes.{Index, IndexType}
 
 import scala.concurrent.Future
@@ -53,22 +52,19 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private def rxSettings = RxMongoDriverSettings(system.settings)
   private[mongodb] val driver = driverProvider.driver
-  private[this] lazy val parsedMongoUri = MongoConnection.parseURI(mongoUri) match {
-    case Success(parsed)    => parsed
-    case Failure(throwable) => throw throwable
-  }
+
+  private[this] lazy val parsedMongoUri = MongoConnection.fromString(mongoUri)
 
   implicit val waitFor: FiniteDuration = 10.seconds
 
   lazy val connection: Future[MongoConnection] =
-    driver.connect(parsedMongoUri)
+    parsedMongoUri.flatMap(driver.connect(_: MongoConnection.ParsedURI))
 
   def closeConnections(): Unit = {
     driver.close(5.seconds)
     ()
   }
 
-  def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
   def failoverStrategy: FailoverStrategy = {
     val rxMSettings = rxSettings
     FailoverStrategy(
@@ -76,10 +72,17 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
       retries = rxMSettings.Retries,
       delayFactor = rxMSettings.GrowthFunction)
   }
-  def db: Future[DefaultDB] =
+
+  def dbName: Future[String] = databaseName match {
+    case Some(name) => Future.successful(name)
+    case _ => parsedMongoUri.map(_.db getOrElse DEFAULT_DB_NAME)
+  }
+
+  def db: Future[DB] =
     for {
       conn <- connection
-      db   <- conn.database(name = dbName, failoverStrategy = failoverStrategy)
+      nme <- dbName
+      db   <- conn.database(name = nme, failoverStrategy = failoverStrategy)
     } yield db
 
   override def collection(name: String): Future[BSONCollection] =
@@ -91,7 +94,10 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   private[this] def ensureCollection(name: String, collectionCreator: BSONCollection => Future[Unit]): Future[BSONCollection] =
     for {
       coll <- collection(name)
-      _ <- collectionCreator(coll).recover { case CommandError.Code(MongoErrors.NamespaceExists.code) => coll }
+      _ <- collectionCreator(coll).recover {
+        case commands.CommandException.Code(
+          MongoErrors.NamespaceExists.code) => coll
+      }
     } yield coll
 
   def journalWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
@@ -101,13 +107,12 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, keys: (String, Int)*): C => Future[C] = {
     collection =>
       val ky = keys.toSeq.map { case (f, o) => f -> (if (o > 0) IndexType.Ascending else IndexType.Descending) }
-      collection.indexesManager.ensure(Index(BSONSerializationPack)(
+      collection.indexesManager.ensure(Index(
         key = ky,
         background = true,
         unique = unique,
         sparse = sparse,
         name = Some(indexName),
-        dropDups = true,
         version = None,
         partialFilter = None,
         options = BSONDocument.empty
