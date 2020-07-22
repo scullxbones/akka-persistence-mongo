@@ -6,7 +6,7 @@ val scala213V = "2.13.2"
 val scalaV = scala213V
 val akkaV = "2.6.8"
 
-val MongoJavaDriverVersion = "3.12.6"
+val MongoJavaDriverVersion = "4.0.5"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
