@@ -1,5 +1,21 @@
 ## Changelog for 3.x major version
 
+### 3.0.3
+* Merge pull request #360 from scala-steward/update/mongodb-driver-3.12.6
+* Merge pull request #364 from scala-steward/update/akka-actor-2.6.8
+* Merge pull request #362 from scala-steward/update/netty-buffer-4.1.51.Final
+* Merge pull request #352 from scala-steward/update/metrics4-akka_a25-4.1.9
+* Merge pull request #355 from scala-steward/update/junit-4-12-3.2.0.0
+* Merge pull request #354 from scala-steward/update/scalatest-3.2.0
+* Merge pull request #365 from cchantep/task/upd-rm-1.0.0-rc.2
+* Update ReactiveMongo to 1.0.0-rc.2
+* Update akka-actor, akka-cluster-sharding, ... to 2.6.8
+* Update netty-buffer, netty-handler, ... to 4.1.51.Final
+* Update mongodb-driver, ... to 3.12.6
+* Update junit-4-12 to 3.2.0.0
+* Update scalatest to 3.2.0
+* Update metrics4-akka_a25 to 4.1.9
+
 ### 3.0.2
 * Merge pull request #344 from scala-steward/update/log4j-core-2.13.3
 * Merge pull request #342 from scala-steward/update/netty-buffer-4.1.50.Final

@@ -11,7 +11,7 @@ fi
 
 NEXT=$1
 NEXT_WO_V=$(echo $1 | sed -Ee 's/^v([.0-9]+)$/\1/')
-PREVIOUS=$(git describe --tags `git rev-list --tags --max-count=1`)
+PREVIOUS=$(git describe --abbrev=0 --tags)
 PREVIOUS_WO_V=$(echo $PREVIOUS | sed -Ee 's/^v([.0-9]+)$/\1/')
 
 if [ "$PREVIOUS" = "$NEXT" ]; then
