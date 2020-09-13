@@ -63,7 +63,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
 
     private def deserializeVersionOne(d: BsonDocument) = Event(
       pid = d.getString(PROCESSOR_ID).getValue,
-      sn = d.getLong(SEQUENCE_NUMBER),
+      sn = d.getInt64(SEQUENCE_NUMBER).longValue(),
       payload = Payload[BsonValue](
         hint = d.getString(TYPE).getValue,
         any = Option(d.get(PayloadKey)).collect(extractPayloadContent).get,
@@ -79,7 +79,7 @@ class ScalaDriverSerializers(dynamicAccess: DynamicAccess, actorSystem: ActorSys
 
     private def deserializeDocumentLegacy(d: BsonDocument) = {
       val persistenceId = d.getString(PROCESSOR_ID).getValue
-      val sequenceNr = d.getLong(SEQUENCE_NUMBER)
+      val sequenceNr = d.getInt64(SEQUENCE_NUMBER).longValue()
       Option(d.get(SERIALIZED)) match {
         case Some(b: BsonDocument) =>
           Event(
