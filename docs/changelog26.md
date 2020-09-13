@@ -1,5 +1,24 @@
 ## Changelog for 3.x major version
 
+### 3.0.4
+* Merge pull request #358 from scala-steward/update/sbt-sonatype-3.9.4
+* Merge pull request #381 from scala-steward/update/akka-actor-2.6.9
+* Merge pull request #379 from scala-steward/update/netty-buffer-4.1.52.Final
+* Merge pull request #376 from scala-steward/update/junit-4-12-3.2.2.0
+* Merge pull request #375 from scala-steward/update/scalatest-3.2.2
+* Merge pull request #374 from scala-steward/update/reactivemongo-akkastream-1.0.0-rc.3
+* Merge branch 'master' into update/reactivemongo-akkastream-1.0.0-rc.3
+* Merge pull request #369 from scala-steward/update/mongodb-driver-3.12.7
+* Merge pull request #380 from cchantep/task/upd-rm-1.0.0
+* Update akka-actor, akka-cluster-sharding, ... to 2.6.9
+* Update ReactiveMongo to 1.0.0
+* Update netty-buffer, netty-handler, ... to 4.1.52.Final
+* Update junit-4-12 to 3.2.2.0
+* Update scalatest to 3.2.2
+* Update reactivemongo-akkastream to 1.0.0-rc.3
+* Update mongodb-driver, ... to 3.12.7
+* Update sbt-sonatype to 3.9.4
+
 ### 3.0.3
 * Merge pull request #360 from scala-steward/update/mongodb-driver-3.12.6
 * Merge pull request #364 from scala-steward/update/akka-actor-2.6.8
