@@ -6,7 +6,7 @@ val scala213V = "2.13.2"
 val scalaV = scala213V
 val akkaV = "2.6.8"
 
-val MongoJavaDriverVersion = "3.12.6"
+val MongoJavaDriverVersion = "3.12.7"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
@@ -114,7 +114,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "1.0.0-rc.3" % Compile)
+        .map("org.reactivemongo" %% _ % "1.0.0" % Compile)
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")
