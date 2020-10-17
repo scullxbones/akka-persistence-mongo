@@ -1,4 +1,4 @@
-val releaseV = "3.0.4"
+val releaseV = "3.0.5"
 
 val scala212V = "2.12.11"
 val scala213V = "2.13.2"

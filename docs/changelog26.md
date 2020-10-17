@@ -1,5 +1,9 @@
 ## Changelog for 3.x major version
 
+### 3.0.5
+* Merge pull request #390 from scullxbones/wip-mongobson-upgade
+* Upgrade mongo-bson to latest version
+
 ### 3.0.4
 * Merge pull request #358 from scala-steward/update/sbt-sonatype-3.9.4
 * Merge pull request #381 from scala-steward/update/akka-actor-2.6.9
