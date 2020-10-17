@@ -43,9 +43,9 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   override def ensureCollection(name: String): Future[C] =
     ensureCollection(name, db.createCollection)
 
-  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Completed]): Future[C] =
+  private[this] def ensureCollection(name: String, collectionCreator: String => SingleObservable[Void]): Future[C] =
     for {
-      _ <- collectionCreator(name).toFuture().recover { case MongoErrors.NamespaceExists() => Completed }
+      _ <- collectionCreator(name).toFuture().recover { case MongoErrors.NamespaceExists() => () }
       mongoCollection <- collection(name)
     } yield mongoCollection
 
@@ -54,8 +54,8 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   def metadataWriteConcern: WriteConcern = toWriteConcern(journalWriteSafety, journalWTimeout, journalFsync)
   private def toWriteConcern(writeSafety: WriteSafety, wtimeout: Duration, fsync: Boolean): WriteConcern =
     (writeSafety, wtimeout.toMillis, fsync) match {
-      case (Unacknowledged, w, f)      => WriteConcern.UNACKNOWLEDGED.withWTimeout(w, TimeUnit.MILLISECONDS).withFsync(f)
-      case (Acknowledged, w, f)        => WriteConcern.ACKNOWLEDGED.withWTimeout(w, TimeUnit.MILLISECONDS).withFsync(f)
+      case (Unacknowledged, w, f)      => WriteConcern.UNACKNOWLEDGED.withWTimeout(w, TimeUnit.MILLISECONDS)
+      case (Acknowledged, w, f)        => WriteConcern.ACKNOWLEDGED.withWTimeout(w, TimeUnit.MILLISECONDS)
       case (Journaled, w, _)           => WriteConcern.JOURNALED.withWTimeout(w, TimeUnit.MILLISECONDS)
       case (ReplicaAcknowledged, w, f) => WriteConcern.MAJORITY.withWTimeout(w, TimeUnit.MILLISECONDS).withJournal(!f)
     }
@@ -125,7 +125,7 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
               } else collection.countDocuments().toFuture()
           } yield count
         } else Future.successful(firstCount)
-        _ = if (secondCount == 0L) collection.drop().toFuture().recover { case _ => Completed() } // ignore errors
+        _ = if (secondCount == 0L) collection.drop().toFuture().recover { case _ => () } // ignore errors
     } yield ()
 
   override def ensureIndex(indexName: String, unique: Boolean, sparse: Boolean, fields: (String, Int)*): C => Future[C] = {

@@ -1,4 +1,4 @@
-val releaseV = "3.0.4"
+val releaseV = "3.0.5"
 
 val scala212V = "2.12.11"
 val scala213V = "2.13.2"
@@ -6,7 +6,7 @@ val scala213V = "2.13.2"
 val scalaV = scala213V
 val akkaV = "2.6.9"
 
-val MongoJavaDriverVersion = "3.12.7"
+val MongoJavaDriverVersion = "4.1.0"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
@@ -20,7 +20,7 @@ val commonDeps = Seq(
   "com.typesafe.akka"         %% "akka-persistence"         % akkaV     % "compile",
   "com.typesafe.akka"         %% "akka-actor"               % akkaV     % "compile",
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
-  "org.mongodb"               % "mongodb-driver"            % MongoJavaDriverVersion   % "test",
+  "org.mongodb"               % "mongodb-driver-legacy"     % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.30"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.13.3"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.13.3"  % "test",
@@ -50,7 +50,7 @@ val commonSettings = Seq(
     "com.typesafe" % "config" % "1.3.2",
     "org.slf4j" % "slf4j-api" % "1.7.30",
     "com.typesafe.akka" %% "akka-stream" % akkaV,
-    "org.mongodb" % "mongo-java-driver" % MongoJavaDriverVersion
+    "org.mongodb" % "mongodb-driver-legacy" % MongoJavaDriverVersion
   ),
   version := releaseV,
   organization := "com.github.scullxbones",
@@ -98,12 +98,16 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.9.0"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "2.9.0"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.53.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.53.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.53.Final" % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "4.1.1"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.1.1"        % "compile",
+      "org.mongodb"       % "mongodb-driver-core" % "4.1.1"        % "compile",
+      "io.netty"          % "netty-buffer"        % "4.1.52.Final" % "compile",
+      "io.netty"          % "netty-transport"     % "4.1.52.Final" % "compile",
+      "io.netty"          % "netty-handler"       % "4.1.52.Final" % "compile",
       "org.reactivestreams" % "reactive-streams"  % "1.0.3"
+    ),
+    dependencyOverrides ++= Seq(
+      "org.mongodb"       % "mongodb-driver-core" % "4.1.1"        % "compile"
     )
   )
   .configs(Travis)
