@@ -46,8 +46,8 @@ object ScalaDriverPersistenceSnapshotter extends SnapshottingFieldNames {
       }
 
       val pid = document.getString(PROCESSOR_ID).getValue
-      val sn = document.getLong(SEQUENCE_NUMBER)
-      val ts = document.getLong(TIMESTAMP)
+      val sn = document.getInt64(SEQUENCE_NUMBER).longValue()
+      val ts = document.getInt64(TIMESTAMP).longValue()
       SelectedSnapshot(SnapshotMetadata(pid, sn, ts), content)
     }
   }
