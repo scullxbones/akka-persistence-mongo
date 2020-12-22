@@ -25,7 +25,6 @@ class ScalaMongoDriver(system: ActorSystem, config: Config) extends MongoPersist
   val mongoClientSettings: MongoClientSettings =
     scalaDriverSettings
       .configure(mongoUri)
-      .applicationName("akka-persistence-mongodb")
       .build()
 
   lazy val client: MongoClient = MongoClient(mongoClientSettings)
