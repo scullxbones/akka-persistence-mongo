@@ -53,3 +53,5 @@ out/
 # vscode metals
 .metals/
 .bloop/
+
+.bsp/
