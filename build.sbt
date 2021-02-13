@@ -28,7 +28,7 @@ val commonDeps = Seq(
   "org.scalatest"             %% "scalatest"                % "3.2.9"   % "test",
   "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
   "org.scalatestplus"         %% "junit-4-12"               % "3.2.2.0" % "test",
-  "junit"                     % "junit"                     % "4.13.1"    % "test",
+  "junit"                     % "junit"                     % "4.13.2"    % "test",
   "org.mockito"               % "mockito-all"               % "1.10.19" % "test",
   "com.typesafe.akka"         %% "akka-slf4j"               % akkaV     % "test",
   "com.typesafe.akka"         %% "akka-testkit"             % akkaV     % "test",
