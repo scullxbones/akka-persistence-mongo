@@ -4,7 +4,7 @@ val scala212V = "2.12.11"
 val scala213V = "2.13.2"
 
 val scalaV = scala213V
-val akkaV = "2.6.10"
+val akkaV = "2.6.15"
 
 val MongoJavaDriverVersion = "4.3.1"
 
