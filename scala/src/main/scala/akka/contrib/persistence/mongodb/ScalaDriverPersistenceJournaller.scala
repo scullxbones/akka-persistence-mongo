@@ -11,7 +11,7 @@ import akka.stream.scaladsl._
 import com.mongodb.ErrorCategory
 import org.mongodb.scala._
 import org.mongodb.scala.bson.{BsonDocument, BsonValue}
-import org.mongodb.scala.model.Aggregates._
+import org.mongodb.scala.model.Aggregates.{`match`, `group`}
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.model.Sorts._
