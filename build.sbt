@@ -1,12 +1,12 @@
 val releaseV = "3.0.6"
 
-val scala212V = "2.12.14"
+val scala212V = "2.12.15"
 val scala213V = "2.13.6"
 
 val scalaV = scala213V
-val akkaV = "2.6.15"
+val akkaV = "2.6.16"
 
-val MongoJavaDriverVersion = "4.3.1"
+val MongoJavaDriverVersion = "4.3.2"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
@@ -25,7 +25,7 @@ val commonDeps = Seq(
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.14.1"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.14.1"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.14.1"  % "test",
-  "org.scalatest"             %% "scalatest"                % "3.2.9"   % "test",
+  "org.scalatest"             %% "scalatest"                % "3.2.10"   % "test",
   "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
   "org.scalatestplus"         %% "junit-4-12"               % "3.2.2.0" % "test",
   "junit"                     % "junit"                     % "4.13.2"    % "test",
@@ -98,8 +98,8 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "4.3.1"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.3.1"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "4.3.2"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.3.2"        % "compile",
       "io.netty"          % "netty-buffer"        % "4.1.68.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.68.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.68.Final" % "compile",
@@ -116,7 +116,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .settings(
     libraryDependencies ++=
       Seq("reactivemongo", "reactivemongo-akkastream")
-        .map("org.reactivemongo" %% _ % "1.0.6" % Compile)
+        .map("org.reactivemongo" %% _ % "1.0.7" % Compile)
         .map(_.exclude("com.typesafe.akka","akka-actor_2.11")
           .exclude("com.typesafe.akka","akka-actor_2.12")
           .exclude("com.typesafe.akka","akka-actor_2.13")
