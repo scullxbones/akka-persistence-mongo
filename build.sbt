@@ -98,8 +98,8 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "4.3.2"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.3.2"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % "4.3.3"        % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.3.3"        % "compile",
       "io.netty"          % "netty-buffer"        % "4.1.67.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.67.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.67.Final" % "compile",
