@@ -144,7 +144,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
       val ar1 = as.actorOf(props("foo", promise1, 3))
       val ar2 = as.actorOf(props("bar", promise2, 3))
 
-      events slice (0, 3) foreach (ar1 ! _)
+      events take 3 foreach (ar1 ! _)
       Await.ready(promise1.future, 3.seconds)
       val readJournal =
         PersistenceQuery(as).readJournalFor[ScalaDslMongoReadJournal](MongoReadJournal.Identifier)
@@ -158,7 +158,7 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
           .run()
       Thread.sleep(1000L)
 
-      events slice (3, 6) foreach (ar2 ! _)
+      events takeRight 3 foreach (ar2 ! _)
 
       probe.receiveN(events.size, 3.seconds.dilated).collect { case msg: EventEnvelope => msg.event.toString } should contain allOf ("this", "is", "just", "a", "test", "END")
       ks.shutdown()
@@ -458,11 +458,16 @@ abstract class ReadJournalSpec[A <: MongoPersistenceExtension](extensionClass: C
         .eventsByPersistenceId("foo-live-2b", 0L, Long.MaxValue)
         .viaMat(KillSwitches.single)(Keep.right)
         .take(events2.size.toLong)
+        .wireTap(ee => System.out.println(s"${getClass.getSimpleName}-$suiteName Received envelope for event: ${ee.event}"))
         .toMat(Sink.seq[EventEnvelope])(Keep.both)
         .run()
 
+      Thread.sleep(1000L)
+
       events foreach (ar ! _)
       events2 foreach (ar2 ! _)
+
+      promise2.future.futureValue(Timeout(1.seconds.dilated))
 
       sq.futureValue(Timeout(3.seconds.dilated))
         .toList

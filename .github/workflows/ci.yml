@@ -1,0 +1,62 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mongo-version: 3.6
+            scala-version: 2.12.15
+          - mongo-version: 3.6
+            scala-version: 2.13.6
+            # 4.0 must be quoted, otherwise will be truncated to 4
+          - mongo-version: "4.0"
+            scala-version: 2.12.15
+          - mongo-version: "4.0"
+            scala-version: 2.13.6
+          - mongo-version: 4.2
+            scala-version: 2.12.15
+          - mongo-version: 4.2
+            scala-version: 2.13.6
+    env:
+      MONGODB_AUTH_PORT: 28117
+      MONGODB_NOAUTH_PORT: 27117
+      MONGODB_OPTS: --storageEngine wiredTiger --bind_ip_all
+      CONTAINER_HOST: 127.0.0.1
+      AKKA_TEST_TIMEFACTOR: 10
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Setup JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: adopt
+        java-version: 8
+    - name: Coursier cache
+      uses: coursier/cache-action@v6
+    - name: Start mongod
+      run: |
+        echo Starting mongod version ${{matrix.mongo-version}}
+        sudo docker pull scullxbones/mongodb:${{matrix.mongo-version}}
+        sudo docker run -d -p $MONGODB_NOAUTH_PORT:27017 scullxbones/mongodb:${{matrix.mongo-version}} --noauth $MONGODB_OPTS
+        sudo docker run -d -p $MONGODB_AUTH_PORT:27017 scullxbones/mongodb:${{matrix.mongo-version}} --auth $MONGODB_OPTS
+        sudo docker ps -a
+    - name: Setup authentication
+      run: |
+        sleep 15
+        sudo docker exec $(sudo docker ps -a | grep -e "--auth" | awk '{print $1;}') mongo admin --eval "db.createUser({user:'admin',pwd:'password',roles:['root']});"
+    - name: Build and test
+      shell: bash
+      run: |
+        echo Running test suite for scala version ${{matrix.scala-version}}
+        ./ci_build.sh ${{matrix.scala-version}}
+    - name: Cleanup before cache
+      shell: bash
+      run: |
+        rm -rf "$HOME/.ivy2/local" || true
+        find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
+        find $HOME/.ivy2/cache                       -name "ivydata-*.properties" -delete || true
+        find $HOME/.cache/coursier/v1                -name "ivydata-*.properties" -delete || true
+        find $HOME/.sbt                              -name "*.lock"               -delete || true
