@@ -36,7 +36,7 @@ val commonDeps = Seq(
   "com.typesafe.akka"         %% "akka-cluster-sharding"    % akkaV     % "test"
 )
 
-lazy val Travis = config("travis").extend(Test)
+lazy val Ci = config("ci").extend(Test)
 
 ThisBuild / organization := "com.github.scullxbones"
 ThisBuild / version      := releaseV
@@ -82,16 +82,16 @@ val commonSettings = Seq(
   ),
   parallelExecution in Test := false,
   testOptions in Test += Tests.Argument("-oDS"),
-  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
+  testOptions in Ci += Tests.Argument("-l", "org.scalatest.tags.Slow"),
   fork in Test := false,
   publishTo := sonatypePublishTo.value,
   publishConfiguration := publishConfiguration.value.withOverwrite(true),
   publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
-) ++ inConfig(Travis)(Defaults.testTasks)
+) ++ inConfig(Ci)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
   .settings(commonSettings:_*)
-  .configs(Travis)
+  .configs(Ci)
 
 lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
@@ -108,7 +108,7 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
     dependencyOverrides ++= Seq(
     )
   )
-  .configs(Travis)
+  .configs(Ci)
 
 lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
   .dependsOn(`akka-persistence-mongo-common` % "test->test;compile->compile")
@@ -123,7 +123,7 @@ lazy val `akka-persistence-mongo-rxmongo` = (project in file("rxmongo"))
           .excludeAll(ExclusionRule("org.apache.logging.log4j"))
         )
   )
-  .configs(Travis)
+  .configs(Ci)
 
 lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .dependsOn(`akka-persistence-mongo-scala` % "test->test;compile->compile")
@@ -133,7 +133,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
       "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0" % "compile"
     )
   )
-  .configs(Travis)
+  .configs(Ci)
 
 lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
