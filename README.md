@@ -13,7 +13,7 @@
 
 * Cross-compiled for 2.12 / 2.13 - Java 8 targeted
 * Active development
-* Latest release - `3.0.6` ~ compatible with Akka 2.6
+* Latest release - `3.0.7` ~ compatible with Akka 2.6
 
 ### Using Akka 2.5? Use 2.x Series.
 [![Build Status](https://travis-ci.com/scullxbones/akka-persistence-mongo.svg?branch=akka25)](https://travis-ci.org/scullxbones/akka-persistence-mongo)

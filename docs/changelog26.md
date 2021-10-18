@@ -1,5 +1,39 @@
 ## Changelog for 3.x major version
 
+### 3.0.7
+* Transition from TravisCI to Github Actions (#478)
+* Update sbt-sonatype to 3.9.10 (#467)
+* Update scalatest to 3.2.10 (#473)
+* Update scala-compiler, scala-library to 2.12.15 (#472)
+* Update mongodb-driver-core, ... to 4.3.2 (#470)
+* Update mongo-scala-bson, ... to 4.3.2 (#469)
+* Update reactivemongo, ... to 1.0.7 (#468)
+* Update akka-actor, akka-cluster-sharding, ... to 2.6.16 (#466)
+* Update sbt to 1.5.5
+* Update junit to 4.13.2
+* Update sbt to 1.4.9
+* Update scala-library to 2.13.6 (#448)
+* Update scalatest to 3.2.9 (#444)
+* Update slf4j-api to 1.7.32 (#455)
+* Update netty-buffer to 4.1.67.Final (#462)
+* Update netty-handler, netty-transport to 4.1.67.Final
+* Do not override driver with an older version
+* Fix for changes to scala driver
+* Update travis build status links
+* Update sbt-pgp to 2.1.1
+* Update scala-library to 2.12.14
+* Update sbt-sonatype to 3.9.9
+* Update akka-actor, akka-cluster-sharding, ... to 2.6.15
+* Update reactivemongo, ... to 1.0.6
+* Update mongo-scala-bson, ... to 4.3.1
+* Update mongodb-driver-core, ... to 4.3.1
+* Update netty-handler, netty-transport to 4.1.66.Final
+* Update metrics4-akka_a25 to 4.1.19
+* Update netty-handler, netty-transport to 4.1.61.Final
+* Update log4j-api, log4j-core, ... to 2.14.1
+* Update mongo-scala-bson, ... to 4.1.2
+* Update mongodb-driver-legacy to 4.1.2
+
 ### 3.0.5
 * Merge pull request #390 from scullxbones/wip-mongobson-upgade
 * Upgrade mongo-bson to latest version
