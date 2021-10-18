@@ -33,7 +33,7 @@ mv previous.md docs/changelog26.md
 
 git add .
 git commit -m 'Prepare for '$NEXT' release' -S
-git tag -a $NEXT -m "$BLOCK" -s
+git tag -a $NEXT -m ''$NEXT' release' -s
 
 gh release create $NEXT -F target/release.md -d -t $NEXT --target master
 rm target/release.md
