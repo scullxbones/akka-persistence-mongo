@@ -1,5 +1,17 @@
 ## Changelog for 3.x major version
 
+### 3.0.8
+* Merge branch 'master' into update/netty-buffer-4.1.72.Final
+* Update reactivemongo, ... to 1.0.10
+* Update sbt to 1.5.7
+* Update mongo-scala-bson, ... to 4.3.4
+* Update mongodb-driver-core, ... to 4.3.4
+* Update scala-library to 2.13.7
+* Update akka-actor, akka-cluster-sharding, ... to 2.6.17
+* Update log4j-api, log4j-core, ... to 2.17.0
+* Update netty-buffer, netty-handler, ... to 4.1.72.Final
+* Convert release process pre over to linux from osx
+
 ### 3.0.7
 * Transition from TravisCI to Github Actions (#478)
 * Update sbt-sonatype to 3.9.10 (#467)

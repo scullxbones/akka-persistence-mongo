@@ -19,12 +19,12 @@
 
 (Official Scala)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "3.0.7"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-scala" % "3.0.8"
 ```
 
 (Reactive Mongo)
 ```scala
-libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "3.0.7"
+libraryDependencies +="com.github.scullxbones" %% "akka-persistence-mongo-rxmongo" % "3.0.8"
 ```
 * Inside of your `application.conf` file, add the following line if you want to use the journal (snapshot is optional).  The driver selection should be pulled in by a `reference.conf` in the driver jar you choose:
 ```
@@ -608,7 +608,7 @@ Of course, once this is done, you should **not** start your application, unless 
 ###### Configuration
 Add the following to your `build.sbt` file:
 ```scala
-libraryDependencies += "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "3.0.7"
+libraryDependencies += "com.github.scullxbones" %% "akka-persistence-mongo-tools" % "3.0.8"
 ```
 Notice that even if you currently don't use it, migration process is performed through Official Scala driver.
 
