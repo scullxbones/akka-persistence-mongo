@@ -12,7 +12,7 @@ val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
     .exclude("org.iq80.leveldb", "leveldb")
     .exclude("org.fusesource.leveldbjni", "leveldbjni-all"),
-  ("nl.grons" %% "metrics4-akka_a25" % "4.1.19")
+  ("nl.grons" %% "metrics4-akka_a25" % "4.2.7")
     .exclude("com.typesafe.akka", "akka-actor_2.11")
     .exclude("com.typesafe.akka", "akka-actor_2.12")
     .exclude("com.typesafe.akka", "akka-actor_2.13"),
