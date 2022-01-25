@@ -21,7 +21,7 @@ val commonDeps = Seq(
   "com.typesafe.akka"         %% "akka-actor"               % akkaV     % "compile",
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver-legacy"     % MongoJavaDriverVersion   % "test",
-  "org.slf4j"                 % "slf4j-api"                 % "1.7.32"  % "test",
+  "org.slf4j"                 % "slf4j-api"                 % "1.7.35"  % "test",
   "org.apache.logging.log4j"  % "log4j-api"                 % "2.17.0"  % "test",
   "org.apache.logging.log4j"  % "log4j-core"                % "2.17.0"  % "test",
   "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.17.0"  % "test",
@@ -48,7 +48,7 @@ val commonSettings = Seq(
   libraryDependencies ++= commonDeps,
   dependencyOverrides ++= Seq(
     "com.typesafe" % "config" % "1.3.2",
-    "org.slf4j" % "slf4j-api" % "1.7.32",
+    "org.slf4j" % "slf4j-api" % "1.7.35",
     "com.typesafe.akka" %% "akka-stream" % akkaV,
     "org.mongodb" % "mongodb-driver-legacy" % MongoJavaDriverVersion
   ),
