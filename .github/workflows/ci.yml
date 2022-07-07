@@ -7,16 +7,16 @@ jobs:
       matrix:
         include:
           - mongo-version: 3.6
-            scala-version: 2.12.15
+            scala-version: 2.12.16
           - mongo-version: 3.6
             scala-version: 2.13.7
             # 4.0 must be quoted, otherwise will be truncated to 4
           - mongo-version: "4.0"
-            scala-version: 2.12.15
+            scala-version: 2.12.16
           - mongo-version: "4.0"
             scala-version: 2.13.7
           - mongo-version: 4.2
-            scala-version: 2.12.15
+            scala-version: 2.12.16
           - mongo-version: 4.2
             scala-version: 2.13.7
     env:
