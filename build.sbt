@@ -103,7 +103,7 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
       "io.netty"          % "netty-buffer"        % "4.1.72.Final" % "compile",
       "io.netty"          % "netty-transport"     % "4.1.72.Final" % "compile",
       "io.netty"          % "netty-handler"       % "4.1.72.Final" % "compile",
-      "org.reactivestreams" % "reactive-streams"  % "1.0.3"
+      "org.reactivestreams" % "reactive-streams"  % "1.0.4"
     ),
     dependencyOverrides ++= Seq(
     )
