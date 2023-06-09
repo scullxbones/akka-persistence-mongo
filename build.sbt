@@ -1,6 +1,6 @@
 val releaseV = "3.0.8"
 
-val scala212V = "2.12.15"
+val scala212V = "2.12.18"
 val scala213V = "2.13.7"
 
 val scalaV = scala213V
