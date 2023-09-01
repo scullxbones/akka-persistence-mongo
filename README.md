@@ -4,6 +4,10 @@
 
 * Test suite verifies against MongoDB 3.6, 4.0, 4.2
 
+### Preparing to migrate to Apache Pekko? Not to worry, an incremental upgrade is supported.
+
+* Provides forwards compatibility for Akka / Pekko features that persist internal class names, allowing for you to safely roll back your application after migration.
+
 ### Using Akka 2.6? Use 3.x Series.
 [![Build Status](https://travis-ci.com/scullxbones/akka-persistence-mongo.svg?branch=master)](https://travis-ci.org/scullxbones/akka-persistence-mongo)
 ![Maven Central 2.12](https://maven-badges.herokuapp.com/maven-central/com.github.scullxbones/akka-persistence-mongo-common_2.12/badge.svg)
