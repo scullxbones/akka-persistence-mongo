@@ -8,7 +8,7 @@ import akka.actor.ActorRef
 import akka.persistence.journal.Tagged
 import akka.persistence.query.{EventEnvelope, Offset}
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.{Serialization, SerializerWithStringManifest}
+import akka.serialization.{Serialization, Serializer, SerializerWithStringManifest}
 
 import scala.collection.immutable.{Seq => ISeq}
 import scala.language.existentials
@@ -51,15 +51,28 @@ case class Serialized[C <: AnyRef](bytes: Array[Byte],
   lazy val content: C = {
 
     val clazz = loadClass.getClassFor[X forSome { type X <: AnyRef }](className)
+    Try(tryDeserialize(clazz, clazz.flatMap(c => Try(ser.serializerFor(c)))))
+      .recover({
+        case _ if className.startsWith("org.apache.pekko.") =>
+          val backwardsCompatClazz = loadClass.getClassFor[X forSome { type X <: AnyRef }](className.replaceFirst("org.apache.pekko", "akka"))
+          tryDeserialize(backwardsCompatClazz, backwardsCompatClazz.flatMap(c => Try(ser.serializerFor(c))))
+        case x => throw x
+      }) match {
+      case Failure(x) => throw x
+      case Success(deser) => deser
+    }
+  }
 
-    val tried = (serializedManifest,serializerId,clazz.flatMap(c => Try(ser.serializerFor(c)))) match {
+  private def tryDeserialize(clazz: Try[Class[_ <: X forSome {type X <: AnyRef}]],
+                             serializer: Try[Serializer]): C = {
+    val tried = (serializedManifest, serializerId, serializer) match {
       // Manifest was serialized, class exists ~ prefer read-time configuration
       case (Some(manifest), _, Success(clazzSer)) =>
         ser.deserialize(bytes, clazzSer.identifier, manifest)
 
       // No manifest id serialized, prefer read-time configuration
       case (None, _, Success(clazzSer)) =>
-        ser.deserialize[X forSome { type X <: AnyRef }](bytes, clazzSer.identifier, clazz.toOption)
+        ser.deserialize[X forSome {type X <: AnyRef}](bytes, clazzSer.identifier, clazz.toOption)
 
       // Manifest, id were serialized, class doesn't exist - use write-time configuration
       case (Some(manifest), Some(id), Failure(_)) =>
