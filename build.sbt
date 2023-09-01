@@ -1,4 +1,4 @@
-val releaseV = "3.0.8"
+publish / skip := true
 
 val scala212V = "2.12.15"
 val scala213V = "2.13.7"
@@ -39,8 +39,22 @@ val commonDeps = Seq(
 lazy val Ci = config("ci").extend(Test)
 
 ThisBuild / organization := "com.github.scullxbones"
-ThisBuild / version      := releaseV
 ThisBuild / scalaVersion := scalaV
+ThisBuild / versionScheme := Some("semver-spec")
+
+import xerial.sbt.Sonatype._
+
+ThisBuild / sonatypeProjectHosting := Some(GitHubHosting("scullxbones", "akka-persistence-mongo", "scullduggery@gmail.com"))
+ThisBuild / licenses := Seq("APL2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
+ThisBuild / developers := List(
+    Developer(
+      "scullxbones",
+      "Brian Scully",
+      "@scullxbones",
+      url("https://github.com/scullxbones/")
+    )
+  )
+ThisBuild / homepage := Some(url("https://github.com/scullxbones/akka-persistence-mongo"))
 
 val commonSettings = Seq(
   scalaVersion := scalaV,
@@ -52,8 +66,6 @@ val commonSettings = Seq(
     "com.typesafe.akka" %% "akka-stream" % akkaV,
     "org.mongodb" % "mongodb-driver-legacy" % MongoJavaDriverVersion
   ),
-  version := releaseV,
-  organization := "com.github.scullxbones",
   scalacOptions ++= Seq(
     "-unchecked",
     "-deprecation",
@@ -131,7 +143,8 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .settings(
     libraryDependencies ++= Seq(
       "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0" % "compile"
-    )
+    ),
+    publish / skip := true,
   )
   .configs(Ci)
 
@@ -139,6 +152,6 @@ lazy val `akka-persistence-mongo` = (project in file("."))
   .aggregate(`akka-persistence-mongo-common`, `akka-persistence-mongo-rxmongo`, `akka-persistence-mongo-scala`, `akka-persistence-mongo-tools`)
   .settings(
     crossScalaVersions := Nil,
-    skip in publish := true,
+    publish / skip := true,
     publishTo := Some(Resolver.file("file", new File("target/unusedrepo")))
   )
