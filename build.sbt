@@ -92,13 +92,10 @@ val commonSettings = Seq(
     "Typesafe Snapshots" at "https://repo.typesafe.com/typesafe/snapshots/",
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   ),
-  parallelExecution in Test := false,
-  testOptions in Test += Tests.Argument("-oDS"),
-  testOptions in Ci += Tests.Argument("-l", "org.scalatest.tags.Slow"),
-  fork in Test := false,
-  publishTo := sonatypePublishTo.value,
-  publishConfiguration := publishConfiguration.value.withOverwrite(true),
-  publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
+  Test / parallelExecution := false,
+  Test / testOptions += Tests.Argument("-oDS"),
+  Ci / testOptions += Tests.Argument("-l", "org.scalatest.tags.Slow"),
+  Test / fork := false,
 ) ++ inConfig(Ci)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
