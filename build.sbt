@@ -6,7 +6,9 @@ val scala213V = "2.13.12"
 val scalaV = scala213V
 val akkaV = "2.6.20"
 
-val MongoJavaDriverVersion = "4.3.4"
+val MongoJavaDriverVersion = "4.10.2"
+val Log4JVersion = "2.17.0"
+val NettyVersion = "4.1.98.Final"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
@@ -22,9 +24,9 @@ val commonDeps = Seq(
   "org.mongodb"               % "mongodb-driver-core"       % MongoJavaDriverVersion   % "compile",
   "org.mongodb"               % "mongodb-driver-legacy"     % MongoJavaDriverVersion   % "test",
   "org.slf4j"                 % "slf4j-api"                 % "1.7.36"  % "test",
-  "org.apache.logging.log4j"  % "log4j-api"                 % "2.17.0"  % "test",
-  "org.apache.logging.log4j"  % "log4j-core"                % "2.17.0"  % "test",
-  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % "2.17.0"  % "test",
+  "org.apache.logging.log4j"  % "log4j-api"                 % Log4JVersion  % "test",
+  "org.apache.logging.log4j"  % "log4j-core"                % Log4JVersion  % "test",
+  "org.apache.logging.log4j"  % "log4j-slf4j-impl"          % Log4JVersion  % "test",
   "org.scalatest"             %% "scalatest"                % "3.2.17"   % "test",
   "org.scalatestplus"         %% "mockito-1-10"             % "3.1.0.0" % "test",
   "org.scalatestplus"         %% "junit-4-13"               % "3.2.17.0" % "test",
@@ -107,11 +109,11 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "4.3.4"        % "compile",
-      "org.mongodb.scala" %% "mongo-scala-bson"   % "4.3.4"        % "compile",
-      "io.netty"          % "netty-buffer"        % "4.1.98.Final" % "compile",
-      "io.netty"          % "netty-transport"     % "4.1.98.Final" % "compile",
-      "io.netty"          % "netty-handler"       % "4.1.98.Final" % "compile",
+      "org.mongodb.scala" %% "mongo-scala-driver" % MongoJavaDriverVersion % "compile",
+      "org.mongodb.scala" %% "mongo-scala-bson"   % MongoJavaDriverVersion % "compile",
+      "io.netty"          % "netty-buffer"        % NettyVersion % "compile",
+      "io.netty"          % "netty-transport"     % NettyVersion % "compile",
+      "io.netty"          % "netty-handler"       % NettyVersion % "compile",
       "org.reactivestreams" % "reactive-streams"  % "1.0.3"
     ),
     dependencyOverrides ++= Seq(
@@ -139,7 +141,7 @@ lazy val `akka-persistence-mongo-tools` = (project in file("tools"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "org.mongodb.scala" %% "mongo-scala-driver" % "2.7.0" % "compile"
+      "org.mongodb.scala" %% "mongo-scala-driver" % MongoJavaDriverVersion % "compile"
     ),
     publish / skip := true,
   )
