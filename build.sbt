@@ -1,13 +1,13 @@
 publish / skip := true
 
-val scala212V = "2.12.15"
+val scala212V = "2.12.18"
 val scala213V = "2.13.12"
 
 val scalaV = scala213V
 val akkaV = "2.6.20"
 
 val MongoJavaDriverVersion = "4.10.2"
-val Log4JVersion = "2.17.0"
+val Log4JVersion = "2.17.2"
 val NettyVersion = "4.1.98.Final"
 
 val commonDeps = Seq(
@@ -114,7 +114,7 @@ lazy val `akka-persistence-mongo-scala` = (project in file("scala"))
       "io.netty"          % "netty-buffer"        % NettyVersion % "compile",
       "io.netty"          % "netty-transport"     % NettyVersion % "compile",
       "io.netty"          % "netty-handler"       % NettyVersion % "compile",
-      "org.reactivestreams" % "reactive-streams"  % "1.0.3"
+      "org.reactivestreams" % "reactive-streams"  % "1.0.4"
     ),
     dependencyOverrides ++= Seq(
     )
