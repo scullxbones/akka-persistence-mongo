@@ -8,7 +8,7 @@ val akkaV = "2.6.20"
 
 val MongoJavaDriverVersion = "4.10.2"
 val Log4JVersion = "2.17.2"
-val NettyVersion = "4.1.98.Final"
+val NettyVersion = "4.1.99.Final"
 
 val commonDeps = Seq(
   ("com.typesafe.akka"  %% "akka-persistence" % akkaV)
